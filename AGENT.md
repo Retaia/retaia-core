@@ -1,6 +1,6 @@
 # AGENT.md
 
-Ce repository fait partie du projet **Rush**.
+Ce repository fait partie du projet **Retaia**.
 
 Ce document s’adresse :
 
@@ -14,7 +14,7 @@ Il définit les **règles impératives** à respecter avant toute modification.
 
 ## Règle n°1 — Les specs sont la loi
 
-Ce repository contient un submodule `specs/` (repository **rush-specs**).
+Ce repository contient un submodule `specs/` (repository **retaia-docs**).
 
 Le contenu de `specs/` est :
 
@@ -42,7 +42,7 @@ Il est strictement interdit de :
 * contourner une règle définie dans `specs/`
 * corriger une spec "localement" dans ce repo
 
-Toute modification des specs DOIT être faite dans le repository **rush-specs**.
+Toute modification des specs DOIT être faite dans le repository **retaia-docs**.
 
 ---
 
@@ -59,7 +59,7 @@ Alors la procédure est la suivante :
 1. **Ne pas coder de comportement nouveau**
 2. Identifier précisément :
 
-    * le fichier concerné dans `rush-specs`
+    * le fichier concerné dans `retaia-docs`
     * la section exacte
     * le problème constaté
 3. Proposer une modification explicite des specs (texte clair, impact identifié)
@@ -90,7 +90,7 @@ Interdit dans `docs/` :
 * définir des contrats API
 * définir des "job types" ou capabilities
 
-Toute règle de comportement DOIT vivre dans `rush-specs`.
+Toute règle de comportement DOIT vivre dans `retaia-docs`.
 
 ---
 
