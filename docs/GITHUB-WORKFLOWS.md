@@ -32,6 +32,22 @@ Détail :
 - `push` sur `master`
 - `pull_request`
 
+## Required Checks (master)
+
+Objectif recommandé :
+
+- exiger `lint`, `test`, `security-audit` avant merge vers `master`.
+
+Script local fourni :
+
+```bash
+./scripts/apply-branch-protection.sh Retaia/retaia-core master
+```
+
+Note:
+
+- si l’API retourne `403`, la fonctionnalité n’est pas disponible sur le plan GitHub courant pour ce repository privé.
+
 ## Vérification locale
 
 ```bash
