@@ -79,6 +79,7 @@ Le contenu de `docs/` est **non normatif**.
 Guide local recommandé :
 
 * `docs/DEVELOPMENT-BEST-PRACTICES.md` (guide d’implémentation et de qualité, sans autorité normative)
+* `docs/BOOTSTRAP-TECHNIQUE.md` (état du socle technique local et commandes de test)
 
 Autorisé dans `docs/` :
 
