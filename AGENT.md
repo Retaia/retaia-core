@@ -114,6 +114,9 @@ Toute règle de comportement DOIT vivre dans `retaia-docs`.
 ## Conventions techniques locales
 
 * Les best practices Symfony DOIVENT être respectées dans tous les cas (security, DI, routing, persistence, tests).
+* Les fichiers générés DOIVENT rester non modifiés manuellement.
+* Interdiction de modifier manuellement : `vendor/`, `var/cache/`, `config/reference.php`, fichiers auto-générés par recipes/console.
+* Si un fichier généré change pendant un run, ne pas le committer sauf demande explicite et justifiée.
 * Persistance applicative utilisateurs : Doctrine ORM.
 * Base de données de référence (dev/prod) : PostgreSQL.
 * Les tests unitaires et Behat DOIVENT rester rapides et isolés via des doubles en mémoire.
