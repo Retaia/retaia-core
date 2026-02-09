@@ -110,7 +110,7 @@ final class ApiAuthFlowTest extends WebTestCase
 
     public function testLoginThrottlingReturns429AfterTooManyFailures(): void
     {
-        $client = $this->createIsolatedClient('10.0.0.15');
+        $client = $this->createIsolatedClient(sprintf('10.0.%d.%d', random_int(1, 200), random_int(1, 200)));
 
         for ($attempt = 1; $attempt <= 5; ++$attempt) {
             $client->jsonRequest('POST', '/api/v1/auth/login', [
