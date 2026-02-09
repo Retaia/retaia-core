@@ -25,9 +25,7 @@ final class PasswordResetTokenRepository implements PasswordResetTokenRepository
 
     public function consumeValid(string $tokenHash, \DateTimeImmutable $now): ?string
     {
-        $this->entityManager->createQuery(
-            'DELETE FROM App\\Entity\\PasswordResetToken t WHERE t.expiresAt < :now'
-        )->setParameter('now', $now)->execute();
+        $this->purgeExpired($now);
 
         $token = $this->entityManager->getRepository(PasswordResetToken::class)->findOneBy([
             'tokenHash' => $tokenHash,
@@ -42,5 +40,12 @@ final class PasswordResetTokenRepository implements PasswordResetTokenRepository
         $this->entityManager->flush();
 
         return $userId;
+    }
+
+    public function purgeExpired(\DateTimeImmutable $now): int
+    {
+        return $this->entityManager->createQuery(
+            'DELETE FROM App\\Entity\\PasswordResetToken t WHERE t.expiresAt < :now'
+        )->setParameter('now', $now)->execute();
     }
 }

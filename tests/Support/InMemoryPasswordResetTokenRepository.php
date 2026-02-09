@@ -22,17 +22,16 @@ final class InMemoryPasswordResetTokenRepository implements PasswordResetTokenRe
 
     public function consumeValid(string $tokenHash, \DateTimeImmutable $now): ?string
     {
+        $this->purgeExpired($now);
+
         $keptRows = [];
         $userId = null;
 
         foreach ($this->rows as $row) {
-            $isExpired = $row['expires_at'] < $now;
             $isMatch = hash_equals($row['token_hash'], $tokenHash);
 
-            if (!$isMatch || $isExpired) {
-                if (!$isExpired) {
-                    $keptRows[] = $row;
-                }
+            if (!$isMatch) {
+                $keptRows[] = $row;
                 continue;
             }
 
@@ -42,5 +41,24 @@ final class InMemoryPasswordResetTokenRepository implements PasswordResetTokenRe
         $this->rows = $keptRows;
 
         return $userId;
+    }
+
+    public function purgeExpired(\DateTimeImmutable $now): int
+    {
+        $keptRows = [];
+        $removed = 0;
+
+        foreach ($this->rows as $row) {
+            if ($row['expires_at'] < $now) {
+                ++$removed;
+                continue;
+            }
+
+            $keptRows[] = $row;
+        }
+
+        $this->rows = $keptRows;
+
+        return $removed;
     }
 }

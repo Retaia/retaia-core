@@ -39,6 +39,7 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
 - persistance tokens reset :
   - table PostgreSQL `password_reset_token` (Doctrine ORM)
   - migration : `migrations/Version20260209235500.php`
+  - cleanup CLI : `php bin/console app:password-reset:cleanup`
 
 - utilisateur initial (créé par migration) :
   - email : `admin@retaia.local`
