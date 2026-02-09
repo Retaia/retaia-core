@@ -2,7 +2,7 @@
 
 namespace App\User\Service;
 
-use App\User\Model\User;
+use App\Entity\User;
 use App\User\Repository\UserRepositoryInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
 
@@ -62,4 +62,3 @@ final class AuthService
         return $this->users->findById($userId);
     }
 }
-

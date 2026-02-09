@@ -1,19 +1,28 @@
 <?php
 
-namespace App\User\Model;
+namespace App\Entity;
 
+use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
 
-final class User implements UserInterface, PasswordAuthenticatedUserInterface
+#[ORM\Entity]
+#[ORM\Table(name: 'app_user')]
+#[ORM\UniqueConstraint(name: 'uniq_app_user_email', columns: ['email'])]
+class User implements UserInterface, PasswordAuthenticatedUserInterface
 {
     /**
      * @param array<int, string> $roles
      */
     public function __construct(
+        #[ORM\Id]
+        #[ORM\Column(type: 'string', length: 32)]
         private string $id,
+        #[ORM\Column(type: 'string', length: 180)]
         private string $email,
+        #[ORM\Column(name: 'password_hash', type: 'string', length: 255)]
         private string $passwordHash,
+        #[ORM\Column(type: 'json')]
         private array $roles = ['ROLE_USER'],
     ) {
     }
@@ -57,7 +66,8 @@ final class User implements UserInterface, PasswordAuthenticatedUserInterface
 
     public function withPasswordHash(string $hash): self
     {
-        return new self($this->id, $this->email, $hash, $this->roles);
+        $this->passwordHash = $hash;
+
+        return $this;
     }
 }
-

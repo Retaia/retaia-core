@@ -7,7 +7,6 @@
 # Put parameters here that don't need to change on each machine where the app is deployed
 # https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
 parameters:
-    app.user_storage_path: '%kernel.project_dir%/var/data/users.json'
     app.password_reset_storage_path: '%kernel.project_dir%/var/data/password_reset_tokens.json'
 
 services:
@@ -21,7 +20,7 @@ services:
     App\:
         resource: '../src/'
 
-    App\User\Repository\UserRepositoryInterface: '@App\User\Repository\JsonUserRepository'
+    App\User\Repository\UserRepositoryInterface: '@App\User\Repository\DoctrineUserRepository'
 
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones
