@@ -23,7 +23,10 @@
     },
     "require-dev": {
         "behat/behat": "*",
-        "phpunit/phpunit": "*"
+        "doctrine/doctrine-fixtures-bundle": "^4.3",
+        "fakerphp/faker": "^1.24",
+        "hautelook/alice-bundle": "^2.17",
+        "phpunit/phpunit": "^11"
     },
     "config": {
         "allow-plugins": {
