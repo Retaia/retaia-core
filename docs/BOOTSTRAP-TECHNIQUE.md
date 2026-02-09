@@ -49,9 +49,11 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
 
 - PHPUnit :
   - `vendor/bin/phpunit`
+  - couvre explicitement : throttling login, reset token expiré, logout non authentifié
 
 - Behat :
   - `vendor/bin/behat`
+  - inclut un scénario d’expiration du token de reset en mémoire
 
 - Fixtures de test Faker/AliceBundle :
   - `fixtures/test/users.yaml`
