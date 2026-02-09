@@ -3,6 +3,7 @@
 /var/cache/
 /var/log/
 /var/data/*.json
+/vendor/
 
 ###> phpunit/phpunit ###
 /phpunit.xml
