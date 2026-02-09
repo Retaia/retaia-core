@@ -1,0 +1,14 @@
+App\Entity\User:
+  user_admin:
+    __construct:
+      - 'fixtureadmin00000000000000000001'
+      - 'admin@retaia.local'
+      - '<identity("$2y$12$6AGCXyao1Z/Rc2ippIQ8xOhoWwyKr1TaReDVu/jayjEclIawUJjUm")>'
+      - ['ROLE_ADMIN']
+
+  user_{1..5}:
+    __construct:
+      - '<lexify("????????????????????????????????")>'
+      - '<safeEmail()>'
+      - '<identity("$2y$12$6AGCXyao1Z/Rc2ippIQ8xOhoWwyKr1TaReDVu/jayjEclIawUJjUm")>'
+      - ['ROLE_USER']

@@ -49,6 +49,9 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
 - Behat :
   - `vendor/bin/behat`
 
+- Fixtures de test Faker/AliceBundle :
+  - `fixtures/test/users.yaml`
+
 ## Base de données
 
 - développement : PostgreSQL (`DATABASE_URL` dans `.env`)
@@ -58,5 +61,6 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
 
 - La persistance utilisateur applicative est Doctrine + PostgreSQL.
 - Les tests unitaires/Behat restent en mémoire via un repository de test dédié.
+- Les tests fonctionnels Doctrine chargent des fixtures via AliceBundle + Faker.
 - En environnement non `prod`, `lost-password/request` retourne aussi un `reset_token` pour faciliter les tests.
 - Changer les secrets et mots de passe par défaut avant tout usage réel.
