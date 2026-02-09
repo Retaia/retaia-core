@@ -25,7 +25,7 @@ Le contenu de `specs/` est :
 Avant toute modification de code, tu DOIS :
 
 * lire les documents pertinents dans `specs/`
-* lire specs/00-project/CODE-QUALITY.md et appliquer les règles.
+* lire `specs/change-management/CODE-QUALITY.md` et appliquer les règles.
 * comprendre les contraintes qu’ils imposent
 * implémenter strictement en respectant ces règles
 
@@ -75,6 +75,10 @@ Coder avant la mise à jour des specs est interdit.
 Ce repository peut contenir un dossier `docs/`.
 
 Le contenu de `docs/` est **non normatif**.
+
+Guide local recommandé :
+
+* `docs/DEVELOPMENT-BEST-PRACTICES.md` (guide d’implémentation et de qualité, sans autorité normative)
 
 Autorisé dans `docs/` :
 
