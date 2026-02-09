@@ -116,6 +116,8 @@ Toute règle de comportement DOIT vivre dans `retaia-docs`.
 * Persistance applicative utilisateurs : Doctrine ORM.
 * Base de données de référence (dev/prod) : PostgreSQL.
 * Les tests unitaires et Behat DOIVENT rester rapides et isolés via des doubles en mémoire.
+* Les noms de classes `Entity` et `Repository` DOIVENT rester agnostiques d’implémentation.
+* Ne pas inclure `Doctrine` dans les noms de classes métier (ex: préférer `UserRepository` à `DoctrineUserRepository`).
 
 ---
 
