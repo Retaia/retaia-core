@@ -8,13 +8,18 @@ Le pipeline CI est défini dans :
 
 - `.github/workflows/ci.yml`
 
-Il exécute trois jobs :
+Il exécute quatre jobs :
 
-1. `lint`
-2. `test`
-3. `security-audit`
+1. `no-black-magic`
+2. `lint`
+3. `test`
+4. `security-audit`
 
 Détail :
+
+- `no-black-magic` :
+  - `./scripts/no-black-magic.sh`
+  - échoue si des patterns dynamiques/interdits sont détectés (`eval`, `exec`, `shell_exec`, `unserialize`, `call_user_func`, `include/require` dynamiques, etc.)
 
 - `lint` :
   - `composer validate --strict --no-check-publish`
@@ -36,6 +41,7 @@ Détail :
 
 ```bash
 composer install --no-interaction --prefer-dist --optimize-autoloader
+./scripts/no-black-magic.sh
 composer validate --strict --no-check-publish
 php bin/console lint:yaml config
 php bin/console lint:container
