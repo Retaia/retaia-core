@@ -1,0 +1,10 @@
+
+/.env.local
+/var/cache/
+/var/log/
+/var/data/*.json
+
+###> phpunit/phpunit ###
+/phpunit.xml
+/.phpunit.cache/
+###< phpunit/phpunit ###
