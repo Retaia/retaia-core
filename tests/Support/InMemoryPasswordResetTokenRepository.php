@@ -61,4 +61,16 @@ final class InMemoryPasswordResetTokenRepository implements PasswordResetTokenRe
 
         return $removed;
     }
+
+    public function forceExpire(string $rawToken): void
+    {
+        $tokenHash = hash('sha256', $rawToken);
+        foreach ($this->rows as $index => $row) {
+            if (!hash_equals($row['token_hash'], $tokenHash)) {
+                continue;
+            }
+
+            $this->rows[$index]['expires_at'] = new \DateTimeImmutable('-1 minute');
+        }
+    }
 }
