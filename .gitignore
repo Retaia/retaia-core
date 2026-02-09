@@ -1,8 +1,8 @@
 
 /.env.local
-/var/cache/
-/var/log/
-/var/data/*.json
+/.env.local.php
+/var/*
+!/var/.gitignore
 /vendor/
 
 ###> phpunit/phpunit ###
