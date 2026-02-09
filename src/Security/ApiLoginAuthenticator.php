@@ -9,6 +9,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\Exception\AuthenticationException;
 use Symfony\Component\Security\Core\Exception\CustomUserMessageAuthenticationException;
+use Symfony\Component\Security\Core\Exception\TooManyLoginAttemptsAuthenticationException;
 use Symfony\Component\Security\Core\User\UserInterface;
 use Symfony\Component\Security\Http\Authenticator\AbstractAuthenticator;
 use Symfony\Component\Security\Http\Authenticator\Passport\Badge\UserBadge;
@@ -70,6 +71,16 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
                 ['code' => 'VALIDATION_FAILED', 'message' => 'email and password are required'],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
+        }
+
+        if ($exception instanceof TooManyLoginAttemptsAuthenticationException) {
+            $minutes = $exception->getMessageData()['%minutes%'] ?? null;
+            $response = ['code' => 'TOO_MANY_ATTEMPTS', 'message' => 'Too many login attempts'];
+            if (is_int($minutes) && $minutes > 0) {
+                $response['retry_in_minutes'] = $minutes;
+            }
+
+            return new JsonResponse($response, Response::HTTP_TOO_MANY_REQUESTS);
         }
 
         return new JsonResponse(

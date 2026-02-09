@@ -87,4 +87,51 @@ final class ApiAuthFlowTest extends WebTestCase
 
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
     }
+
+    public function testLostPasswordRejectsWeakPassword(): void
+    {
+        $client = static::createClient();
+        $client->disableReboot();
+
+        $client->jsonRequest('POST', '/api/v1/auth/lost-password/request', [
+            'email' => 'admin@retaia.local',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_ACCEPTED);
+        $requestPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($requestPayload);
+        $token = $requestPayload['reset_token'] ?? null;
+        self::assertIsString($token);
+
+        $client->jsonRequest('POST', '/api/v1/auth/lost-password/reset', [
+            'token' => $token,
+            'new_password' => 'short',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
+    }
+
+    public function testLoginThrottlingReturns429AfterTooManyFailures(): void
+    {
+        $client = static::createClient();
+        $client->disableReboot();
+
+        for ($attempt = 1; $attempt <= 5; ++$attempt) {
+            $client->jsonRequest('POST', '/api/v1/auth/login', [
+                'email' => 'admin@retaia.local',
+                'password' => 'invalid-password',
+            ]);
+            self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        }
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'invalid-password',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_TOO_MANY_REQUESTS);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('TOO_MANY_ATTEMPTS', $payload['code'] ?? null);
+    }
 }
