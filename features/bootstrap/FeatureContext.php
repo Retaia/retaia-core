@@ -1,6 +1,6 @@
 <?php
 
-use App\User\Repository\JsonUserRepository;
+use App\Tests\Support\InMemoryUserRepository;
 use App\User\Service\AuthService;
 use App\User\Service\PasswordResetService;
 use Behat\Behat\Context\Context;
@@ -13,7 +13,7 @@ use Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage;
 final class FeatureContext implements Context
 {
     private string $tmpDir;
-    private JsonUserRepository $users;
+    private InMemoryUserRepository $users;
     private RequestStack $requestStack;
     private AuthService $authService;
     private PasswordResetService $passwordResetService;
@@ -27,7 +27,8 @@ final class FeatureContext implements Context
     {
         $this->tmpDir = sys_get_temp_dir().'/retaia-behat-'.bin2hex(random_bytes(6));
         mkdir($this->tmpDir, 0775, true);
-        $this->users = new JsonUserRepository($this->tmpDir.'/users.json');
+        $this->users = new InMemoryUserRepository();
+        $this->users->seedDefaultAdmin();
 
         $request = new Request();
         $request->setSession(new Session(new MockArraySessionStorage()));
@@ -81,4 +82,3 @@ final class FeatureContext implements Context
         Assert::assertTrue($this->authService->login($email, $password));
     }
 }
-
