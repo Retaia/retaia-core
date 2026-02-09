@@ -23,6 +23,9 @@ security:
             entry_point: App\Security\ApiLoginAuthenticator
             logout:
                 path: api_auth_logout
+            login_throttling:
+                max_attempts: 5
+                interval: '15 minutes'
 
             # Activate different ways to authenticate:
             # https://symfony.com/doc/current/security.html#the-firewall
