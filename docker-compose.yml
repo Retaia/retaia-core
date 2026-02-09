@@ -1,0 +1,23 @@
+services:
+  app:
+    image: fullfrontend/php-fpm:latest
+    container_name: retaia-core-app
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+    environment:
+      APP_ENV: dev
+      APP_DEBUG: "1"
+    ports:
+      - "9000:9000"
+    tty: true
+    stdin_open: true
+
+  composer:
+    image: fullfrontend/php-fpm:latest
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+    entrypoint: ["composer"]
+    profiles: ["tools"]
+

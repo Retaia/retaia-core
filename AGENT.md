@@ -81,6 +81,7 @@ Guide local recommandé :
 * `docs/DEVELOPMENT-BEST-PRACTICES.md` (guide d’implémentation et de qualité, sans autorité normative)
 * `docs/BOOTSTRAP-TECHNIQUE.md` (état du socle technique local et commandes de test)
 * `docs/GITHUB-WORKFLOWS.md` (pipeline CI GitHub Actions et exécution des tests)
+* `docs/DOCKER-DEVELOPMENT.md` (environnement de développement docker-compose)
 
 Autorisé dans `docs/` :
 
