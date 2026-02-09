@@ -64,3 +64,12 @@ php bin/console lint:container
 composer test
 composer audit --no-interaction
 ```
+
+## Raccourci local
+
+Le repository expose aussi un `Makefile` pour coller au pipeline :
+
+```bash
+make qa
+make ci-local
+```
