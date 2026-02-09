@@ -4,6 +4,7 @@ namespace App\Controller\Api;
 
 use App\Entity\User;
 use App\User\Service\PasswordResetService;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -13,11 +14,11 @@ use Symfony\Bundle\SecurityBundle\Security;
 #[Route('/api/v1/auth')]
 final class AuthController
 {
-    private const MIN_PASSWORD_LENGTH = 12;
-
     public function __construct(
         private Security $security,
         private PasswordResetService $passwordResetService,
+        #[Autowire('%app.password_reset_min_length%')]
+        private int $passwordResetMinLength,
     ) {
     }
 
@@ -89,11 +90,11 @@ final class AuthController
             );
         }
 
-        if (mb_strlen($newPassword) < self::MIN_PASSWORD_LENGTH) {
+        if (mb_strlen($newPassword) < $this->passwordResetMinLength) {
             return new JsonResponse(
                 [
                     'code' => 'VALIDATION_FAILED',
-                    'message' => sprintf('new_password must be at least %d characters', self::MIN_PASSWORD_LENGTH),
+                    'message' => sprintf('new_password must be at least %d characters', $this->passwordResetMinLength),
                 ],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );

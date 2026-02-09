@@ -43,6 +43,7 @@ final class FeatureContext implements Context
             new InMemoryPasswordResetTokenRepository(),
             new TestUserPasswordHasher(),
             'test',
+            3600,
         );
     }
 
