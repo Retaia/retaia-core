@@ -10,6 +10,7 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
 - structure API Symfony minimale
 - gestion utilisateur locale (login/logout/lost password)
 - persistance PostgreSQL via Doctrine ORM
+- authentification session via Security (authenticator Symfony)
 - tests unitaires avec PHPUnit
 - tests comportementaux avec Behat
 
@@ -24,6 +25,10 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
   - `GET /api/v1/auth/me`
   - `POST /api/v1/auth/lost-password/request`
   - `POST /api/v1/auth/lost-password/reset`
+
+- flux auth :
+  - login/logout gérés par le firewall Security
+  - réponses JSON custom sur succès/échec
 
 - persistance utilisateurs :
   - table PostgreSQL `app_user` (Doctrine ORM)
