@@ -2,7 +2,7 @@
 
 namespace App\Tests\Unit\User;
 
-use App\User\Repository\JsonUserRepository;
+use App\Tests\Support\InMemoryUserRepository;
 use App\User\Service\PasswordResetService;
 use PHPUnit\Framework\TestCase;
 
@@ -12,12 +12,13 @@ final class PasswordResetServiceTest extends TestCase
     {
         $tmpDir = sys_get_temp_dir().'/retaia-reset-tests-'.bin2hex(random_bytes(6));
         mkdir($tmpDir, 0775, true);
-        $usersPath = $tmpDir.'/users.json';
         $tokensPath = $tmpDir.'/tokens.json';
 
-        $users = new JsonUserRepository($usersPath);
+        $users = new InMemoryUserRepository();
+        $users->seedDefaultAdmin();
         $before = $users->findByEmail('admin@retaia.local');
         self::assertNotNull($before);
+        $beforePasswordHash = $before->getPassword();
 
         $service = new PasswordResetService($users, $tokensPath, 'test');
         $token = $service->requestReset('admin@retaia.local');
@@ -28,7 +29,7 @@ final class PasswordResetServiceTest extends TestCase
 
         $after = $users->findByEmail('admin@retaia.local');
         self::assertNotNull($after);
-        self::assertNotSame($before->getPassword(), $after->getPassword());
+        self::assertNotSame($beforePasswordHash, $after->getPassword());
         self::assertTrue(password_verify('new-password', $after->getPassword()));
     }
 
@@ -36,10 +37,10 @@ final class PasswordResetServiceTest extends TestCase
     {
         $tmpDir = sys_get_temp_dir().'/retaia-reset-tests-'.bin2hex(random_bytes(6));
         mkdir($tmpDir, 0775, true);
-        $users = new JsonUserRepository($tmpDir.'/users.json');
+        $users = new InMemoryUserRepository();
+        $users->seedDefaultAdmin();
         $service = new PasswordResetService($users, $tmpDir.'/tokens.json', 'test');
 
         self::assertFalse($service->resetPassword('missing-token', 'new-password'));
     }
 }
-

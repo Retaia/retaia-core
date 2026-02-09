@@ -80,6 +80,8 @@ Guide local recommandé :
 
 * `docs/DEVELOPMENT-BEST-PRACTICES.md` (guide d’implémentation et de qualité, sans autorité normative)
 * `docs/BOOTSTRAP-TECHNIQUE.md` (état du socle technique local et commandes de test)
+* `docs/GITHUB-WORKFLOWS.md` (pipeline CI GitHub Actions et exécution des tests)
+* `docs/DOCKER-DEVELOPMENT.md` (environnement de développement docker-compose)
 
 Autorisé dans `docs/` :
 
@@ -105,6 +107,17 @@ Toute règle de comportement DOIT vivre dans `retaia-docs`.
 * La branche principale est `master`.
 * Aucun push direct sur `master` n’est autorisé.
 * Tout changement passe par une Pull Request.
+* Préférer une branche dédiée par feature (ex: `codex/<feature>`).
+
+---
+
+## Conventions techniques locales
+
+* Persistance applicative utilisateurs : Doctrine ORM.
+* Base de données de référence (dev/prod) : PostgreSQL.
+* Les tests unitaires et Behat DOIVENT rester rapides et isolés via des doubles en mémoire.
+* Les noms de classes `Entity` et `Repository` DOIVENT rester agnostiques d’implémentation.
+* Ne pas inclure `Doctrine` dans les noms de classes métier (ex: préférer `UserRepository` à `DoctrineUserRepository`).
 
 ---
 

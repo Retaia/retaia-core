@@ -68,6 +68,13 @@ Selon le scope :
 - Les sidecars sont associés par règles déterministes, pas heuristiques locales.
 - Tout comportement ambigu doit rester explicite (ex: sidecar non matché).
 
+## Persistance locale
+
+- Utiliser Doctrine ORM pour les entités applicatives (pas de persistance JSON ad hoc).
+- En dev, la base de référence est PostgreSQL.
+- Garder les tests unitaires et Behat indépendants de PostgreSQL avec des doubles en mémoire.
+- Garder des noms de classes agnostiques: pas de préfixe/suffixe `Doctrine` dans les `Entity`/`Repository`.
+
 ## Test strategy minimale (à appliquer à chaque PR)
 
 - Transitions autorisées/interdites de state machine.

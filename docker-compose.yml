@@ -1,0 +1,52 @@
+services:
+  app:
+    image: fullfrontend/php-fpm:latest
+    container_name: retaia-core-app
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+    environment:
+      APP_ENV: dev
+      APP_DEBUG: "1"
+      DATABASE_URL: postgresql://app:app@database:5432/app?serverVersion=16&charset=utf8
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - "9000:9000"
+    tty: true
+    stdin_open: true
+
+  composer:
+    image: fullfrontend/php-fpm:latest
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+    environment:
+      DATABASE_URL: postgresql://app:app@database:5432/app?serverVersion=16&charset=utf8
+    depends_on:
+      database:
+        condition: service_healthy
+    entrypoint: ["composer"]
+    profiles: ["tools"]
+
+  database:
+    image: postgres:16-alpine
+    container_name: retaia-core-db
+    environment:
+      POSTGRES_DB: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_USER: app
+    healthcheck:
+      test: ["CMD", "pg_isready", "-d", "app", "-U", "app"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    ports:
+      - "5432:5432"
+    volumes:
+      - database_data:/var/lib/postgresql/data
+
+volumes:
+  database_data:

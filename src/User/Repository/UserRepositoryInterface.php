@@ -2,7 +2,7 @@
 
 namespace App\User\Repository;
 
-use App\User\Model\User;
+use App\Entity\User;
 
 interface UserRepositoryInterface
 {
@@ -12,4 +12,3 @@ interface UserRepositoryInterface
 
     public function save(User $user): void;
 }
-
