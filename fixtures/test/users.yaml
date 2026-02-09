@@ -5,6 +5,7 @@ App\Entity\User:
       - 'admin@retaia.local'
       - '<identity("$2y$12$6AGCXyao1Z/Rc2ippIQ8xOhoWwyKr1TaReDVu/jayjEclIawUJjUm")>'
       - ['ROLE_ADMIN']
+      - true
 
   user_{1..5}:
     __construct:
@@ -12,3 +13,12 @@ App\Entity\User:
       - '<safeEmail()>'
       - '<identity("$2y$12$6AGCXyao1Z/Rc2ippIQ8xOhoWwyKr1TaReDVu/jayjEclIawUJjUm")>'
       - ['ROLE_USER']
+      - true
+
+  user_unverified:
+    __construct:
+      - 'fixtureunverified0000000000000001'
+      - 'pending@retaia.local'
+      - '<identity("$2y$12$6AGCXyao1Z/Rc2ippIQ8xOhoWwyKr1TaReDVu/jayjEclIawUJjUm")>'
+      - ['ROLE_USER']
+      - false

@@ -19,6 +19,7 @@ final class InMemoryUserRepository implements UserRepositoryInterface
             'admin@retaia.local',
             password_hash('change-me', PASSWORD_DEFAULT),
             ['ROLE_ADMIN'],
+            true,
         ));
     }
 
