@@ -34,8 +34,9 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
   - table PostgreSQL `app_user` (Doctrine ORM)
   - migration : `migrations/Version20260209223000.php`
 
-- stockage local tokens reset :
-  - `var/data/password_reset_tokens.json`
+- persistance tokens reset :
+  - table PostgreSQL `password_reset_token` (Doctrine ORM)
+  - migration : `migrations/Version20260209235500.php`
 
 - utilisateur initial (créé par migration) :
   - email : `admin@retaia.local`

@@ -1,6 +1,7 @@
 <?php
 
 use App\Tests\Support\InMemoryUserRepository;
+use App\Tests\Support\InMemoryPasswordResetTokenRepository;
 use App\Tests\Support\TestUserPasswordHasher;
 use App\User\Service\AuthService;
 use App\User\Service\PasswordResetService;
@@ -39,8 +40,8 @@ final class FeatureContext implements Context
         $this->authService = new AuthService($this->users, $this->requestStack);
         $this->passwordResetService = new PasswordResetService(
             $this->users,
+            new InMemoryPasswordResetTokenRepository(),
             new TestUserPasswordHasher(),
-            $this->tmpDir.'/tokens.json',
             'test',
         );
     }
