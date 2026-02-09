@@ -1,6 +1,7 @@
 <?php
 
 use App\Tests\Support\InMemoryUserRepository;
+use App\Tests\Support\TestUserPasswordHasher;
 use App\User\Service\AuthService;
 use App\User\Service\PasswordResetService;
 use Behat\Behat\Context\Context;
@@ -36,7 +37,12 @@ final class FeatureContext implements Context
         $this->requestStack->push($request);
 
         $this->authService = new AuthService($this->users, $this->requestStack);
-        $this->passwordResetService = new PasswordResetService($this->users, $this->tmpDir.'/tokens.json', 'test');
+        $this->passwordResetService = new PasswordResetService(
+            $this->users,
+            new TestUserPasswordHasher(),
+            $this->tmpDir.'/tokens.json',
+            'test',
+        );
     }
 
     /**

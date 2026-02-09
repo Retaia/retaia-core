@@ -3,6 +3,7 @@
 namespace App\Tests\Unit\User;
 
 use App\Tests\Support\InMemoryUserRepository;
+use App\Tests\Support\TestUserPasswordHasher;
 use App\User\Service\PasswordResetService;
 use PHPUnit\Framework\TestCase;
 
@@ -20,7 +21,7 @@ final class PasswordResetServiceTest extends TestCase
         self::assertNotNull($before);
         $beforePasswordHash = $before->getPassword();
 
-        $service = new PasswordResetService($users, $tokensPath, 'test');
+        $service = new PasswordResetService($users, new TestUserPasswordHasher(), $tokensPath, 'test');
         $token = $service->requestReset('admin@retaia.local');
 
         self::assertIsString($token);
@@ -39,7 +40,7 @@ final class PasswordResetServiceTest extends TestCase
         mkdir($tmpDir, 0775, true);
         $users = new InMemoryUserRepository();
         $users->seedDefaultAdmin();
-        $service = new PasswordResetService($users, $tmpDir.'/tokens.json', 'test');
+        $service = new PasswordResetService($users, new TestUserPasswordHasher(), $tmpDir.'/tokens.json', 'test');
 
         self::assertFalse($service->resetPassword('missing-token', 'new-password'));
     }
