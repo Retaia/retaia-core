@@ -29,6 +29,7 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
 - flux auth :
   - login/logout gérés par le firewall Security
   - réponses JSON custom sur succès/échec
+  - throttling login activé (`5` tentatives / `15` minutes)
 
 - persistance utilisateurs :
   - table PostgreSQL `app_user` (Doctrine ORM)
