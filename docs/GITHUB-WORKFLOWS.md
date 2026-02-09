@@ -1,12 +1,12 @@
-# CircleCI Setup
+# GitHub Actions Setup
 
 > Statut : non normatif.
 
 ## Pipeline
 
-Le pipeline CircleCI est défini dans :
+Le pipeline CI est défini dans :
 
-- `.circleci/config.yml`
+- `.github/workflows/ci.yml`
 
 Il exécute une seule job `test` :
 
@@ -14,14 +14,12 @@ Il exécute une seule job `test` :
 2. `composer install --no-interaction --prefer-dist --optimize-autoloader`
 3. `composer test` (PHPUnit + Behat)
 
-## Pré-requis
+## Déclenchement
 
-- `composer.lock` à jour
-- scripts `composer test:unit`, `composer test:behat`, `composer test` valides
+- `push` sur `master`
+- `pull_request`
 
 ## Vérification locale
-
-Pour reproduire le pipeline localement :
 
 ```bash
 composer validate --strict
