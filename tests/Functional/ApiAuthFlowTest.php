@@ -12,8 +12,7 @@ final class ApiAuthFlowTest extends WebTestCase
 
     public function testLoginAndMeFlowWithSession(): void
     {
-        $client = static::createClient();
-        $client->disableReboot();
+        $client = $this->createIsolatedClient('10.0.0.11');
 
         $client->jsonRequest('POST', '/api/v1/auth/login', [
             'email' => 'admin@retaia.local',
@@ -36,8 +35,7 @@ final class ApiAuthFlowTest extends WebTestCase
 
     public function testLogoutInvalidatesSession(): void
     {
-        $client = static::createClient();
-        $client->disableReboot();
+        $client = $this->createIsolatedClient('10.0.0.12');
 
         $client->jsonRequest('POST', '/api/v1/auth/login', [
             'email' => 'admin@retaia.local',
@@ -58,8 +56,7 @@ final class ApiAuthFlowTest extends WebTestCase
 
     public function testLostPasswordResetFlow(): void
     {
-        $client = static::createClient();
-        $client->disableReboot();
+        $client = $this->createIsolatedClient('10.0.0.13');
 
         $client->jsonRequest('POST', '/api/v1/auth/lost-password/request', [
             'email' => 'admin@retaia.local',
@@ -90,8 +87,7 @@ final class ApiAuthFlowTest extends WebTestCase
 
     public function testLostPasswordRejectsWeakPassword(): void
     {
-        $client = static::createClient();
-        $client->disableReboot();
+        $client = $this->createIsolatedClient('10.0.0.14');
 
         $client->jsonRequest('POST', '/api/v1/auth/lost-password/request', [
             'email' => 'admin@retaia.local',
@@ -114,8 +110,7 @@ final class ApiAuthFlowTest extends WebTestCase
 
     public function testLoginThrottlingReturns429AfterTooManyFailures(): void
     {
-        $client = static::createClient();
-        $client->disableReboot();
+        $client = $this->createIsolatedClient('10.0.0.15');
 
         for ($attempt = 1; $attempt <= 5; ++$attempt) {
             $client->jsonRequest('POST', '/api/v1/auth/login', [
@@ -133,5 +128,13 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_TOO_MANY_REQUESTS);
         $payload = json_decode($client->getResponse()->getContent(), true);
         self::assertSame('TOO_MANY_ATTEMPTS', $payload['code'] ?? null);
+    }
+
+    private function createIsolatedClient(string $ipAddress): \Symfony\Bundle\FrameworkBundle\KernelBrowser
+    {
+        $client = static::createClient([], ['REMOTE_ADDR' => $ipAddress]);
+        $client->disableReboot();
+
+        return $client;
     }
 }
