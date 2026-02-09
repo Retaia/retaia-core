@@ -69,3 +69,8 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
 - En environnement non `prod`, `lost-password/request` retourne aussi un `reset_token` pour faciliter les tests.
 - `lost-password/reset` impose une longueur minimale de mot de passe (`12` caractères).
 - Changer les secrets et mots de passe par défaut avant tout usage réel.
+
+## Paramètres configurables
+
+- `app.password_reset_ttl_seconds` (défaut: `3600`)
+- `app.password_reset_min_length` (défaut: `12`)

@@ -23,6 +23,7 @@ final class PasswordResetServiceTest extends TestCase
             new InMemoryPasswordResetTokenRepository(),
             new TestUserPasswordHasher(),
             'test',
+            3600,
         );
         $token = $service->requestReset('admin@retaia.local');
 
@@ -45,8 +46,26 @@ final class PasswordResetServiceTest extends TestCase
             new InMemoryPasswordResetTokenRepository(),
             new TestUserPasswordHasher(),
             'test',
+            3600,
         );
 
         self::assertFalse($service->resetPassword('missing-token', 'new-password'));
+    }
+
+    public function testResetFailsWhenTokenExpiresImmediately(): void
+    {
+        $users = new InMemoryUserRepository();
+        $users->seedDefaultAdmin();
+        $service = new PasswordResetService(
+            $users,
+            new InMemoryPasswordResetTokenRepository(),
+            new TestUserPasswordHasher(),
+            'test',
+            0,
+        );
+
+        $token = $service->requestReset('admin@retaia.local');
+        self::assertIsString($token);
+        self::assertFalse($service->resetPassword($token, 'new-password'));
     }
 }

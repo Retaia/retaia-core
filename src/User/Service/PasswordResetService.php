@@ -15,6 +15,8 @@ final class PasswordResetService
         private UserPasswordHasherInterface $passwordHasher,
         #[Autowire('%kernel.environment%')]
         private string $environment,
+        #[Autowire('%app.password_reset_ttl_seconds%')]
+        private int $tokenTtlSeconds,
     ) {
     }
 
@@ -32,7 +34,7 @@ final class PasswordResetService
         $this->tokens->save(
             $user->getId(),
             hash('sha256', $token),
-            new \DateTimeImmutable('+1 hour'),
+            new \DateTimeImmutable(sprintf('+%d seconds', $this->tokenTtlSeconds)),
         );
 
         if ($this->environment !== 'prod') {
