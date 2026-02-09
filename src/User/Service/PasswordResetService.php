@@ -4,20 +4,18 @@ namespace App\User\Service;
 
 use App\User\Repository\UserRepositoryInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 final class PasswordResetService
 {
     public function __construct(
         private UserRepositoryInterface $users,
+        private UserPasswordHasherInterface $passwordHasher,
         #[Autowire('%app.password_reset_storage_path%')]
         private string $tokenStoragePath,
         #[Autowire('%kernel.environment%')]
         private string $environment,
     ) {
-        $directory = dirname($this->tokenStoragePath);
-        if (!is_dir($directory)) {
-            mkdir($directory, 0775, true);
-        }
     }
 
     /**
@@ -77,7 +75,7 @@ final class PasswordResetService
             return false;
         }
 
-        $this->users->save($user->withPasswordHash(password_hash($newPassword, PASSWORD_DEFAULT)));
+        $this->users->save($user->withPasswordHash($this->passwordHasher->hashPassword($user, $newPassword)));
 
         return true;
     }
@@ -109,7 +107,11 @@ final class PasswordResetService
      */
     private function writeRows(array $rows): void
     {
+        $directory = dirname($this->tokenStoragePath);
+        if (!is_dir($directory)) {
+            mkdir($directory, 0775, true);
+        }
+
         file_put_contents($this->tokenStoragePath, (string) json_encode($rows, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
     }
 }
-

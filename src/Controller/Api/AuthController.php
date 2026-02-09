@@ -4,21 +4,17 @@ namespace App\Controller\Api;
 
 use App\Entity\User;
 use App\User\Service\PasswordResetService;
-use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Bundle\SecurityBundle\Security;
-use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 
 #[Route('/api/v1/auth')]
 final class AuthController
 {
     public function __construct(
         private Security $security,
-        private TokenStorageInterface $tokenStorage,
-        private RequestStack $requestStack,
         private PasswordResetService $passwordResetService,
     ) {
     }
@@ -26,20 +22,13 @@ final class AuthController
     #[Route('/login', name: 'api_auth_login', methods: ['POST'])]
     public function login(): JsonResponse
     {
-        return new JsonResponse(['code' => 'AUTH_FLOW_MISCONFIGURED'], Response::HTTP_INTERNAL_SERVER_ERROR);
+        throw new \LogicException('This endpoint is handled by the security authenticator.');
     }
 
     #[Route('/logout', name: 'api_auth_logout', methods: ['POST'])]
     public function logout(): JsonResponse
     {
-        $this->tokenStorage->setToken(null);
-
-        $session = $this->requestStack->getSession();
-        if ($session !== null) {
-            $session->invalidate();
-        }
-
-        return new JsonResponse(['authenticated' => false], Response::HTTP_OK);
+        throw new \LogicException('This endpoint is handled by the firewall logout.');
     }
 
     #[Route('/me', name: 'api_auth_me', methods: ['GET'])]
