@@ -5,7 +5,7 @@ namespace App\User\Repository;
 use App\Entity\User;
 use Doctrine\ORM\EntityManagerInterface;
 
-final class DoctrineUserRepository implements UserRepositoryInterface
+final class UserRepository implements UserRepositoryInterface
 {
     public function __construct(
         private EntityManagerInterface $entityManager,
