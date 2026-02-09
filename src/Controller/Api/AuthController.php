@@ -2,62 +2,42 @@
 
 namespace App\Controller\Api;
 
-use App\User\Service\AuthService;
+use App\Entity\User;
 use App\User\Service\PasswordResetService;
+use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Bundle\SecurityBundle\Security;
+use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 
 #[Route('/api/v1/auth')]
 final class AuthController
 {
     public function __construct(
-        private AuthService $authService,
+        private Security $security,
+        private TokenStorageInterface $tokenStorage,
+        private RequestStack $requestStack,
         private PasswordResetService $passwordResetService,
     ) {
     }
 
     #[Route('/login', name: 'api_auth_login', methods: ['POST'])]
-    public function login(Request $request): JsonResponse
+    public function login(): JsonResponse
     {
-        $payload = $this->payload($request);
-        $email = trim((string) ($payload['email'] ?? ''));
-        $password = (string) ($payload['password'] ?? '');
-
-        if ($email === '' || $password === '') {
-            return new JsonResponse(
-                ['code' => 'VALIDATION_FAILED', 'message' => 'email and password are required'],
-                Response::HTTP_UNPROCESSABLE_ENTITY
-            );
-        }
-
-        if (!$this->authService->login($email, $password)) {
-            return new JsonResponse(
-                ['code' => 'UNAUTHORIZED', 'message' => 'Invalid credentials'],
-                Response::HTTP_UNAUTHORIZED
-            );
-        }
-
-        $user = $this->authService->currentUser();
-
-        return new JsonResponse(
-            [
-                'authenticated' => true,
-                'user' => $user === null ? null : [
-                    'id' => $user->getId(),
-                    'email' => $user->getEmail(),
-                    'roles' => $user->getRoles(),
-                ],
-            ],
-            Response::HTTP_OK
-        );
+        return new JsonResponse(['code' => 'AUTH_FLOW_MISCONFIGURED'], Response::HTTP_INTERNAL_SERVER_ERROR);
     }
 
     #[Route('/logout', name: 'api_auth_logout', methods: ['POST'])]
     public function logout(): JsonResponse
     {
-        $this->authService->logout();
+        $this->tokenStorage->setToken(null);
+
+        $session = $this->requestStack->getSession();
+        if ($session !== null) {
+            $session->invalidate();
+        }
 
         return new JsonResponse(['authenticated' => false], Response::HTTP_OK);
     }
@@ -65,8 +45,8 @@ final class AuthController
     #[Route('/me', name: 'api_auth_me', methods: ['GET'])]
     public function me(): JsonResponse
     {
-        $user = $this->authService->currentUser();
-        if ($user === null) {
+        $user = $this->security->getUser();
+        if (!$user instanceof User) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => 'Authentication required'],
                 Response::HTTP_UNAUTHORIZED
@@ -142,4 +122,3 @@ final class AuthController
         return is_array($decoded) ? $decoded : [];
     }
 }
-

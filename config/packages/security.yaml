@@ -18,6 +18,9 @@ security:
         main:
             lazy: true
             provider: app_user_provider
+            custom_authenticators:
+                - App\Security\ApiLoginAuthenticator
+            entry_point: App\Security\ApiLoginAuthenticator
 
             # Activate different ways to authenticate:
             # https://symfony.com/doc/current/security.html#the-firewall
@@ -27,8 +30,11 @@ security:
 
     # Note: Only the *first* matching rule is applied
     access_control:
-        # - { path: ^/admin, roles: ROLE_ADMIN }
-        # - { path: ^/profile, roles: ROLE_USER }
+        - { path: ^/api/v1/health, roles: PUBLIC_ACCESS }
+        - { path: ^/api/v1/auth/login$, roles: PUBLIC_ACCESS }
+        - { path: ^/api/v1/auth/lost-password/request$, roles: PUBLIC_ACCESS }
+        - { path: ^/api/v1/auth/lost-password/reset$, roles: PUBLIC_ACCESS }
+        - { path: ^/api/v1/auth, roles: ROLE_USER }
 
 when@test:
     security:
