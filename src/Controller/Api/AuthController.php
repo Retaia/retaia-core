@@ -13,6 +13,8 @@ use Symfony\Bundle\SecurityBundle\Security;
 #[Route('/api/v1/auth')]
 final class AuthController
 {
+    private const MIN_PASSWORD_LENGTH = 12;
+
     public function __construct(
         private Security $security,
         private PasswordResetService $passwordResetService,
@@ -83,6 +85,16 @@ final class AuthController
         if ($token === '' || $newPassword === '') {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => 'token and new_password are required'],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        if (mb_strlen($newPassword) < self::MIN_PASSWORD_LENGTH) {
+            return new JsonResponse(
+                [
+                    'code' => 'VALIDATION_FAILED',
+                    'message' => sprintf('new_password must be at least %d characters', self::MIN_PASSWORD_LENGTH),
+                ],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }

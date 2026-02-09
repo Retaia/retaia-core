@@ -30,6 +30,7 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
   - login/logout gérés par le firewall Security
   - réponses JSON custom sur succès/échec
   - throttling login activé (`5` tentatives / `15` minutes)
+  - réponse `429` explicite en cas de trop nombreuses tentatives de login
 
 - persistance utilisateurs :
   - table PostgreSQL `app_user` (Doctrine ORM)
@@ -65,4 +66,5 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
 - Les tests unitaires/Behat restent en mémoire via un repository de test dédié.
 - Les tests fonctionnels Doctrine chargent des fixtures via AliceBundle + Faker.
 - En environnement non `prod`, `lost-password/request` retourne aussi un `reset_token` pour faciliter les tests.
+- `lost-password/reset` impose une longueur minimale de mot de passe (`12` caractères).
 - Changer les secrets et mots de passe par défaut avant tout usage réel.
