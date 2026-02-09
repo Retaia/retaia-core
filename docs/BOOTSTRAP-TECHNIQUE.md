@@ -9,6 +9,7 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
 
 - structure API Symfony minimale
 - gestion utilisateur locale (login/logout/lost password)
+- persistance PostgreSQL via Doctrine ORM
 - tests unitaires avec PHPUnit
 - tests comportementaux avec Behat
 
@@ -24,11 +25,14 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
   - `POST /api/v1/auth/lost-password/request`
   - `POST /api/v1/auth/lost-password/reset`
 
-- stockage local bootstrap :
-  - utilisateurs : `var/data/users.json`
-  - tokens reset : `var/data/password_reset_tokens.json`
+- persistance utilisateurs :
+  - table PostgreSQL `app_user` (Doctrine ORM)
+  - migration : `migrations/Version20260209223000.php`
 
-- utilisateur initial (créé automatiquement si stockage absent) :
+- stockage local tokens reset :
+  - `var/data/password_reset_tokens.json`
+
+- utilisateur initial (créé par migration) :
   - email : `admin@retaia.local`
   - password : `change-me`
 
@@ -40,10 +44,14 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
 - Behat :
   - `vendor/bin/behat`
 
+## Base de données
+
+- développement : PostgreSQL (`DATABASE_URL` dans `.env`)
+- tests : mémoire (`DATABASE_URL=sqlite:///:memory:` dans `.env.test`)
+
 ## Points d’attention
 
-- Le stockage utilisateur actuel est un bootstrap local (JSON) pour démarrer vite.
-- À remplacer par une persistance applicative robuste avant mise en production.
+- La persistance utilisateur applicative est Doctrine + PostgreSQL.
+- Les tests unitaires/Behat restent en mémoire via un repository de test dédié.
 - En environnement non `prod`, `lost-password/request` retourne aussi un `reset_token` pour faciliter les tests.
 - Changer les secrets et mots de passe par défaut avant tout usage réel.
-

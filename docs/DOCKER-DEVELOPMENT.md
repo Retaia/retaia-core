@@ -6,13 +6,14 @@
 
 - `app`: `fullfrontend/php-fpm:latest`
 - `composer`: même image, profil `tools`
+- `database`: `postgres:16-alpine`
 
 Le code du repo est monté dans `/var/www/html`.
 
 ## Démarrage
 
 ```bash
-docker compose up -d app
+docker compose up -d app database
 ```
 
 ## Commandes utiles
@@ -29,6 +30,12 @@ Exécuter les tests :
 docker compose run --rm app composer test
 ```
 
+Appliquer les migrations Doctrine :
+
+```bash
+docker compose run --rm app php bin/console doctrine:migrations:migrate --no-interaction
+```
+
 Ouvrir un shell dans le conteneur app :
 
 ```bash
@@ -41,3 +48,8 @@ Arrêter l'environnement :
 docker compose down
 ```
 
+Supprimer aussi le volume PostgreSQL (reset complet) :
+
+```bash
+docker compose down -v
+```
