@@ -29,6 +29,7 @@ Selon le scope :
 ## Principes d’implémentation
 
 - Suivre les best practices Symfony dans tous les cas (composants natifs avant implémentation custom).
+- Ne jamais modifier manuellement des fichiers générés (Symfony/Composer/console).
 - Garder le serveur comme source de vérité. L’agent exécute, ne décide pas.
 - Ne jamais automatiser `KEEP/REJECT`.
 - Utiliser l’UUID comme identité. Le path est mutable.
@@ -68,6 +69,7 @@ Selon le scope :
 - Les dérivés passent par l’API upload dédiée.
 - Les sidecars sont associés par règles déterministes, pas heuristiques locales.
 - Tout comportement ambigu doit rester explicite (ex: sidecar non matché).
+- Ne pas committer de contenu généré : `vendor/`, `var/cache/`, `config/reference.php` et fichiers auto-générés équivalents.
 
 ## Persistance locale
 
