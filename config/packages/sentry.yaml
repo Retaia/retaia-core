@@ -1,0 +1,10 @@
+sentry:
+    dsn: '%env(SENTRY_DSN)%'
+    options:
+        environment: '%kernel.environment%'
+        send_default_pii: false
+        traces_sample_rate: 0.0
+
+when@test:
+    sentry:
+        dsn: ''

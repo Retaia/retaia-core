@@ -56,6 +56,58 @@ final class OpenApiContractTest extends WebTestCase
         self::assertSame('contract-correlation-id', $payload['correlation_id'] ?? null);
     }
 
+    public function testAuthEndpointsDeclareErrorModelInOpenApi(): void
+    {
+        $openApi = $this->openApi();
+
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/login', 'post', '401');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/login', 'post', '403');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/login', 'post', '422');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/login', 'post', '429');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/me', 'get', '401');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/lost-password/request', 'post', '422');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/lost-password/request', 'post', '429');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/lost-password/reset', 'post', '400');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/lost-password/reset', 'post', '422');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/verify-email/request', 'post', '422');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/verify-email/request', 'post', '429');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/verify-email/confirm', 'post', '400');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/verify-email/confirm', 'post', '422');
+    }
+
+    public function testErrorCodeEnumIncludesRuntimeCodes(): void
+    {
+        $openApi = $this->openApi();
+        $errorSchema = $this->errorSchema($openApi);
+        $errorCodes = $this->errorCodes($errorSchema);
+
+        $runtimeCodes = [
+            'UNAUTHORIZED',
+            'FORBIDDEN_SCOPE',
+            'FORBIDDEN_ACTOR',
+            'EMAIL_NOT_VERIFIED',
+            'STATE_CONFLICT',
+            'IDEMPOTENCY_CONFLICT',
+            'MISSING_IDEMPOTENCY_KEY',
+            'STALE_LOCK_TOKEN',
+            'NAME_COLLISION_EXHAUSTED',
+            'PURGED',
+            'NOT_FOUND',
+            'INVALID_TOKEN',
+            'USER_NOT_FOUND',
+            'VALIDATION_FAILED',
+            'LOCK_REQUIRED',
+            'LOCK_INVALID',
+            'TOO_MANY_ATTEMPTS',
+            'RATE_LIMITED',
+            'TEMPORARY_UNAVAILABLE',
+        ];
+
+        foreach ($runtimeCodes as $code) {
+            self::assertContains($code, $errorCodes, sprintf('OpenAPI ErrorResponse enum must include %s.', $code));
+        }
+    }
+
     public function testDecisionRequestWithoutIdempotencyKeyIsRejected(): void
     {
         $openApi = $this->openApi();
@@ -74,6 +126,60 @@ final class OpenApiContractTest extends WebTestCase
         self::assertSame('MISSING_IDEMPOTENCY_KEY', $payload['code'] ?? null);
         self::assertArrayHasKey('retryable', $payload);
         self::assertArrayHasKey('correlation_id', $payload);
+    }
+
+    public function testAuthUnauthorizedErrorMatchesOpenApiModel(): void
+    {
+        $openApi = $this->openApi();
+        $errorCodes = $this->errorCodes($this->errorSchema($openApi));
+
+        $client = static::createClient();
+        $this->ensureAuxiliaryTables();
+        $client->request('GET', '/api/v1/auth/me');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        $this->assertErrorPayloadMatchesModel($payload, $errorCodes);
+        self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
+    }
+
+    public function testAuthValidationErrorMatchesOpenApiModel(): void
+    {
+        $openApi = $this->openApi();
+        $errorCodes = $this->errorCodes($this->errorSchema($openApi));
+
+        $client = static::createClient();
+        $this->ensureAuxiliaryTables();
+        $client->jsonRequest('POST', '/api/v1/auth/lost-password/request', []);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        $this->assertErrorPayloadMatchesModel($payload, $errorCodes);
+        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
+    }
+
+    public function testAuthRateLimitErrorMatchesOpenApiModel(): void
+    {
+        $openApi = $this->openApi();
+        $errorCodes = $this->errorCodes($this->errorSchema($openApi));
+
+        $client = static::createClient();
+        $this->ensureAuxiliaryTables();
+        $status = Response::HTTP_ACCEPTED;
+        for ($i = 0; $i < 6; ++$i) {
+            $client->jsonRequest('POST', '/api/v1/auth/lost-password/request', [
+                'email' => 'admin@retaia.local',
+            ]);
+            $status = $client->getResponse()->getStatusCode();
+            if ($status === Response::HTTP_TOO_MANY_REQUESTS) {
+                break;
+            }
+        }
+
+        self::assertSame(Response::HTTP_TOO_MANY_REQUESTS, $status);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        $this->assertErrorPayloadMatchesModel($payload, $errorCodes);
+        self::assertSame('TOO_MANY_ATTEMPTS', $payload['code'] ?? null);
     }
 
     /**
@@ -112,6 +218,19 @@ final class OpenApiContractTest extends WebTestCase
 
     /**
      * @param array<string, mixed> $openApi
+     */
+    private function assertPathStatusUsesErrorResponse(array $openApi, string $path, string $method, string $status): void
+    {
+        $schemaRef = $openApi['paths'][$path][$method]['responses'][$status]['content']['application/json']['schema']['$ref'] ?? null;
+        self::assertSame(
+            '#/components/schemas/ErrorResponse',
+            $schemaRef,
+            sprintf('OpenAPI path %s %s response %s must reference ErrorResponse.', strtoupper($method), $path, $status)
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $openApi
      * @return array<string, mixed>
      */
     private function errorSchema(array $openApi): array
@@ -135,6 +254,20 @@ final class OpenApiContractTest extends WebTestCase
         return array_values(array_map('strval', $enum));
     }
 
+    /**
+     * @param mixed $payload
+     * @param array<int, string> $errorCodes
+     */
+    private function assertErrorPayloadMatchesModel(mixed $payload, array $errorCodes): void
+    {
+        self::assertIsArray($payload);
+        self::assertIsString($payload['code'] ?? null);
+        self::assertContains((string) $payload['code'], $errorCodes);
+        self::assertIsString($payload['message'] ?? null);
+        self::assertIsBool($payload['retryable'] ?? null);
+        self::assertIsString($payload['correlation_id'] ?? null);
+    }
+
     private function createAuthenticatedClient(): KernelBrowser
     {
         $client = static::createClient();
@@ -154,6 +287,8 @@ final class OpenApiContractTest extends WebTestCase
     {
         /** @var Connection $connection */
         $connection = static::getContainer()->get(Connection::class);
+        $connection->executeStatement('CREATE TABLE IF NOT EXISTS app_user (id VARCHAR(32) NOT NULL PRIMARY KEY, email VARCHAR(180) NOT NULL, password_hash VARCHAR(255) NOT NULL, roles CLOB NOT NULL, email_verified BOOLEAN NOT NULL DEFAULT 0)');
+        $connection->executeStatement('CREATE UNIQUE INDEX IF NOT EXISTS uniq_app_user_email ON app_user (email)');
         $connection->executeStatement('CREATE TABLE IF NOT EXISTS idempotency_entry (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, actor_id VARCHAR(64) NOT NULL, method VARCHAR(8) NOT NULL, path VARCHAR(255) NOT NULL, idempotency_key VARCHAR(128) NOT NULL, request_hash VARCHAR(64) NOT NULL, response_status INTEGER NOT NULL, response_body CLOB NOT NULL, created_at DATETIME NOT NULL)');
         $connection->executeStatement('CREATE UNIQUE INDEX IF NOT EXISTS uniq_idempotency_key_scope ON idempotency_entry (actor_id, method, path, idempotency_key)');
         $connection->executeStatement('CREATE TABLE IF NOT EXISTS asset_operation_lock (id VARCHAR(32) PRIMARY KEY NOT NULL, asset_uuid VARCHAR(36) NOT NULL, lock_type VARCHAR(32) NOT NULL, actor_id VARCHAR(64) NOT NULL, acquired_at DATETIME NOT NULL, released_at DATETIME DEFAULT NULL)');

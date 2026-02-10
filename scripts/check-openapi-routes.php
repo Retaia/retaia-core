@@ -65,7 +65,7 @@ if (!is_array($routes)) {
     exit(1);
 }
 
-$targetPrefixes = ['api_assets_', 'api_jobs_', 'api_agents_'];
+$targetPrefixes = ['api_assets_', 'api_jobs_', 'api_agents_', 'api_auth_'];
 /** @var array<string, bool> $implementedMethods */
 $implementedMethods = [];
 
@@ -115,7 +115,7 @@ if ($missingInOpenApi !== []) {
     exit(1);
 }
 
-fwrite(STDOUT, "OpenAPI route coverage OK for implemented assets/jobs/agents endpoints\n");
+fwrite(STDOUT, "OpenAPI route coverage OK for implemented assets/jobs/agents/auth endpoints\n");
 exit(0);
 
 function normalizePath(string $path): string

@@ -121,6 +121,118 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
         self::assertSame(['first', 'second'], $contents);
     }
 
+    public function testRetryDoesNotDuplicatePathHistoryWhenTargetAlreadyExists(): void
+    {
+        $root = sys_get_temp_dir().'/retaia-move-retry-'.bin2hex(random_bytes(4));
+        mkdir($root.'/INBOX', 0777, true);
+        mkdir($root.'/ARCHIVE', 0777, true);
+        mkdir($root.'/REJECTS', 0777, true);
+        file_put_contents($root.'/ARCHIVE/rush.mov', 'data');
+
+        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+
+        static::bootKernel();
+        $container = static::getContainer();
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = $container->get(EntityManagerInterface::class);
+        /** @var Connection $connection */
+        $connection = $container->get(Connection::class);
+        $this->ensureAuditTable($connection);
+
+        $asset = new Asset(
+            'cccccccc-cccc-cccc-cccc-cccccccccccc',
+            'VIDEO',
+            'rush.mov',
+            AssetState::ARCHIVED,
+            [],
+            null,
+            [
+                'source_path' => 'INBOX/rush.mov',
+                'current_path' => 'ARCHIVE/rush.mov',
+                'path_history' => [
+                    [
+                        'from' => 'INBOX/rush.mov',
+                        'to' => 'ARCHIVE/rush.mov',
+                        'reason' => 'state_transition',
+                        'moved_at' => (new \DateTimeImmutable())->format(DATE_ATOM),
+                    ],
+                ],
+            ]
+        );
+        $entityManager->persist($asset);
+        $entityManager->flush();
+
+        $application = new Application(static::$kernel);
+        $command = $application->find('app:ingest:apply-outbox');
+        $tester = new CommandTester($command);
+        $tester->execute(['--limit' => 10]);
+
+        $assetReloaded = $entityManager->find(Asset::class, 'cccccccc-cccc-cccc-cccc-cccccccccccc');
+        self::assertInstanceOf(Asset::class, $assetReloaded);
+        $history = $assetReloaded->getFields()['path_history'] ?? null;
+        self::assertIsArray($history);
+        self::assertCount(1, $history);
+
+        $count = (int) $connection->fetchOne('SELECT COUNT(*) FROM ingest_path_audit');
+        self::assertSame(0, $count);
+    }
+
+    public function testMoveFailureDoesNotBlockOtherAssets(): void
+    {
+        $root = sys_get_temp_dir().'/retaia-move-failure-'.bin2hex(random_bytes(4));
+        mkdir($root.'/INBOX', 0777, true);
+        mkdir($root.'/ARCHIVE', 0777, true);
+        mkdir($root.'/REJECTS', 0777, true);
+        file_put_contents($root.'/INBOX/a.mov', 'archive-fail');
+        file_put_contents($root.'/INBOX/b.mov', 'reject-ok');
+        chmod($root.'/ARCHIVE', 0555);
+
+        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+
+        static::bootKernel();
+        $container = static::getContainer();
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = $container->get(EntityManagerInterface::class);
+        /** @var Connection $connection */
+        $connection = $container->get(Connection::class);
+        $this->ensureAuditTable($connection);
+
+        $archived = new Asset(
+            'dddddddd-dddd-dddd-dddd-dddddddddddd',
+            'VIDEO',
+            'a.mov',
+            AssetState::ARCHIVED,
+            [],
+            null,
+            ['source_path' => 'INBOX/a.mov']
+        );
+        $rejected = new Asset(
+            'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+            'VIDEO',
+            'b.mov',
+            AssetState::REJECTED,
+            [],
+            null,
+            ['source_path' => 'INBOX/b.mov']
+        );
+        $entityManager->persist($archived);
+        $entityManager->persist($rejected);
+        $entityManager->flush();
+
+        $application = new Application(static::$kernel);
+        $command = $application->find('app:ingest:apply-outbox');
+        $tester = new CommandTester($command);
+        $tester->execute(['--limit' => 10]);
+
+        self::assertFileExists($root.'/INBOX/a.mov');
+        self::assertFileExists($root.'/REJECTS/b.mov');
+        self::assertStringContainsString('Encountered 1 move failure', $tester->getDisplay());
+
+        chmod($root.'/ARCHIVE', 0755);
+    }
+
     private function ensureAuditTable(Connection $connection): void
     {
         $connection->executeStatement(

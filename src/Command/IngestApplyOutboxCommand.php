@@ -35,6 +35,7 @@ final class IngestApplyOutboxCommand extends Command
         $io = new SymfonyStyle($input, $output);
         $limit = max(1, (int) $input->getOption('limit'));
         $processed = 0;
+        $failed = 0;
 
         $assets = array_merge(
             $this->assets->listAssets(AssetState::ARCHIVED->value, null, null, $limit),
@@ -42,9 +43,17 @@ final class IngestApplyOutboxCommand extends Command
         );
 
         foreach ($assets as $asset) {
-            $processed += $this->processAsset($asset);
+            try {
+                $processed += $this->processAsset($asset);
+            } catch (\Throwable $e) {
+                ++$failed;
+                $io->warning(sprintf('Skipping asset %s: %s', $asset->getUuid(), $e->getMessage()));
+            }
         }
 
+        if ($failed > 0) {
+            $io->warning(sprintf('Encountered %d move failure(s).', $failed));
+        }
         $io->success(sprintf('Moved %d file(s) to ARCHIVE/REJECTS.', $processed));
 
         return Command::SUCCESS;
@@ -68,13 +77,15 @@ final class IngestApplyOutboxCommand extends Command
         $targetRelative = $targetFolder.DIRECTORY_SEPARATOR.basename($fromRelative);
         $targetAbsolute = $root.DIRECTORY_SEPARATOR.$targetRelative;
 
-        if (!is_dir(dirname($targetAbsolute))) {
-            mkdir(dirname($targetAbsolute), 0777, true);
+        if (!is_dir(dirname($targetAbsolute)) && !mkdir(dirname($targetAbsolute), 0777, true) && !is_dir(dirname($targetAbsolute))) {
+            throw new \RuntimeException(sprintf('Unable to create target directory for %s', $targetRelative));
         }
 
         if (is_file($fromAbsolute)) {
             [$finalRelative, $finalAbsolute] = $this->resolveAvailableTarget($root, $targetFolder, $targetRelative, $asset->getUuid());
-            rename($fromAbsolute, $finalAbsolute);
+            if (!@rename($fromAbsolute, $finalAbsolute)) {
+                throw new \RuntimeException(sprintf('Unable to move %s to %s', $fromRelative, $finalRelative));
+            }
             $this->persistPathUpdate($asset, $fromRelative, $finalRelative);
 
             return 1;
@@ -92,9 +103,21 @@ final class IngestApplyOutboxCommand extends Command
     private function persistPathUpdate(Asset $asset, string $fromRelative, string $toRelative): void
     {
         $fields = $asset->getFields();
+        if (($fields['current_path'] ?? null) === $toRelative) {
+            return;
+        }
+
         $history = $fields['path_history'] ?? [];
         if (!is_array($history)) {
             $history = [];
+        }
+        $last = $history[count($history) - 1] ?? null;
+        if (is_array($last) && ($last['from'] ?? null) === $fromRelative && ($last['to'] ?? null) === $toRelative) {
+            $fields['current_path'] = $toRelative;
+            $asset->setFields($fields);
+            $this->assets->save($asset);
+
+            return;
         }
 
         $entry = [
