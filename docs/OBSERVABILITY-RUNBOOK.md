@@ -38,5 +38,7 @@ Fournir un socle opérationnel minimal pour diagnostiquer les incidents API côt
 2. Corréler les erreurs API avec les événements structurés sur la même fenêtre temporelle.
 3. Pour les conflits jobs, regrouper par `job_id` puis vérifier `agent_id` et fréquence.
 4. Pour les incidents auth, vérifier les spikes `auth.login.throttled` et les codes API `429`.
-5. En cas de correction, passer par PR avec tests de non-régression.
-
+5. Vérifier la sonde Sentry (prod):
+   - `php bin/console app:sentry:probe`
+   - DSN attendu: host `sentry.fullfrontend.be`
+6. En cas de correction, passer par PR avec tests de non-régression.

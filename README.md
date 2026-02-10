@@ -89,6 +89,7 @@ Useful checks:
 php bin/console lint:yaml config
 php bin/console lint:container
 composer audit --no-interaction
+php bin/console app:sentry:probe
 ```
 
 DX shortcuts:
@@ -160,6 +161,17 @@ GitHub Actions workflow:
 See details in:
 
 - `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/GITHUB-WORKFLOWS.md`
+
+## Sentry (Prod Probe)
+
+- Configure `SENTRY_DSN` in production with host `sentry.fullfrontend.be`.
+- Probe command:
+
+```bash
+php bin/console app:sentry:probe
+```
+
+- Non-prod is skipped by default (use `--allow-non-prod` only for explicit checks).
 
 ## Branching & PR Policy
 
