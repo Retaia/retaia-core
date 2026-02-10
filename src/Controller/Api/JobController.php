@@ -71,10 +71,7 @@ final class JobController
     {
         $lockToken = trim((string) ($this->payload($request)['lock_token'] ?? ''));
         if ($lockToken === '') {
-            return new JsonResponse([
-                'code' => 'VALIDATION_FAILED',
-                'message' => 'lock_token is required',
-            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            return $this->lockRequiredResponse();
         }
 
         $job = $this->jobs->heartbeat($jobId, $lockToken, 300);
@@ -86,10 +83,7 @@ final class JobController
                 'code' => $conflictCode,
             ]);
 
-            return new JsonResponse([
-                'code' => $conflictCode,
-                'message' => 'Invalid lock token or expired lock',
-            ], Response::HTTP_CONFLICT);
+            return $this->lockConflictResponse($conflictCode);
         }
 
         $this->logger->info('jobs.heartbeat.succeeded', $this->jobContext($job));
@@ -106,10 +100,7 @@ final class JobController
             $payload = $this->payload($request);
             $lockToken = trim((string) ($payload['lock_token'] ?? ''));
             if ($lockToken === '') {
-                return new JsonResponse([
-                    'code' => 'VALIDATION_FAILED',
-                    'message' => 'lock_token is required',
-                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+                return $this->lockRequiredResponse();
             }
 
             $result = $payload['result'] ?? [];
@@ -136,10 +127,7 @@ final class JobController
                     'code' => $conflictCode,
                 ]);
 
-                return new JsonResponse([
-                    'code' => $conflictCode,
-                    'message' => 'Invalid lock token or expired lock',
-                ], Response::HTTP_CONFLICT);
+                return $this->lockConflictResponse($conflictCode);
             }
 
             $this->logger->info('jobs.submit.succeeded', $this->jobContext($job));
@@ -158,10 +146,14 @@ final class JobController
             $message = trim((string) ($payload['message'] ?? ''));
             $retryable = (bool) ($payload['retryable'] ?? false);
 
-            if ($lockToken === '' || $errorCode === '' || $message === '') {
+            if ($lockToken === '') {
+                return $this->lockRequiredResponse();
+            }
+
+            if ($errorCode === '' || $message === '') {
                 return new JsonResponse([
                     'code' => 'VALIDATION_FAILED',
-                    'message' => 'lock_token, error_code and message are required',
+                    'message' => 'error_code and message are required',
                 ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
@@ -176,10 +168,7 @@ final class JobController
                     'code' => $conflictCode,
                 ]);
 
-                return new JsonResponse([
-                    'code' => $conflictCode,
-                    'message' => 'Invalid lock token or expired lock',
-                ], Response::HTTP_CONFLICT);
+                return $this->lockConflictResponse($conflictCode);
             }
 
             $context = $this->jobContext($job);
@@ -233,6 +222,25 @@ final class JobController
         }
 
         return 'STATE_CONFLICT';
+    }
+
+    private function lockRequiredResponse(): JsonResponse
+    {
+        return new JsonResponse([
+            'code' => 'LOCK_REQUIRED',
+            'message' => 'lock_token is required',
+        ], Response::HTTP_LOCKED);
+    }
+
+    private function lockConflictResponse(string $conflictCode): JsonResponse
+    {
+        $status = $conflictCode === 'STALE_LOCK_TOKEN' ? Response::HTTP_CONFLICT : Response::HTTP_LOCKED;
+        $code = $conflictCode === 'STATE_CONFLICT' ? 'LOCK_INVALID' : $conflictCode;
+
+        return new JsonResponse([
+            'code' => $code,
+            'message' => 'Invalid lock token or expired lock',
+        ], $status);
     }
 
     /**
