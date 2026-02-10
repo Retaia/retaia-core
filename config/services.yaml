@@ -46,5 +46,9 @@ services:
         bind:
             bool $bulkDecisionsEnabled: '%app.features.decisions.bulk%'
 
+    App\Controller\Api\AssetController:
+        bind:
+            bool $featureSuggestedTagsFiltersEnabled: '%app.features.ai.suggested_tags_filters%'
+
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

@@ -52,6 +52,7 @@ Selon le scope :
 - Respecter strictement `openapi/v1.yaml` et `specs/api/API-CONTRACTS.md`.
 - Appliquer `Idempotency-Key` sur les endpoints critiques définis par la spec.
 - Pour les features `v1.1+`, vérifier le feature flag et renvoyer un refus explicite si inactif.
+- Les filtres `suggested_tags` / `suggested_tags_mode` doivent être refusés tant que `features.ai.suggested_tags_filters` est inactif.
 - Garantir la stabilité des codes d’erreur contractuels (ex: `STATE_CONFLICT`, `IDEMPOTENCY_CONFLICT`).
 - Ajouter systématiquement des headers de sécurité sur les réponses API (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`).
 - En production HTTPS, forcer `Strict-Transport-Security` et cookies de session `secure`.
