@@ -8,6 +8,8 @@
 # https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
 parameters:
     app.password_reset_ttl_seconds: 3600
+    app.email_verification_ttl_seconds: 86400
+    app.email_verification.secret: '%kernel.secret%'
     app.password_policy.min_length: 12
     app.password_policy.require_mixed_case: true
     app.password_policy.require_number: true

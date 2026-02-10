@@ -3,6 +3,7 @@
 namespace App\Controller\Api;
 
 use App\Entity\User;
+use App\User\Service\EmailVerificationService;
 use App\User\Service\PasswordPolicy;
 use App\User\Service\PasswordResetService;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -17,6 +18,7 @@ final class AuthController
     public function __construct(
         private Security $security,
         private PasswordResetService $passwordResetService,
+        private EmailVerificationService $emailVerificationService,
         private PasswordPolicy $passwordPolicy,
     ) {
     }
@@ -108,6 +110,49 @@ final class AuthController
         }
 
         return new JsonResponse(['password_reset' => true], Response::HTTP_OK);
+    }
+
+    #[Route('/verify-email/request', name: 'api_auth_verify_email_request', methods: ['POST'])]
+    public function requestEmailVerification(Request $request): JsonResponse
+    {
+        $payload = $this->payload($request);
+        $email = trim((string) ($payload['email'] ?? ''));
+        if ($email === '') {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => 'email is required'],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        $token = $this->emailVerificationService->requestVerification($email);
+        $response = ['accepted' => true];
+        if ($token !== null) {
+            $response['verification_token'] = $token;
+        }
+
+        return new JsonResponse($response, Response::HTTP_ACCEPTED);
+    }
+
+    #[Route('/verify-email/confirm', name: 'api_auth_verify_email_confirm', methods: ['POST'])]
+    public function confirmEmailVerification(Request $request): JsonResponse
+    {
+        $payload = $this->payload($request);
+        $token = trim((string) ($payload['token'] ?? ''));
+        if ($token === '') {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => 'token is required'],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        if (!$this->emailVerificationService->confirmVerification($token)) {
+            return new JsonResponse(
+                ['code' => 'INVALID_TOKEN', 'message' => 'Token invalid or expired'],
+                Response::HTTP_BAD_REQUEST
+            );
+        }
+
+        return new JsonResponse(['email_verified' => true], Response::HTTP_OK);
     }
 
     /**
