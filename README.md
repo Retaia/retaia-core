@@ -51,8 +51,7 @@ composer test
 Run coverage and enforce threshold (80%):
 
 ```bash
-composer test:coverage
-composer check:coverage
+composer test:quality
 ```
 
 Useful checks:
@@ -75,7 +74,7 @@ make ci-local
 
 This repository supports Husky hooks for local commit quality gates:
 
-- `pre-commit`: runs `composer test`, `composer test:coverage`, then `composer check:coverage` (80% gate)
+- `pre-commit`: runs `composer test:quality` (PHPUnit with coverage + Behat + 80% gate)
 - `commit-msg`: enforces Conventional Commits via `commitlint`
 
 Coverage prerequisite for `pre-commit`:
@@ -112,7 +111,6 @@ GitHub Actions workflow:
 - `lint`
 - `test`
 - `security-audit`
-- `coverage` (80% minimum)
 
 See details in:
 

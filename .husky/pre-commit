@@ -1,6 +1,4 @@
 #!/usr/bin/env sh
 set -eu
 
-composer test
-composer test:coverage
-composer check:coverage
+composer test:quality

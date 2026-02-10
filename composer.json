@@ -66,6 +66,11 @@
         "test:unit": "vendor/bin/phpunit",
         "test:coverage": "bash scripts/run-coverage.sh",
         "test:behat": "vendor/bin/behat",
+        "test:quality": [
+            "@test:coverage",
+            "@test:behat",
+            "@check:coverage"
+        ],
         "test": [
             "@test:unit",
             "@test:behat"
