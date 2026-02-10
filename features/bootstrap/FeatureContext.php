@@ -28,6 +28,12 @@ final class FeatureContext implements Context
     private bool $lastEmailVerificationSucceeded = false;
     private ?string $lastToken = null;
     private ?string $lastVerificationToken = null;
+    /** @var array<string, bool> */
+    private array $pendingJobs = [];
+    /** @var array<string, string> */
+    private array $claimedJobs = [];
+    /** @var array<string, bool> */
+    private array $claimResults = [];
 
     /**
      * @Given a bootstrap user exists
@@ -192,5 +198,37 @@ final class FeatureContext implements Context
     public function emailVerificationShouldFail(): void
     {
         Assert::assertFalse($this->lastEmailVerificationSucceeded);
+    }
+
+    /**
+     * @Given a pending job exists with id :jobId
+     */
+    public function aPendingJobExistsWithId(string $jobId): void
+    {
+        $this->pendingJobs[$jobId] = true;
+        unset($this->claimedJobs[$jobId]);
+        $this->claimResults = [];
+    }
+
+    /**
+     * @When agent :agentId claims job :jobId
+     */
+    public function agentClaimsJob(string $agentId, string $jobId): void
+    {
+        $canClaim = ($this->pendingJobs[$jobId] ?? false) && !isset($this->claimedJobs[$jobId]);
+        if ($canClaim) {
+            $this->claimedJobs[$jobId] = $agentId;
+        }
+
+        $this->claimResults[$agentId] = $canClaim;
+    }
+
+    /**
+     * @Then exactly one claim should succeed
+     */
+    public function exactlyOneClaimShouldSucceed(): void
+    {
+        $successfulClaims = array_values(array_filter($this->claimResults, static fn (bool $result): bool => $result));
+        Assert::assertCount(1, $successfulClaims);
     }
 }
