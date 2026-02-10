@@ -73,14 +73,14 @@ final class ApiAuthFlowTest extends WebTestCase
 
         $client->jsonRequest('POST', '/api/v1/auth/lost-password/reset', [
             'token' => $token,
-            'new_password' => 'new-password',
+            'new_password' => 'New-password1!',
         ]);
 
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('POST', '/api/v1/auth/login', [
             'email' => 'admin@retaia.local',
-            'password' => 'new-password',
+            'password' => 'New-password1!',
         ]);
 
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
@@ -150,7 +150,7 @@ final class ApiAuthFlowTest extends WebTestCase
 
         $client->jsonRequest('POST', '/api/v1/auth/lost-password/reset', [
             'token' => $token,
-            'new_password' => 'new-password',
+            'new_password' => 'New-password1!',
         ]);
 
         self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
@@ -180,6 +180,44 @@ final class ApiAuthFlowTest extends WebTestCase
                 'tokenHash' => hash('sha256', $token),
             ],
         );
+    }
+
+    public function testLoginFailsWhenEmailIsNotVerified(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.16');
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'pending@retaia.local',
+            'password' => 'change-me',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('EMAIL_NOT_VERIFIED', $payload['code'] ?? null);
+    }
+
+    public function testLostPasswordRejectsPasswordWithoutSpecialCharacter(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.17');
+
+        $client->jsonRequest('POST', '/api/v1/auth/lost-password/request', [
+            'email' => 'admin@retaia.local',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_ACCEPTED);
+        $requestPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($requestPayload);
+        $token = $requestPayload['reset_token'] ?? null;
+        self::assertIsString($token);
+
+        $client->jsonRequest('POST', '/api/v1/auth/lost-password/reset', [
+            'token' => $token,
+            'new_password' => 'NoSpecial1234',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
+        self::assertSame('new_password must include at least one special character', $payload['message'] ?? null);
     }
 
     private function createIsolatedClient(string $ipAddress): \Symfony\Bundle\FrameworkBundle\KernelBrowser

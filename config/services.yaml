@@ -8,7 +8,10 @@
 # https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
 parameters:
     app.password_reset_ttl_seconds: 3600
-    app.password_reset_min_length: 12
+    app.password_policy.min_length: 12
+    app.password_policy.require_mixed_case: true
+    app.password_policy.require_number: true
+    app.password_policy.require_special: true
 
 services:
     # default configuration for services in *this* file

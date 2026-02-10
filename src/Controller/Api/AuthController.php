@@ -3,8 +3,8 @@
 namespace App\Controller\Api;
 
 use App\Entity\User;
+use App\User\Service\PasswordPolicy;
 use App\User\Service\PasswordResetService;
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -17,8 +17,7 @@ final class AuthController
     public function __construct(
         private Security $security,
         private PasswordResetService $passwordResetService,
-        #[Autowire('%app.password_reset_min_length%')]
-        private int $passwordResetMinLength,
+        private PasswordPolicy $passwordPolicy,
     ) {
     }
 
@@ -90,11 +89,12 @@ final class AuthController
             );
         }
 
-        if (mb_strlen($newPassword) < $this->passwordResetMinLength) {
+        $violations = $this->passwordPolicy->violations($newPassword);
+        if ($violations !== []) {
             return new JsonResponse(
                 [
                     'code' => 'VALIDATION_FAILED',
-                    'message' => sprintf('new_password must be at least %d characters', $this->passwordResetMinLength),
+                    'message' => $violations[0],
                 ],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );

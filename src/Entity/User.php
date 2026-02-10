@@ -24,6 +24,8 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         private string $passwordHash,
         #[ORM\Column(type: 'json')]
         private array $roles = ['ROLE_USER'],
+        #[ORM\Column(type: 'boolean')]
+        private bool $emailVerified = false,
     ) {
     }
 
@@ -62,6 +64,18 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
 
     public function eraseCredentials(): void
     {
+    }
+
+    public function isEmailVerified(): bool
+    {
+        return $this->emailVerified;
+    }
+
+    public function withEmailVerified(bool $verified): self
+    {
+        $this->emailVerified = $verified;
+
+        return $this;
     }
 
     public function withPasswordHash(string $hash): self

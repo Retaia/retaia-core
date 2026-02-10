@@ -95,6 +95,13 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
             );
         }
 
+        if ($exception->getMessageKey() === 'EMAIL_NOT_VERIFIED') {
+            return new JsonResponse(
+                ['code' => 'EMAIL_NOT_VERIFIED', 'message' => 'Email address must be verified'],
+                Response::HTTP_FORBIDDEN
+            );
+        }
+
         if ($exception instanceof TooManyLoginAttemptsAuthenticationException) {
             $minutes = $exception->getMessageData()['%minutes%'] ?? null;
             $response = ['code' => 'TOO_MANY_ATTEMPTS', 'message' => 'Too many login attempts'];
