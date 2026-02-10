@@ -110,6 +110,31 @@ final class WorkflowApiTest extends WebTestCase
         self::assertSame('FORBIDDEN_ACTOR', $payload['code'] ?? null);
     }
 
+    public function testPurgeReturnsConflictWhenAssetHasActiveOperationLock(): void
+    {
+        $client = $this->createAuthenticatedClient('admin@retaia.local');
+        $uuid = '66666666-ffff-4fff-8fff-666666666666';
+        $this->seedAsset($uuid, AssetState::REJECTED, 'locked-purge.mov');
+
+        /** @var Connection $connection */
+        $connection = static::getContainer()->get(Connection::class);
+        $connection->insert('asset_operation_lock', [
+            'id' => bin2hex(random_bytes(16)),
+            'asset_uuid' => $uuid,
+            'lock_type' => 'asset_purge_lock',
+            'actor_id' => 'test',
+            'acquired_at' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
+            'released_at' => null,
+        ]);
+
+        $client->jsonRequest('POST', '/api/v1/assets/'.$uuid.'/purge', [], [
+            'HTTP_IDEMPOTENCY_KEY' => 'purge-locked-1',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('STATE_CONFLICT', $payload['code'] ?? null);
+    }
+
     private function createAuthenticatedClient(string $email): KernelBrowser
     {
         $client = static::createClient();
@@ -143,6 +168,8 @@ final class WorkflowApiTest extends WebTestCase
         /** @var Connection $connection */
         $connection = static::getContainer()->get(Connection::class);
         $connection->executeStatement('CREATE TABLE IF NOT EXISTS batch_move_report (batch_id VARCHAR(16) PRIMARY KEY NOT NULL, payload CLOB NOT NULL, created_at DATETIME NOT NULL)');
+        $connection->executeStatement('CREATE TABLE IF NOT EXISTS asset_operation_lock (id VARCHAR(32) PRIMARY KEY NOT NULL, asset_uuid VARCHAR(36) NOT NULL, lock_type VARCHAR(32) NOT NULL, actor_id VARCHAR(64) NOT NULL, acquired_at DATETIME NOT NULL, released_at DATETIME DEFAULT NULL)');
+        $connection->executeStatement('CREATE TABLE IF NOT EXISTS processing_job (id VARCHAR(36) PRIMARY KEY NOT NULL, asset_uuid VARCHAR(36) NOT NULL, job_type VARCHAR(64) NOT NULL, status VARCHAR(16) NOT NULL, claimed_by VARCHAR(32) DEFAULT NULL, lock_token VARCHAR(64) DEFAULT NULL, locked_until DATETIME DEFAULT NULL, result_payload CLOB DEFAULT NULL, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL)');
         $connection->executeStatement('CREATE TABLE IF NOT EXISTS idempotency_entry (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, actor_id VARCHAR(64) NOT NULL, method VARCHAR(8) NOT NULL, path VARCHAR(255) NOT NULL, idempotency_key VARCHAR(128) NOT NULL, request_hash VARCHAR(64) NOT NULL, response_status INTEGER NOT NULL, response_body CLOB NOT NULL, created_at DATETIME NOT NULL)');
         $connection->executeStatement('CREATE UNIQUE INDEX IF NOT EXISTS uniq_idempotency_key_scope ON idempotency_entry (actor_id, method, path, idempotency_key)');
     }

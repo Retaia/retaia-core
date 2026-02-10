@@ -4,6 +4,7 @@ namespace App\Tests\Functional;
 
 use App\Asset\AssetState;
 use App\Entity\Asset;
+use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
@@ -20,6 +21,8 @@ final class AssetStateMachineApiTest extends WebTestCase
 
         $client->jsonRequest('POST', '/api/v1/assets/11111111-1111-1111-1111-111111111111/decision', [
             'action' => 'KEEP',
+        ], [
+            'HTTP_IDEMPOTENCY_KEY' => 'asset-decision-ok-1',
         ]);
 
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
@@ -33,6 +36,8 @@ final class AssetStateMachineApiTest extends WebTestCase
 
         $client->jsonRequest('POST', '/api/v1/assets/22222222-2222-2222-2222-222222222222/decision', [
             'action' => 'KEEP',
+        ], [
+            'HTTP_IDEMPOTENCY_KEY' => 'asset-decision-conflict-1',
         ]);
 
         self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
@@ -55,7 +60,9 @@ final class AssetStateMachineApiTest extends WebTestCase
     {
         $client = $this->createAuthenticatedClient(true);
 
-        $client->jsonRequest('POST', '/api/v1/assets/33333333-3333-3333-3333-333333333333/reprocess');
+        $client->jsonRequest('POST', '/api/v1/assets/33333333-3333-3333-3333-333333333333/reprocess', [], [
+            'HTTP_IDEMPOTENCY_KEY' => 'asset-reprocess-ok-1',
+        ]);
 
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $payload = json_decode((string) $client->getResponse()->getContent(), true);
@@ -66,7 +73,9 @@ final class AssetStateMachineApiTest extends WebTestCase
     {
         $client = $this->createAuthenticatedClient();
 
-        $client->jsonRequest('POST', '/api/v1/assets/00000000-0000-0000-0000-000000000000/reprocess');
+        $client->jsonRequest('POST', '/api/v1/assets/00000000-0000-0000-0000-000000000000/reprocess', [], [
+            'HTTP_IDEMPOTENCY_KEY' => 'asset-reprocess-missing-1',
+        ]);
 
         self::assertResponseStatusCodeSame(Response::HTTP_NOT_FOUND);
         $payload = json_decode((string) $client->getResponse()->getContent(), true);
@@ -134,6 +143,7 @@ final class AssetStateMachineApiTest extends WebTestCase
     {
         $client = static::createClient();
         $client->disableReboot();
+        $this->ensureAuxiliaryTables();
 
         if ($seedAssets) {
             $this->seedAssets();
@@ -147,6 +157,15 @@ final class AssetStateMachineApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         return $client;
+    }
+
+    private function ensureAuxiliaryTables(): void
+    {
+        /** @var Connection $connection */
+        $connection = self::getContainer()->get(Connection::class);
+        $connection->executeStatement('CREATE TABLE IF NOT EXISTS asset_operation_lock (id VARCHAR(32) PRIMARY KEY NOT NULL, asset_uuid VARCHAR(36) NOT NULL, lock_type VARCHAR(32) NOT NULL, actor_id VARCHAR(64) NOT NULL, acquired_at DATETIME NOT NULL, released_at DATETIME DEFAULT NULL)');
+        $connection->executeStatement('CREATE TABLE IF NOT EXISTS idempotency_entry (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, actor_id VARCHAR(64) NOT NULL, method VARCHAR(8) NOT NULL, path VARCHAR(255) NOT NULL, idempotency_key VARCHAR(128) NOT NULL, request_hash VARCHAR(64) NOT NULL, response_status INTEGER NOT NULL, response_body CLOB NOT NULL, created_at DATETIME NOT NULL)');
+        $connection->executeStatement('CREATE UNIQUE INDEX IF NOT EXISTS uniq_idempotency_key_scope ON idempotency_entry (actor_id, method, path, idempotency_key)');
     }
 
     private function seedAssets(): void

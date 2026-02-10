@@ -27,5 +27,26 @@ final class FilesystemFilePollerTest extends TestCase
         self::assertSame('b.txt', $items[1]['path']);
         self::assertSame(1, $items[0]['size']);
     }
-}
 
+    public function testPollIgnoresSymlinks(): void
+    {
+        if (!function_exists('symlink')) {
+            self::markTestSkipped('symlink not available');
+        }
+
+        $root = sys_get_temp_dir().'/retaia-watch-poller-link-'.bin2hex(random_bytes(4));
+        mkdir($root, 0777, true);
+        file_put_contents($root.'/safe.txt', 'SAFE');
+
+        $outside = sys_get_temp_dir().'/retaia-watch-poller-outside-'.bin2hex(random_bytes(4)).'.txt';
+        file_put_contents($outside, 'OUTSIDE');
+        @symlink($outside, $root.'/outside.txt');
+
+        $resolver = new WatchPathResolver($root, '.');
+        $poller = new FilesystemFilePoller($resolver);
+        $items = $poller->poll(10);
+
+        self::assertCount(1, $items);
+        self::assertSame('safe.txt', $items[0]['path']);
+    }
+}

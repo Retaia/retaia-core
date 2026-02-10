@@ -122,6 +122,11 @@ Toute règle de comportement DOIT vivre dans `retaia-docs`.
 * Les tests unitaires et Behat DOIVENT rester rapides et isolés via des doubles en mémoire.
 * Les noms de classes `Entity` et `Repository` DOIVENT rester agnostiques d’implémentation.
 * Ne pas inclure `Doctrine` dans les noms de classes métier (ex: préférer `UserRepository` à `DoctrineUserRepository`).
+* Les endpoints critiques DOIVENT appliquer `Idempotency-Key` selon `specs/api/API-CONTRACTS.md`.
+* Les workflows move/purge DOIVENT utiliser des verrous persistés (table `asset_operation_lock`) conformément à `specs/policies/LOCKING-MATRIX.md`.
+* Le polling filesystem DOIT ignorer les symlinks et refuser les chemins non sûrs.
+* Les messages API DOIVENT rester localisables (`en`, `fr`) avec fallback `en` sans impacter les codes métier.
+* Toute PR doit vérifier que les migrations nécessaires sont présentes et exécutables.
 
 ---
 

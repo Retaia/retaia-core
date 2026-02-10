@@ -49,6 +49,11 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
   - migration : `migrations/Version20260209235500.php`
   - cleanup CLI : `php bin/console app:password-reset:cleanup`
 
+- persistance sécurité/concurrence :
+  - table idempotency : `idempotency_entry` (endpoints critiques v1)
+  - table locks opérationnels : `asset_operation_lock`
+  - migration lock : `migrations/Version20260210174000.php`
+
 - utilisateur initial (créé par migration) :
   - email : `admin@retaia.local`
   - password : `change-me`
@@ -82,6 +87,9 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
 - `lost-password/reset` applique une policy configurable (longueur + complexité).
 - Les logs auth n’incluent ni mot de passe ni token brut (email hashé).
 - Toute vérification email forcée par admin est tracée en audit log.
+- `decision` et `reprocess` exigent `Idempotency-Key` (conforme contrat API v1).
+- Les workflows move/purge sont protégés par locks persistés pour éviter les courses concurrentes.
+- Le poller ingest ignore les symlinks et les chemins non sûrs.
 - Changer les secrets et mots de passe par défaut avant tout usage réel.
 
 ## Paramètres configurables

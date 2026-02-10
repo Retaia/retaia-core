@@ -61,6 +61,8 @@ Selon le scope :
 - Aucun processing sur asset `MOVE_QUEUED`.
 - Purge refusée si un job est encore claimé.
 - Reprocess refusé si lock move actif.
+- Verrous d'opération persistés (`asset_move_lock`, `asset_purge_lock`) requis pour toute opération move/purge.
+- Les locks actifs doivent bloquer les mutations humaines critiques (`decision`, `reprocess`, `reopen`, `purge`).
 - Écrire les flows en pensant crash/retry/reprise idempotente.
 
 ## Données et filesystem
@@ -69,6 +71,7 @@ Selon le scope :
 - Les dérivés passent par l’API upload dédiée.
 - Les sidecars sont associés par règles déterministes, pas heuristiques locales.
 - Tout comportement ambigu doit rester explicite (ex: sidecar non matché).
+- Le polling filesystem doit ignorer les symlinks et refuser les chemins non sûrs (`..`, null-byte, absolu inattendu).
 - Ne pas committer de contenu généré : `vendor/`, `var/cache/`, `config/reference.php` et fichiers auto-générés équivalents.
 
 ## Persistance locale
@@ -87,6 +90,7 @@ Selon le scope :
 - Batch move: éligibilité, locks, collision naming, tolérance partielle aux erreurs.
 - Purge: uniquement depuis `REJECTED`, suppression originaux + sidecars + dérivés.
 - Authz: scope/acteur/état vérifiés selon matrice normative.
+- I18N API: messages localisés (`en`, `fr`) + fallback `en` pour locale non supportée.
 
 ## Checklist PR
 

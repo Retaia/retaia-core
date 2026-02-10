@@ -7,6 +7,7 @@ use App\Asset\Repository\AssetRepositoryInterface;
 use App\Asset\Service\AssetStateMachine;
 use App\Asset\Service\StateConflictException;
 use App\Entity\Asset;
+use App\Lock\Repository\OperationLockRepository;
 use App\Workflow\Service\BatchWorkflowService;
 use Doctrine\DBAL\Connection;
 use PHPUnit\Framework\TestCase;
@@ -22,7 +23,7 @@ final class BatchWorkflowServiceTest extends TestCase
         $assets = $this->createMock(AssetRepositoryInterface::class);
         $assets->method('listAssets')->willReturn([$assetKeep, $assetReject, $assetIgnored]);
 
-        $service = new BatchWorkflowService($assets, new AssetStateMachine(), $this->createMock(Connection::class));
+        $service = new BatchWorkflowService($assets, new AssetStateMachine(), $this->createMock(Connection::class), $this->locks(false));
         $preview = $service->previewMoves();
 
         self::assertSame(2, $preview['eligible_count']);
@@ -52,7 +53,7 @@ final class BatchWorkflowServiceTest extends TestCase
             self::callback(static fn (array $payload): bool => isset($payload['batch_id'], $payload['payload']))
         );
 
-        $service = new BatchWorkflowService($assets, new AssetStateMachine(), $connection);
+        $service = new BatchWorkflowService($assets, new AssetStateMachine(), $connection, $this->locks(false));
         $result = $service->applyMoves();
 
         self::assertSame(1, $result['success_count']);
@@ -74,7 +75,7 @@ final class BatchWorkflowServiceTest extends TestCase
         });
         $assets->expects(self::once())->method('save')->with($eligible);
 
-        $service = new BatchWorkflowService($assets, new AssetStateMachine(), $this->createMock(Connection::class));
+        $service = new BatchWorkflowService($assets, new AssetStateMachine(), $this->createMock(Connection::class), $this->locks(false));
         $preview = $service->previewDecisions(['a-1', 'a-2', 'a-3'], 'keep');
         $apply = $service->applyDecisions(['a-1', 'a-2'], 'keep');
 
@@ -96,13 +97,14 @@ final class BatchWorkflowServiceTest extends TestCase
                 ['payload' => 'not-json'],
                 false
             );
+        $connection->method('fetchOne')->willReturn(0);
 
         $rejected = $this->asset('a-r', 'r.mp4', AssetState::REJECTED);
         $ready = $this->asset('a-ready', 'ready.mp4', AssetState::READY);
 
         $assets->expects(self::once())->method('save')->with($rejected);
 
-        $service = new BatchWorkflowService($assets, new AssetStateMachine(), $connection);
+        $service = new BatchWorkflowService($assets, new AssetStateMachine(), $connection, $this->locks(false));
 
         self::assertSame(['batch_id' => 'b-1'], $service->getBatchReport('b-1'));
         self::assertNull($service->getBatchReport('b-2'));
@@ -127,5 +129,15 @@ final class BatchWorkflowServiceTest extends TestCase
             createdAt: new \DateTimeImmutable('-1 hour'),
             updatedAt: new \DateTimeImmutable('-1 hour'),
         );
+    }
+
+    private function locks(bool $hasActive): OperationLockRepository
+    {
+        $locks = $this->createMock(OperationLockRepository::class);
+        $locks->method('hasActiveLock')->willReturn($hasActive);
+        $locks->method('acquire')->willReturn(true);
+        $locks->method('release');
+
+        return $locks;
     }
 }
