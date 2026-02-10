@@ -46,6 +46,10 @@ services:
         bind:
             bool $bulkDecisionsEnabled: '%app.features.decisions.bulk%'
 
+    App\Controller\Api\AssetController:
+        bind:
+            bool $featureSuggestedTagsFiltersEnabled: '%app.features.ai.suggested_tags_filters%'
+
     App\Controller\Api\JobController:
         bind:
             bool $featureSuggestTagsEnabled: '%app.features.ai.suggest_tags%'

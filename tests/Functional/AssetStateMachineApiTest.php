@@ -139,6 +139,40 @@ final class AssetStateMachineApiTest extends WebTestCase
         self::assertSame('22222222-2222-2222-2222-222222222222', $payload['items'][0]['uuid'] ?? null);
     }
 
+    public function testSuggestedTagsFilterIsForbiddenWhenFeatureDisabled(): void
+    {
+        $client = $this->createAuthenticatedClient(true);
+
+        $client->request('GET', '/api/v1/assets?suggested_tags=wedding');
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('FORBIDDEN_SCOPE', $payload['code'] ?? null);
+    }
+
+    public function testSuggestedTagsFilterWorksWhenFeatureEnabled(): void
+    {
+        putenv('APP_FEATURE_AI_SUGGESTED_TAGS_FILTERS=1');
+        $_ENV['APP_FEATURE_AI_SUGGESTED_TAGS_FILTERS'] = '1';
+        $_SERVER['APP_FEATURE_AI_SUGGESTED_TAGS_FILTERS'] = '1';
+        static::ensureKernelShutdown();
+
+        try {
+            $client = $this->createAuthenticatedClient(true);
+
+            $client->request('GET', '/api/v1/assets?suggested_tags=wedding');
+            self::assertResponseStatusCodeSame(Response::HTTP_OK);
+            $payload = json_decode((string) $client->getResponse()->getContent(), true);
+            self::assertIsArray($payload);
+            self::assertCount(1, $payload['items'] ?? []);
+            self::assertSame('11111111-1111-1111-1111-111111111111', $payload['items'][0]['uuid'] ?? null);
+        } finally {
+            putenv('APP_FEATURE_AI_SUGGESTED_TAGS_FILTERS=0');
+            $_ENV['APP_FEATURE_AI_SUGGESTED_TAGS_FILTERS'] = '0';
+            $_SERVER['APP_FEATURE_AI_SUGGESTED_TAGS_FILTERS'] = '0';
+            static::ensureKernelShutdown();
+        }
+    }
+
     private function createAuthenticatedClient(bool $seedAssets = false): KernelBrowser
     {
         $client = static::createClient();
@@ -176,9 +210,19 @@ final class AssetStateMachineApiTest extends WebTestCase
         $asset1 = new Asset('11111111-1111-1111-1111-111111111111', 'VIDEO', 'rush-001.mov', AssetState::DECISION_PENDING);
         $asset1->setTags(['wedding']);
         $asset1->setNotes('first review');
-        $asset1->setFields(['camera' => 'a7s']);
+        $asset1->setFields([
+            'camera' => 'a7s',
+            'suggestions' => [
+                'suggested_tags' => ['wedding', 'ceremony'],
+            ],
+        ]);
 
         $asset2 = new Asset('22222222-2222-2222-2222-222222222222', 'AUDIO', 'voice-001.wav', AssetState::PROCESSED);
+        $asset2->setFields([
+            'suggestions' => [
+                'suggested_tags' => ['interview'],
+            ],
+        ]);
         $asset3 = new Asset('33333333-3333-3333-3333-333333333333', 'PHOTO', 'archive-001.jpg', AssetState::ARCHIVED);
 
         $entityManager->persist($asset1);
