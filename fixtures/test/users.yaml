@@ -23,6 +23,14 @@ App\Entity\User:
       - ['ROLE_USER']
       - false
 
+  user_operator:
+    __construct:
+      - 'fixtureoperator000000000000000001'
+      - 'operator@retaia.local'
+      - '<identity("$2y$12$6AGCXyao1Z/Rc2ippIQ8xOhoWwyKr1TaReDVu/jayjEclIawUJjUm")>'
+      - ['ROLE_USER']
+      - true
+
   user_agent:
     __construct:
       - 'fixtureagent000000000000000000001'

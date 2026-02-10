@@ -12,13 +12,14 @@ auth:
     token_required: "token is required"
     admin_role_required: "Admin role required"
     unknown_user: "Unknown user"
+    forbidden_scope: "Insufficient scope"
+    forbidden_actor: "Actor not allowed"
 asset:
   error:
     not_found: "Asset not found"
     state_conflict: "State transition is not allowed"
     decision_action_required: "action is required"
     purged_read_only: "Purged assets are read-only"
-    forbidden_scope: "Insufficient scope"
 agent:
   error:
     invalid_registration_payload: "agent_name, agent_version and capabilities are required"
