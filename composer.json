@@ -76,6 +76,15 @@
             "@test:unit",
             "@test:behat"
         ],
+        "release:check": [
+            "@check:i18n",
+            "@check:openapi",
+            "php bin/console lint:yaml config",
+            "php bin/console lint:container",
+            "@test:quality",
+            "php bin/console app:ops:readiness-check",
+            "php bin/console app:sentry:probe"
+        ],
         "auto-scripts": {
             "cache:clear": "symfony-cmd",
             "assets:install %PUBLIC_DIR%": "symfony-cmd"

@@ -87,6 +87,14 @@ Run coverage and enforce threshold (80%):
 composer test:quality
 ```
 
+Run full V1 pre-release preflight:
+
+```bash
+composer release:check
+```
+
+Prerequisites: database/service dependencies must be reachable for `app:ops:readiness-check`.
+
 Useful checks:
 
 ```bash
