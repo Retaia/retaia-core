@@ -25,6 +25,8 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
   - `GET /api/v1/auth/me`
   - `POST /api/v1/auth/lost-password/request`
   - `POST /api/v1/auth/lost-password/reset`
+  - `POST /api/v1/auth/verify-email/request`
+  - `POST /api/v1/auth/verify-email/confirm`
 
 - flux auth :
   - login/logout gérés par le firewall Security
@@ -71,6 +73,7 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
 - Les tests unitaires/Behat restent en mémoire via un repository de test dédié.
 - Les tests fonctionnels Doctrine chargent des fixtures via AliceBundle + Faker.
 - En environnement non `prod`, `lost-password/request` retourne aussi un `reset_token` pour faciliter les tests.
+- En environnement non `prod`, `verify-email/request` retourne aussi un `verification_token` pour faciliter les tests.
 - `lost-password/reset` applique une policy configurable (longueur + complexité).
 - Les logs auth n’incluent ni mot de passe ni token brut (email hashé).
 - Changer les secrets et mots de passe par défaut avant tout usage réel.
@@ -78,6 +81,8 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
 ## Paramètres configurables
 
 - `app.password_reset_ttl_seconds` (défaut: `3600`)
+- `app.email_verification_ttl_seconds` (défaut: `86400`)
+- `app.email_verification.secret` (défaut: `%kernel.secret%`)
 - `app.password_policy.min_length` (défaut: `12`)
 - `app.password_policy.require_mixed_case` (défaut: `true`)
 - `app.password_policy.require_number` (défaut: `true`)
