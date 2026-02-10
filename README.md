@@ -35,6 +35,10 @@ composer install --no-interaction --prefer-dist --optimize-autoloader
 2. Configure env:
 
 - Copy `.env` values as needed (especially `DATABASE_URL`).
+- For reverse proxy / auth hardening, configure:
+  - `SYMFONY_TRUSTED_PROXIES`
+  - `APP_AUTH_LOST_PASSWORD_LIMIT`, `APP_AUTH_LOST_PASSWORD_INTERVAL`
+  - `APP_AUTH_VERIFY_EMAIL_LIMIT`, `APP_AUTH_VERIFY_EMAIL_INTERVAL`
 
 3. Run migrations:
 
