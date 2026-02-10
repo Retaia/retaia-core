@@ -19,6 +19,7 @@ security:
             lazy: true
             provider: app_user_provider
             user_checker: App\Security\UserChecker
+            access_denied_handler: App\Security\ApiAccessDeniedHandler
             custom_authenticators:
                 - App\Security\ApiLoginAuthenticator
             entry_point: App\Security\ApiLoginAuthenticator
@@ -45,6 +46,7 @@ security:
         - { path: ^/api/v1/auth/verify-email/admin-confirm$, roles: ROLE_USER }
         - { path: ^/api/v1/auth, roles: ROLE_USER }
         - { path: ^/api/v1/jobs, roles: ROLE_AGENT }
+        - { path: ^/api/v1/agents/register$, roles: ROLE_AGENT }
 
 when@test:
     security:

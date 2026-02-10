@@ -12,3 +12,7 @@ auth:
     token_required: "token est requis"
     admin_role_required: "Rôle administrateur requis"
     unknown_user: "Utilisateur inconnu"
+    forbidden_scope: "Scope insuffisant"
+agent:
+  error:
+    invalid_registration_payload: "agent_name, agent_version et capabilities sont requis"
