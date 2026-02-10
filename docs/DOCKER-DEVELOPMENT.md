@@ -71,6 +71,13 @@ docker compose exec app php bin/console app:ingest:poll --limit=50
 docker compose exec app php bin/console app:ingest:poll --json
 docker compose exec app php bin/console app:ingest:enqueue-stable --limit=50
 docker compose exec app php bin/console app:ingest:apply-outbox --limit=50
+docker compose exec app php bin/console app:ingest:cron-tick --poll-limit=50 --enqueue-limit=50 --apply-limit=100
+```
+
+Configurer un cron (hôte ou conteneur) pour exécuter un tick par minute :
+
+```bash
+* * * * * cd /var/www/html && php bin/console app:ingest:cron-tick --no-interaction >> var/log/ingest-cron.log 2>&1
 ```
 
 Arrêter l'environnement :
