@@ -4,6 +4,7 @@ use App\Tests\Support\InMemoryUserRepository;
 use App\Tests\Support\InMemoryPasswordResetTokenRepository;
 use App\Tests\Support\TestUserPasswordHasher;
 use App\User\Service\AuthService;
+use App\User\Service\EmailVerificationService;
 use App\User\Service\PasswordResetService;
 use Behat\Behat\Context\Context;
 use Psr\Log\NullLogger;
@@ -20,9 +21,11 @@ final class FeatureContext implements Context
     private RequestStack $requestStack;
     private AuthService $authService;
     private PasswordResetService $passwordResetService;
+    private EmailVerificationService $emailVerificationService;
     private InMemoryPasswordResetTokenRepository $tokenRepository;
     private bool $lastLoginSucceeded = false;
     private ?string $lastToken = null;
+    private ?string $lastVerificationToken = null;
 
     /**
      * @Given a bootstrap user exists
@@ -49,6 +52,13 @@ final class FeatureContext implements Context
             'test',
             3600,
         );
+        $this->emailVerificationService = new EmailVerificationService(
+            $this->users,
+            new NullLogger(),
+            'test',
+            'behat-secret',
+            3600,
+        );
     }
 
     /**
@@ -66,6 +76,15 @@ final class FeatureContext implements Context
     {
         Assert::assertTrue($this->lastLoginSucceeded);
         Assert::assertNotNull($this->authService->currentUser());
+    }
+
+    /**
+     * @Then authentication should fail
+     */
+    public function authenticationShouldFail(): void
+    {
+        Assert::assertFalse($this->lastLoginSucceeded);
+        Assert::assertNull($this->authService->currentUser());
     }
 
     /**
@@ -110,5 +129,31 @@ final class FeatureContext implements Context
     {
         $this->authService->logout();
         Assert::assertTrue($this->authService->login($email, $password));
+    }
+
+    /**
+     * @Given an unverified user exists with email :email and password :password
+     */
+    public function anUnverifiedUserExistsWithEmailAndPassword(string $email, string $password): void
+    {
+        $this->aBootstrapUserExists();
+        $this->users->seedUnverifiedUser($email, $password);
+    }
+
+    /**
+     * @When I request an email verification for :email
+     */
+    public function iRequestAnEmailVerificationFor(string $email): void
+    {
+        $this->lastVerificationToken = $this->emailVerificationService->requestVerification($email);
+    }
+
+    /**
+     * @When I confirm the email verification token
+     */
+    public function iConfirmTheEmailVerificationToken(): void
+    {
+        Assert::assertIsString($this->lastVerificationToken);
+        Assert::assertTrue($this->emailVerificationService->confirmVerification((string) $this->lastVerificationToken));
     }
 }

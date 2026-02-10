@@ -77,6 +77,8 @@ Use docker-compose setup documented in:
 - `GET /api/v1/auth/me`
 - `POST /api/v1/auth/lost-password/request`
 - `POST /api/v1/auth/lost-password/reset`
+- `POST /api/v1/auth/verify-email/request`
+- `POST /api/v1/auth/verify-email/confirm`
 
 ## CI
 

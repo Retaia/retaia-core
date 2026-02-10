@@ -19,3 +19,12 @@ Feature: Basic user authentication and password reset
     When I request a password reset for "admin@retaia.local"
     And the reset token has expired
     Then the password reset should be rejected for "New-password1!"
+
+  Scenario: Email verification enables login for unverified users
+    Given an unverified user exists with email "pending@retaia.local" and password "change-me"
+    When I login with email "pending@retaia.local" and password "change-me"
+    Then authentication should fail
+    When I request an email verification for "pending@retaia.local"
+    And I confirm the email verification token
+    And I login with email "pending@retaia.local" and password "change-me"
+    Then authentication should succeed

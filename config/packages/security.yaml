@@ -40,6 +40,8 @@ security:
         - { path: ^/api/v1/auth/login$, roles: PUBLIC_ACCESS }
         - { path: ^/api/v1/auth/lost-password/request$, roles: PUBLIC_ACCESS }
         - { path: ^/api/v1/auth/lost-password/reset$, roles: PUBLIC_ACCESS }
+        - { path: ^/api/v1/auth/verify-email/request$, roles: PUBLIC_ACCESS }
+        - { path: ^/api/v1/auth/verify-email/confirm$, roles: PUBLIC_ACCESS }
         - { path: ^/api/v1/auth, roles: ROLE_USER }
 
 when@test:

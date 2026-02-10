@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\User;
 
+use App\Entity\User;
 use App\Tests\Support\InMemoryUserRepository;
 use App\User\Service\AuthService;
 use PHPUnit\Framework\TestCase;
@@ -50,6 +51,21 @@ final class AuthServiceTest extends TestCase
         self::assertNotNull($service->currentUser());
         $service->logout();
 
+        self::assertNull($service->currentUser());
+    }
+
+    public function testLoginFailsWhenEmailIsNotVerified(): void
+    {
+        $this->users->save(new User(
+            'testpending0000099',
+            'pending@retaia.local',
+            password_hash('change-me', PASSWORD_DEFAULT),
+            ['ROLE_USER'],
+            false,
+        ));
+        $service = new AuthService($this->users, $this->requestStack);
+
+        self::assertFalse($service->login('pending@retaia.local', 'change-me'));
         self::assertNull($service->currentUser());
     }
 }

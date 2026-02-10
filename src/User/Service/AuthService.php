@@ -27,6 +27,10 @@ final class AuthService
             return false;
         }
 
+        if (!$user->isEmailVerified()) {
+            return false;
+        }
+
         $session = $this->requestStack->getSession();
         if ($session === null) {
             return false;
