@@ -99,6 +99,21 @@ make qa
 make ci-local
 ```
 
+## V1 Safety Rules (Implemented)
+
+- `Idempotency-Key` is enforced on critical endpoints, including:
+  - `POST /api/v1/assets/{uuid}/decision`
+  - `POST /api/v1/assets/{uuid}/reprocess`
+  - `POST /api/v1/batches/moves`
+  - `POST /api/v1/decisions/apply`
+  - `POST /api/v1/assets/{uuid}/purge`
+  - `POST /api/v1/jobs/{job_id}/submit`
+  - `POST /api/v1/jobs/{job_id}/fail`
+- Operation locks are enforced for move/purge concurrency safety (`asset_operation_lock` table).
+- Job claimability is blocked when an asset is `MOVE_QUEUED`, `PURGED`, or under active operation lock.
+- Ingest polling ignores symlinks and unsafe paths.
+- API localization supports `Accept-Language` (`en`, `fr`) with fallback to `en`.
+
 ## Git Hooks (Husky)
 
 This repository supports Husky hooks for local commit quality gates:
