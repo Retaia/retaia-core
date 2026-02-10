@@ -20,18 +20,30 @@ final class JobRepository
     public function listClaimable(int $limit): array
     {
         $rows = $this->connection->fetchAllAssociative(
-            'SELECT id, asset_uuid, job_type, status, claimed_by, lock_token, locked_until, result_payload
-            FROM processing_job
-            WHERE status = :pending OR (status = :claimed AND locked_until < :now)
-            ORDER BY created_at ASC
+            'SELECT j.id, j.asset_uuid, j.job_type, j.status, j.claimed_by, j.lock_token, j.locked_until, j.result_payload
+            FROM processing_job j
+            INNER JOIN asset a ON a.uuid = j.asset_uuid
+            WHERE (j.status = :pending OR (j.status = :claimed AND j.locked_until < :now))
+              AND a.state NOT IN (:blockedStateMoveQueued, :blockedStatePurged)
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM asset_operation_lock l
+                  WHERE l.asset_uuid = j.asset_uuid
+                    AND l.released_at IS NULL
+              )
+            ORDER BY j.created_at ASC
             LIMIT :limit',
             [
                 'pending' => JobStatus::PENDING->value,
                 'claimed' => JobStatus::CLAIMED->value,
                 'now' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
+                'blockedStateMoveQueued' => 'MOVE_QUEUED',
+                'blockedStatePurged' => 'PURGED',
                 'limit' => $limit,
             ],
             [
+                'blockedStateMoveQueued' => ParameterType::STRING,
+                'blockedStatePurged' => ParameterType::STRING,
                 'limit' => ParameterType::INTEGER,
             ]
         );
@@ -94,7 +106,19 @@ final class JobRepository
             'UPDATE processing_job
              SET status = :claimed, claimed_by = :agentId, lock_token = :lockToken, locked_until = :lockedUntil, updated_at = :now
              WHERE id = :id
-               AND (status = :pending OR (status = :claimed AND locked_until < :now))',
+               AND (status = :pending OR (status = :claimed AND locked_until < :now))
+               AND EXISTS (
+                  SELECT 1
+                  FROM asset a
+                  WHERE a.uuid = processing_job.asset_uuid
+                    AND a.state NOT IN (:blockedStateMoveQueued, :blockedStatePurged)
+               )
+               AND NOT EXISTS (
+                  SELECT 1
+                  FROM asset_operation_lock l
+                  WHERE l.asset_uuid = processing_job.asset_uuid
+                    AND l.released_at IS NULL
+               )',
             [
                 'claimed' => JobStatus::CLAIMED->value,
                 'agentId' => $agentId,
@@ -103,6 +127,8 @@ final class JobRepository
                 'id' => $id,
                 'pending' => JobStatus::PENDING->value,
                 'now' => $now,
+                'blockedStateMoveQueued' => 'MOVE_QUEUED',
+                'blockedStatePurged' => 'PURGED',
             ]
         );
 

@@ -154,6 +154,30 @@ final class JobApiTest extends WebTestCase
         self::assertSame('VALIDATION_FAILED', $missingLock['code'] ?? null);
     }
 
+    public function testClaimReturnsConflictWhenAssetHasActiveOperationLock(): void
+    {
+        $client = $this->bootClient();
+        $jobId = 'job-locked';
+        $this->seedJob($jobId);
+
+        /** @var Connection $connection */
+        $connection = self::getContainer()->get(Connection::class);
+        $connection->insert('asset_operation_lock', [
+            'id' => bin2hex(random_bytes(16)),
+            'asset_uuid' => 'asset-'.$jobId,
+            'lock_type' => 'asset_move_lock',
+            'actor_id' => 'test',
+            'acquired_at' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
+            'released_at' => null,
+        ]);
+
+        $this->loginAgent($client);
+        $client->jsonRequest('POST', '/api/v1/jobs/'.$jobId.'/claim');
+        self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('STATE_CONFLICT', $payload['code'] ?? null);
+    }
+
     public function testFailHandlesValidationConflictAndSuccess(): void
     {
         $client = $this->bootClient();
@@ -216,10 +240,25 @@ final class JobApiTest extends WebTestCase
         $connection = self::getContainer()->get(Connection::class);
         $this->ensureJobSchema($connection);
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        $assetUuid = 'asset-'.$jobId;
+
+        if ((int) $connection->fetchOne('SELECT COUNT(*) FROM asset WHERE uuid = :uuid', ['uuid' => $assetUuid]) === 0) {
+            $connection->insert('asset', [
+                'uuid' => $assetUuid,
+                'media_type' => 'VIDEO',
+                'filename' => $jobId.'.mov',
+                'state' => 'READY',
+                'tags' => '[]',
+                'notes' => null,
+                'fields' => '{}',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
 
         $connection->insert('processing_job', [
             'id' => $jobId,
-            'asset_uuid' => 'asset-'.$jobId,
+            'asset_uuid' => $assetUuid,
             'job_type' => 'extract_facts',
             'status' => 'pending',
             'claimed_by' => null,
@@ -234,6 +273,19 @@ final class JobApiTest extends WebTestCase
     private function ensureJobSchema(Connection $connection): void
     {
         $connection->executeStatement(
+            'CREATE TABLE IF NOT EXISTS asset (
+                uuid VARCHAR(36) PRIMARY KEY NOT NULL,
+                media_type VARCHAR(16) NOT NULL,
+                filename VARCHAR(255) NOT NULL,
+                state VARCHAR(32) NOT NULL,
+                tags CLOB NOT NULL,
+                notes CLOB DEFAULT NULL,
+                fields CLOB NOT NULL,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL
+            )'
+        );
+        $connection->executeStatement(
             'CREATE TABLE IF NOT EXISTS processing_job (
                 id VARCHAR(36) PRIMARY KEY NOT NULL,
                 asset_uuid VARCHAR(36) NOT NULL,
@@ -245,6 +297,16 @@ final class JobApiTest extends WebTestCase
                 result_payload CLOB DEFAULT NULL,
                 created_at DATETIME NOT NULL,
                 updated_at DATETIME NOT NULL
+            )'
+        );
+        $connection->executeStatement(
+            'CREATE TABLE IF NOT EXISTS asset_operation_lock (
+                id VARCHAR(32) PRIMARY KEY NOT NULL,
+                asset_uuid VARCHAR(36) NOT NULL,
+                lock_type VARCHAR(32) NOT NULL,
+                actor_id VARCHAR(64) NOT NULL,
+                acquired_at DATETIME NOT NULL,
+                released_at DATETIME DEFAULT NULL
             )'
         );
 

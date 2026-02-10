@@ -9,6 +9,7 @@ use App\Asset\Service\AssetStateMachine;
 use App\Controller\Api\WorkflowController;
 use App\Entity\Asset;
 use App\Entity\User;
+use App\Lock\Repository\OperationLockRepository;
 use App\Workflow\Service\BatchWorkflowService;
 use Doctrine\DBAL\Connection;
 use PHPUnit\Framework\TestCase;
@@ -24,7 +25,7 @@ final class WorkflowControllerTest extends TestCase
     {
         $repo = new InMemoryAssetRepo([$this->asset('a1', AssetState::DECIDED_KEEP)]);
         $connection = $this->createMock(Connection::class);
-        $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection);
+        $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false));
         $idempotency = $this->idempotencyPassthrough();
         $translator = $this->translator();
 
@@ -44,7 +45,7 @@ final class WorkflowControllerTest extends TestCase
         $repo = new InMemoryAssetRepo([$this->asset('a1', AssetState::DECISION_PENDING)]);
         $connection = $this->createMock(Connection::class);
         $connection->method('fetchAssociative')->willReturn(false);
-        $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection);
+        $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false));
         $idempotency = $this->idempotencyPassthrough();
         $translator = $this->translator();
         $security = $this->createMock(Security::class);
@@ -71,7 +72,8 @@ final class WorkflowControllerTest extends TestCase
         $ready = $this->asset('a3', AssetState::READY);
         $repo = new InMemoryAssetRepo([$rejected, $ready]);
         $connection = $this->createMock(Connection::class);
-        $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection);
+        $connection->method('fetchOne')->willReturn(0);
+        $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false));
         $idempotency = $this->idempotencyPassthrough();
         $translator = $this->translator();
         $security = $this->createMock(Security::class);
@@ -122,6 +124,16 @@ final class WorkflowControllerTest extends TestCase
             createdAt: new \DateTimeImmutable('-1 hour'),
             updatedAt: new \DateTimeImmutable('-1 hour'),
         );
+    }
+
+    private function locks(bool $hasActive): OperationLockRepository
+    {
+        $locks = $this->createMock(OperationLockRepository::class);
+        $locks->method('hasActiveLock')->willReturn($hasActive);
+        $locks->method('acquire')->willReturn(true);
+        $locks->method('release');
+
+        return $locks;
     }
 }
 

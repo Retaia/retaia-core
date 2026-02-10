@@ -7,6 +7,8 @@ use App\Asset\Repository\AssetRepositoryInterface;
 use App\Asset\Service\AssetStateMachine;
 use App\Asset\Service\StateConflictException;
 use App\Entity\Asset;
+use App\Lock\OperationLockType;
+use App\Lock\Repository\OperationLockRepository;
 use Doctrine\DBAL\Connection;
 
 final class BatchWorkflowService
@@ -15,6 +17,7 @@ final class BatchWorkflowService
         private AssetRepositoryInterface $assets,
         private AssetStateMachine $stateMachine,
         private Connection $connection,
+        private OperationLockRepository $locks,
     ) {
     }
 
@@ -65,6 +68,22 @@ final class BatchWorkflowService
 
         foreach ($items as $asset) {
             $targetState = $asset->getState() === AssetState::DECIDED_KEEP ? AssetState::ARCHIVED : AssetState::REJECTED;
+            if ($this->locks->hasActiveLock($asset->getUuid())) {
+                $errors[] = [
+                    'uuid' => $asset->getUuid(),
+                    'code' => 'STATE_CONFLICT',
+                ];
+                continue;
+            }
+
+            $acquired = $this->locks->acquire($asset->getUuid(), OperationLockType::MOVE, 'workflow:move');
+            if (!$acquired) {
+                $errors[] = [
+                    'uuid' => $asset->getUuid(),
+                    'code' => 'STATE_CONFLICT',
+                ];
+                continue;
+            }
 
             try {
                 $this->stateMachine->transition($asset, AssetState::MOVE_QUEUED);
@@ -79,6 +98,8 @@ final class BatchWorkflowService
                     'uuid' => $asset->getUuid(),
                     'code' => 'STATE_CONFLICT',
                 ];
+            } finally {
+                $this->locks->release($asset->getUuid(), OperationLockType::MOVE);
             }
         }
 
@@ -113,6 +134,9 @@ final class BatchWorkflowService
 
             try {
                 $cloned = clone $asset;
+                if ($this->locks->hasActiveLock($cloned->getUuid())) {
+                    throw new StateConflictException('asset locked');
+                }
                 $this->stateMachine->decide($cloned, $action);
                 $eligible[] = ['uuid' => $uuid, 'target_state' => $cloned->getState()->value];
             } catch (StateConflictException $exception) {
@@ -182,7 +206,7 @@ final class BatchWorkflowService
         return [
             'uuid' => $asset->getUuid(),
             'state' => $asset->getState()->value,
-            'allowed' => $asset->getState() === AssetState::REJECTED,
+            'allowed' => $asset->getState() === AssetState::REJECTED && !$this->locks->hasActiveLock($asset->getUuid()),
         ];
     }
 
@@ -192,8 +216,32 @@ final class BatchWorkflowService
             return false;
         }
 
-        $this->stateMachine->transition($asset, AssetState::PURGED);
-        $this->assets->save($asset);
+        if ($this->locks->hasActiveLock($asset->getUuid())) {
+            return false;
+        }
+
+        $activeClaims = (int) $this->connection->fetchOne(
+            'SELECT COUNT(*) FROM processing_job WHERE asset_uuid = :assetUuid AND status = :claimed AND locked_until >= :now',
+            [
+                'assetUuid' => $asset->getUuid(),
+                'claimed' => 'claimed',
+                'now' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
+            ]
+        );
+        if ($activeClaims > 0) {
+            return false;
+        }
+
+        if (!$this->locks->acquire($asset->getUuid(), OperationLockType::PURGE, 'workflow:purge')) {
+            return false;
+        }
+
+        try {
+            $this->stateMachine->transition($asset, AssetState::PURGED);
+            $this->assets->save($asset);
+        } finally {
+            $this->locks->release($asset->getUuid(), OperationLockType::PURGE);
+        }
 
         return true;
     }

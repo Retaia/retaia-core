@@ -2,12 +2,15 @@
 
 namespace App\Controller\Api;
 
+use App\Api\Service\IdempotencyService;
 use App\Asset\AssetState;
 use App\Asset\Repository\AssetRepositoryInterface;
 use App\Asset\Service\AssetStateMachine;
 use App\Asset\Service\StateConflictException;
 use App\Entity\Asset;
 use Symfony\Bundle\SecurityBundle\Security;
+use App\Entity\User;
+use App\Lock\Repository\OperationLockRepository;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -22,6 +25,8 @@ final class AssetController
         private AssetStateMachine $stateMachine,
         private TranslatorInterface $translator,
         private Security $security,
+        private IdempotencyService $idempotency,
+        private OperationLockRepository $locks,
     ) {
     }
 
@@ -82,6 +87,13 @@ final class AssetController
             ], Response::HTTP_GONE);
         }
 
+        if ($this->locks->hasActiveLock($asset->getUuid())) {
+            return new JsonResponse([
+                'code' => 'STATE_CONFLICT',
+                'message' => $this->translator->trans('asset.error.state_conflict'),
+            ], Response::HTTP_CONFLICT);
+        }
+
         $payload = $this->payload($request);
         if (array_key_exists('tags', $payload) && is_array($payload['tags'])) {
             $asset->setTags($payload['tags']);
@@ -107,37 +119,46 @@ final class AssetController
             return $this->forbiddenActorResponse();
         }
 
-        $asset = $this->assets->findByUuid($uuid);
-        if (!$asset instanceof Asset) {
-            return new JsonResponse([
-                'code' => 'NOT_FOUND',
-                'message' => $this->translator->trans('asset.error.not_found'),
-            ], Response::HTTP_NOT_FOUND);
-        }
+        return $this->idempotency->execute($request, $this->actorId(), function () use ($uuid, $request): JsonResponse {
+            $asset = $this->assets->findByUuid($uuid);
+            if (!$asset instanceof Asset) {
+                return new JsonResponse([
+                    'code' => 'NOT_FOUND',
+                    'message' => $this->translator->trans('asset.error.not_found'),
+                ], Response::HTTP_NOT_FOUND);
+            }
 
-        $payload = $this->payload($request);
-        $action = trim((string) ($payload['action'] ?? ''));
-        if ($action === '') {
-            return new JsonResponse([
-                'code' => 'VALIDATION_FAILED',
-                'message' => $this->translator->trans('asset.error.decision_action_required'),
-            ], Response::HTTP_UNPROCESSABLE_ENTITY);
-        }
+            if ($this->locks->hasActiveLock($asset->getUuid())) {
+                return new JsonResponse([
+                    'code' => 'STATE_CONFLICT',
+                    'message' => $this->translator->trans('asset.error.state_conflict'),
+                ], Response::HTTP_CONFLICT);
+            }
 
-        try {
-            $this->stateMachine->decide($asset, $action);
-            $this->assets->save($asset);
-        } catch (StateConflictException $exception) {
-            return new JsonResponse([
-                'code' => 'STATE_CONFLICT',
-                'message' => $this->translator->trans('asset.error.state_conflict'),
-            ], Response::HTTP_CONFLICT);
-        }
+            $payload = $this->payload($request);
+            $action = trim((string) ($payload['action'] ?? ''));
+            if ($action === '') {
+                return new JsonResponse([
+                    'code' => 'VALIDATION_FAILED',
+                    'message' => $this->translator->trans('asset.error.decision_action_required'),
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
 
-        return new JsonResponse([
-            'uuid' => $asset->getUuid(),
-            'state' => $asset->getState()->value,
-        ], Response::HTTP_OK);
+            try {
+                $this->stateMachine->decide($asset, $action);
+                $this->assets->save($asset);
+            } catch (StateConflictException $exception) {
+                return new JsonResponse([
+                    'code' => 'STATE_CONFLICT',
+                    'message' => $this->translator->trans('asset.error.state_conflict'),
+                ], Response::HTTP_CONFLICT);
+            }
+
+            return new JsonResponse([
+                'uuid' => $asset->getUuid(),
+                'state' => $asset->getState()->value,
+            ], Response::HTTP_OK);
+        });
     }
 
     #[Route('/{uuid}/reopen', name: 'api_assets_reopen', methods: ['POST'])]
@@ -153,6 +174,13 @@ final class AssetController
                 'code' => 'NOT_FOUND',
                 'message' => $this->translator->trans('asset.error.not_found'),
             ], Response::HTTP_NOT_FOUND);
+        }
+
+        if ($this->locks->hasActiveLock($asset->getUuid())) {
+            return new JsonResponse([
+                'code' => 'STATE_CONFLICT',
+                'message' => $this->translator->trans('asset.error.state_conflict'),
+            ], Response::HTTP_CONFLICT);
         }
 
         try {
@@ -172,34 +200,43 @@ final class AssetController
     }
 
     #[Route('/{uuid}/reprocess', name: 'api_assets_reprocess', methods: ['POST'])]
-    public function reprocess(string $uuid): JsonResponse
+    public function reprocess(string $uuid, Request $request): JsonResponse
     {
         if ($this->security->isGranted('ROLE_AGENT')) {
             return $this->forbiddenActorResponse();
         }
 
-        $asset = $this->assets->findByUuid($uuid);
-        if (!$asset instanceof Asset) {
-            return new JsonResponse([
-                'code' => 'NOT_FOUND',
-                'message' => $this->translator->trans('asset.error.not_found'),
-            ], Response::HTTP_NOT_FOUND);
-        }
+        return $this->idempotency->execute($request, $this->actorId(), function () use ($uuid): JsonResponse {
+            $asset = $this->assets->findByUuid($uuid);
+            if (!$asset instanceof Asset) {
+                return new JsonResponse([
+                    'code' => 'NOT_FOUND',
+                    'message' => $this->translator->trans('asset.error.not_found'),
+                ], Response::HTTP_NOT_FOUND);
+            }
 
-        try {
-            $this->stateMachine->transition($asset, AssetState::READY);
-            $this->assets->save($asset);
-        } catch (StateConflictException $exception) {
-            return new JsonResponse([
-                'code' => 'STATE_CONFLICT',
-                'message' => $this->translator->trans('asset.error.state_conflict'),
-            ], Response::HTTP_CONFLICT);
-        }
+            if ($this->locks->hasActiveLock($asset->getUuid())) {
+                return new JsonResponse([
+                    'code' => 'STATE_CONFLICT',
+                    'message' => $this->translator->trans('asset.error.state_conflict'),
+                ], Response::HTTP_CONFLICT);
+            }
 
-        return new JsonResponse([
-            'uuid' => $asset->getUuid(),
-            'state' => $asset->getState()->value,
-        ], Response::HTTP_OK);
+            try {
+                $this->stateMachine->transition($asset, AssetState::READY);
+                $this->assets->save($asset);
+            } catch (StateConflictException $exception) {
+                return new JsonResponse([
+                    'code' => 'STATE_CONFLICT',
+                    'message' => $this->translator->trans('asset.error.state_conflict'),
+                ], Response::HTTP_CONFLICT);
+            }
+
+            return new JsonResponse([
+                'uuid' => $asset->getUuid(),
+                'state' => $asset->getState()->value,
+            ], Response::HTTP_OK);
+        });
     }
 
     /**
@@ -254,5 +291,12 @@ final class AssetController
             'code' => 'FORBIDDEN_ACTOR',
             'message' => $this->translator->trans('auth.error.forbidden_actor'),
         ], Response::HTTP_FORBIDDEN);
+    }
+
+    private function actorId(): string
+    {
+        $user = $this->security->getUser();
+
+        return $user instanceof User ? $user->getId() : 'anonymous';
     }
 }
