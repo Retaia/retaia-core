@@ -64,6 +64,20 @@ make qa
 make ci-local
 ```
 
+## Git Hooks (Husky)
+
+This repository supports Husky hooks for local commit quality gates:
+
+- `pre-commit`: runs `composer test`
+- `commit-msg`: enforces Conventional Commits
+
+Setup once locally:
+
+```bash
+npm install
+npm run prepare
+```
+
 ## Docker Dev
 
 Use docker-compose setup documented in:
