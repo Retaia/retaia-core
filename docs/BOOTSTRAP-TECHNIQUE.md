@@ -32,6 +32,7 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
 - flux auth :
   - login/logout gérés par le firewall Security
   - réponses JSON custom sur succès/échec
+  - messages localisables via `Accept-Language` (`en`, `fr`) avec fallback `en`
   - login refusé (`403 EMAIL_NOT_VERIFIED`) si le compte n’a pas d’email vérifié
   - throttling login activé (`5` tentatives / `15` minutes)
   - throttling verify-email/request activé (`3` tentatives / `1` minute par email+IP)

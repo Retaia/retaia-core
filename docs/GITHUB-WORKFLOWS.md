@@ -25,6 +25,7 @@ Détail :
   - `composer validate --strict --no-check-publish`
   - `php bin/console lint:yaml config`
   - `php bin/console lint:container`
+  - `php scripts/check-translation-keys.php` (gate bloquant en/fr)
 
 - `test` :
   - `composer test` (PHPUnit + Behat)
