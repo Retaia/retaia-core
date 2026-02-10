@@ -5,6 +5,7 @@
 ## Stack
 
 - `app`: `fullfrontend/php-fpm:latest`
+- `ingest-cron`: worker dédié ingest (polling + déplacement fichiers), séparé de `app`
 - `caddy`: reverse proxy HTTP local vers `app` (upload max `10GB`)
 - `composer`: même image, profil `tools`
 - `database`: `postgres:16-alpine`
@@ -17,8 +18,10 @@ Les dossiers locaux disponibles sont aussi `/docker/RETAIA/ARCHIVE` et `/docker/
 ## Démarrage
 
 ```bash
-docker compose up -d app caddy database
+docker compose up -d app ingest-cron caddy database
 ```
+
+Le déplacement de fichiers ingest est exécuté par `ingest-cron`, donc il ne bloque pas les workers API/UI du service `app`.
 
 ## Commandes utiles
 
@@ -79,6 +82,8 @@ Configurer un cron (hôte ou conteneur) pour exécuter un tick par minute :
 ```bash
 * * * * * cd /var/www/html && php bin/console app:ingest:cron-tick --no-interaction >> var/log/ingest-cron.log 2>&1
 ```
+
+Note: en Docker local, le service `ingest-cron` intègre déjà cette exécution périodique; ce cron manuel est utile hors Docker.
 
 Arrêter l'environnement :
 

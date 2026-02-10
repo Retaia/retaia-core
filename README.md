@@ -67,6 +67,8 @@ php bin/console app:ingest:cron-tick --poll-limit=100 --enqueue-limit=100 --appl
 * * * * * cd /var/www/html && php bin/console app:ingest:cron-tick --no-interaction >> var/log/ingest-cron.log 2>&1
 ```
 
+In Docker dev, run the dedicated `ingest-cron` service so file polling/moves stay isolated from API/UI workers.
+
 ## Tests
 
 Run full test suite:

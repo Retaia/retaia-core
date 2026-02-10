@@ -17,6 +17,30 @@ services:
     tty: true
     stdin_open: true
 
+  ingest-cron:
+    image: fullfrontend/php-fpm:latest
+    container_name: retaia-core-ingest-cron
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+      - ./docker/RETAIA:/var/local/RETAIA
+    environment:
+      APP_ENV: dev
+      APP_DEBUG: "1"
+      DATABASE_URL: postgresql://app:app@database:5432/app?serverVersion=16&charset=utf8
+      APP_INGEST_WATCH_PATH: /var/local/RETAIA/INBOX
+    depends_on:
+      database:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        while true; do
+          php bin/console app:ingest:cron-tick --no-interaction --poll-limit=100 --enqueue-limit=100 --apply-limit=200 || true
+          sleep 60
+        done
+
   caddy:
     image: caddy:2-alpine
     container_name: retaia-core-caddy
