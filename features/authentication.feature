@@ -14,3 +14,8 @@ Feature: Basic user authentication and password reset
     And I reset the password to "new-password" using the reset token
     Then I can login with email "admin@retaia.local" and password "new-password"
 
+  Scenario: Lost password reset is rejected when token has expired
+    Given a bootstrap user exists
+    When I request a password reset for "admin@retaia.local"
+    And the reset token has expired
+    Then the password reset should be rejected for "new-password"
