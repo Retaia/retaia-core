@@ -21,6 +21,7 @@ final class WorkflowController
         private IdempotencyService $idempotency,
         private Security $security,
         private TranslatorInterface $translator,
+        private bool $bulkDecisionsEnabled,
     ) {
     }
 
@@ -74,6 +75,9 @@ final class WorkflowController
         if ($this->security->isGranted('ROLE_AGENT')) {
             return $this->forbiddenActor();
         }
+        if (!$this->bulkDecisionsEnabled) {
+            return $this->forbiddenScope();
+        }
 
         $payload = $this->payload($request);
         $action = trim((string) ($payload['action'] ?? ''));
@@ -93,6 +97,9 @@ final class WorkflowController
     {
         if ($this->security->isGranted('ROLE_AGENT')) {
             return $this->forbiddenActor();
+        }
+        if (!$this->bulkDecisionsEnabled) {
+            return $this->forbiddenScope();
         }
 
         return $this->idempotency->execute($request, $this->actorId(), function () use ($request): JsonResponse {
@@ -207,6 +214,14 @@ final class WorkflowController
         return new JsonResponse([
             'code' => 'FORBIDDEN_ACTOR',
             'message' => $this->translator->trans('auth.error.forbidden_actor'),
+        ], Response::HTTP_FORBIDDEN);
+    }
+
+    private function forbiddenScope(): JsonResponse
+    {
+        return new JsonResponse([
+            'code' => 'FORBIDDEN_SCOPE',
+            'message' => $this->translator->trans('auth.error.forbidden_scope'),
         ], Response::HTTP_FORBIDDEN);
     }
 }

@@ -31,12 +31,12 @@ final class WorkflowControllerTest extends TestCase
 
         $securityForbidden = $this->createMock(Security::class);
         $securityForbidden->method('isGranted')->with('ROLE_AGENT')->willReturn(true);
-        $controller = new WorkflowController($workflows, $repo, $idempotency, $securityForbidden, $translator);
+        $controller = new WorkflowController($workflows, $repo, $idempotency, $securityForbidden, $translator, false);
         self::assertSame(Response::HTTP_FORBIDDEN, $controller->previewMoves(Request::create('/x', 'POST'))->getStatusCode());
 
         $securityAllowed = $this->createMock(Security::class);
         $securityAllowed->method('isGranted')->with('ROLE_AGENT')->willReturn(false);
-        $controller = new WorkflowController($workflows, $repo, $idempotency, $securityAllowed, $translator);
+        $controller = new WorkflowController($workflows, $repo, $idempotency, $securityAllowed, $translator, false);
         self::assertSame(Response::HTTP_OK, $controller->previewMoves(Request::create('/x', 'POST'))->getStatusCode());
     }
 
@@ -52,7 +52,7 @@ final class WorkflowControllerTest extends TestCase
         $security->method('isGranted')->with('ROLE_AGENT')->willReturn(false);
         $security->method('getUser')->willReturn(new User('u1', 'u@example.test', 'hash', ['ROLE_USER'], true));
 
-        $controller = new WorkflowController($workflows, $repo, $idempotency, $security, $translator);
+        $controller = new WorkflowController($workflows, $repo, $idempotency, $security, $translator, true);
 
         self::assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $controller->previewDecisions(Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{}'))->getStatusCode());
         self::assertSame(Response::HTTP_OK, $controller->previewDecisions(Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{"action":"KEEP","uuids":["a1"]}'))->getStatusCode());
@@ -64,6 +64,31 @@ final class WorkflowControllerTest extends TestCase
         self::assertSame(Response::HTTP_OK, $controller->applyDecisions($validApplyRequest)->getStatusCode());
 
         self::assertSame(Response::HTTP_NOT_FOUND, $controller->getBatch('missing')->getStatusCode());
+    }
+
+    public function testDecisionEndpointsForbiddenWhenBulkFeatureDisabled(): void
+    {
+        $repo = new InMemoryAssetRepo([$this->asset('a1', AssetState::DECISION_PENDING)]);
+        $connection = $this->createMock(Connection::class);
+        $connection->method('fetchAssociative')->willReturn(false);
+        $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false));
+        $idempotency = $this->idempotencyPassthrough();
+        $translator = $this->translator();
+        $security = $this->createMock(Security::class);
+        $security->method('isGranted')->with('ROLE_AGENT')->willReturn(false);
+        $security->method('getUser')->willReturn(new User('u1', 'u@example.test', 'hash', ['ROLE_USER'], true));
+
+        $controller = new WorkflowController($workflows, $repo, $idempotency, $security, $translator, false);
+
+        $preview = $controller->previewDecisions(Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{"action":"KEEP","uuids":["a1"]}'));
+        self::assertSame(Response::HTTP_FORBIDDEN, $preview->getStatusCode());
+        self::assertSame('FORBIDDEN_SCOPE', (string) json_decode((string) $preview->getContent(), true)['code']);
+
+        $applyRequest = Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{"action":"KEEP","uuids":["a1"]}');
+        $applyRequest->headers->set('Idempotency-Key', 'idem-disabled-1');
+        $apply = $controller->applyDecisions($applyRequest);
+        self::assertSame(Response::HTTP_FORBIDDEN, $apply->getStatusCode());
+        self::assertSame('FORBIDDEN_SCOPE', (string) json_decode((string) $apply->getContent(), true)['code']);
     }
 
     public function testPurgeEndpointsAndStateConflict(): void
@@ -80,7 +105,7 @@ final class WorkflowControllerTest extends TestCase
         $security->method('isGranted')->with('ROLE_AGENT')->willReturn(false);
         $security->method('getUser')->willReturn(null);
 
-        $controller = new WorkflowController($workflows, $repo, $idempotency, $security, $translator);
+        $controller = new WorkflowController($workflows, $repo, $idempotency, $security, $translator, false);
         self::assertSame(Response::HTTP_NOT_FOUND, $controller->previewPurge('missing')->getStatusCode());
         $purgeMissingRequest = Request::create('/x', 'POST');
         $purgeMissingRequest->headers->set('Idempotency-Key', 'idem-p1');

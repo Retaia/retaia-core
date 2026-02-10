@@ -51,17 +51,18 @@ final class WorkflowApiTest extends WebTestCase
         self::assertSame('REJECTED', $rejectAsset['state'] ?? null);
     }
 
-    public function testBulkDecisionsPreviewAndApply(): void
+    public function testBulkDecisionsEndpointsAreForbiddenWhenFeatureIsDisabled(): void
     {
         $client = $this->createAuthenticatedClient('admin@retaia.local');
         $this->seedAsset('33333333-cccc-4ccc-8ccc-333333333333', AssetState::DECISION_PENDING, 'decision.mov');
+
         $client->jsonRequest('POST', '/api/v1/decisions/preview', [
             'action' => 'KEEP',
             'uuids' => ['33333333-cccc-4ccc-8ccc-333333333333'],
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
         $preview = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame(1, $preview['eligible_count'] ?? null);
+        self::assertSame('FORBIDDEN_SCOPE', $preview['code'] ?? null);
 
         $client->jsonRequest('POST', '/api/v1/decisions/apply', [
             'action' => 'KEEP',
@@ -69,11 +70,9 @@ final class WorkflowApiTest extends WebTestCase
         ], [
             'HTTP_IDEMPOTENCY_KEY' => 'bulk-decisions-1',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
-
-        $client->request('GET', '/api/v1/assets/33333333-cccc-4ccc-8ccc-333333333333');
-        $asset = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('DECIDED_KEEP', $asset['state'] ?? null);
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        $apply = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('FORBIDDEN_SCOPE', $apply['code'] ?? null);
     }
 
     public function testPurgePreviewAndApply(): void
