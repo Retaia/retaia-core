@@ -76,6 +76,30 @@ final class EmailVerificationServiceTest extends TestCase
         self::assertFalse($service->confirmVerification($token));
     }
 
+    public function testForceVerifyByEmail(): void
+    {
+        $users = new InMemoryUserRepository();
+        $users->save(new User(
+            'testpending0000003',
+            'ops@retaia.local',
+            password_hash('change-me', PASSWORD_DEFAULT),
+            ['ROLE_USER'],
+            false,
+        ));
+
+        $service = new EmailVerificationService(
+            $users,
+            new NullLogger(),
+            'test',
+            'secret-key',
+            3600,
+        );
+
+        self::assertTrue($service->forceVerifyByEmail('ops@retaia.local', 'admin-actor-1'));
+        self::assertTrue($users->findByEmail('ops@retaia.local')?->isEmailVerified() ?? false);
+        self::assertFalse($service->forceVerifyByEmail('missing@retaia.local', 'admin-actor-1'));
+    }
+
     public function testConfirmRejectsTokenWithTamperedSignature(): void
     {
         $users = new InMemoryUserRepository();

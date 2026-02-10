@@ -266,6 +266,33 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('INVALID_TOKEN', $payload['code'] ?? null);
     }
 
+    public function testAdminCanForceVerifyUserEmail(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.20');
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/verify-email/admin-confirm', [
+            'email' => 'pending@retaia.local',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame(true, $payload['email_verified'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/auth/logout');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'pending@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+    }
+
     public function testVerifyEmailRequestIsRateLimited(): void
     {
         $client = $this->createIsolatedClient('10.0.0.21');

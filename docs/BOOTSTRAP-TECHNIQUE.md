@@ -27,6 +27,7 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
   - `POST /api/v1/auth/lost-password/reset`
   - `POST /api/v1/auth/verify-email/request`
   - `POST /api/v1/auth/verify-email/confirm`
+  - `POST /api/v1/auth/verify-email/admin-confirm` (ROLE_ADMIN)
 
 - flux auth :
   - login/logout gérés par le firewall Security
@@ -77,6 +78,7 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
 - En environnement non `prod`, `verify-email/request` retourne aussi un `verification_token` pour faciliter les tests.
 - `lost-password/reset` applique une policy configurable (longueur + complexité).
 - Les logs auth n’incluent ni mot de passe ni token brut (email hashé).
+- Toute vérification email forcée par admin est tracée en audit log.
 - Changer les secrets et mots de passe par défaut avant tout usage réel.
 
 ## Paramètres configurables

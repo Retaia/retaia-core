@@ -91,6 +91,33 @@ final class EmailVerificationService
         return true;
     }
 
+    public function forceVerifyByEmail(string $email, ?string $actorId): bool
+    {
+        $user = $this->users->findByEmail($email);
+        if ($user === null) {
+            $this->logger->warning('auth.email_verification.admin_forced.failed', [
+                'reason' => 'user_not_found',
+                'actor_id' => $actorId,
+                'email_hash' => hash('sha256', mb_strtolower(trim($email))),
+            ]);
+
+            return false;
+        }
+
+        $alreadyVerified = $user->isEmailVerified();
+        if (!$alreadyVerified) {
+            $this->users->save($user->withEmailVerified(true));
+        }
+
+        $this->logger->info('auth.email_verification.admin_forced.completed', [
+            'actor_id' => $actorId,
+            'target_user_id' => $user->getId(),
+            'already_verified' => $alreadyVerified,
+        ]);
+
+        return true;
+    }
+
     private function createToken(string $userId): string
     {
         $payload = json_encode([
