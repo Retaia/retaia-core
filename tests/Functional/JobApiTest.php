@@ -278,11 +278,11 @@ final class JobApiTest extends WebTestCase
                 media_type VARCHAR(16) NOT NULL,
                 filename VARCHAR(255) NOT NULL,
                 state VARCHAR(32) NOT NULL,
-                tags CLOB NOT NULL,
-                notes CLOB DEFAULT NULL,
-                fields CLOB NOT NULL,
-                created_at DATETIME NOT NULL,
-                updated_at DATETIME NOT NULL
+                tags TEXT NOT NULL,
+                notes TEXT DEFAULT NULL,
+                fields TEXT NOT NULL,
+                created_at TIMESTAMP(0) WITHOUT TIME ZONE NOT NULL,
+                updated_at TIMESTAMP(0) WITHOUT TIME ZONE NOT NULL
             )'
         );
         $connection->executeStatement(
@@ -293,10 +293,10 @@ final class JobApiTest extends WebTestCase
                 status VARCHAR(16) NOT NULL,
                 claimed_by VARCHAR(32) DEFAULT NULL,
                 lock_token VARCHAR(64) DEFAULT NULL,
-                locked_until DATETIME DEFAULT NULL,
-                result_payload CLOB DEFAULT NULL,
-                created_at DATETIME NOT NULL,
-                updated_at DATETIME NOT NULL
+                locked_until TIMESTAMP(0) WITHOUT TIME ZONE DEFAULT NULL,
+                result_payload TEXT DEFAULT NULL,
+                created_at TIMESTAMP(0) WITHOUT TIME ZONE NOT NULL,
+                updated_at TIMESTAMP(0) WITHOUT TIME ZONE NOT NULL
             )'
         );
         $connection->executeStatement(
@@ -305,22 +305,22 @@ final class JobApiTest extends WebTestCase
                 asset_uuid VARCHAR(36) NOT NULL,
                 lock_type VARCHAR(32) NOT NULL,
                 actor_id VARCHAR(64) NOT NULL,
-                acquired_at DATETIME NOT NULL,
-                released_at DATETIME DEFAULT NULL
+                acquired_at TIMESTAMP(0) WITHOUT TIME ZONE NOT NULL,
+                released_at TIMESTAMP(0) WITHOUT TIME ZONE DEFAULT NULL
             )'
         );
 
         $connection->executeStatement(
             'CREATE TABLE IF NOT EXISTS idempotency_entry (
-                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                id BIGSERIAL PRIMARY KEY,
                 actor_id VARCHAR(64) NOT NULL,
                 method VARCHAR(8) NOT NULL,
                 path VARCHAR(255) NOT NULL,
                 idempotency_key VARCHAR(128) NOT NULL,
                 request_hash VARCHAR(64) NOT NULL,
                 response_status INTEGER NOT NULL,
-                response_body CLOB NOT NULL,
-                created_at DATETIME NOT NULL
+                response_body TEXT NOT NULL,
+                created_at TIMESTAMP(0) WITHOUT TIME ZONE NOT NULL
             )'
         );
         $connection->executeStatement('CREATE UNIQUE INDEX IF NOT EXISTS uniq_idempotency_key_scope ON idempotency_entry (actor_id, method, path, idempotency_key)');

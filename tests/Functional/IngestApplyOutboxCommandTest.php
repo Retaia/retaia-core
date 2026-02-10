@@ -242,7 +242,7 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
                 from_path VARCHAR(1024) NOT NULL,
                 to_path VARCHAR(1024) NOT NULL,
                 reason VARCHAR(64) NOT NULL,
-                created_at DATETIME NOT NULL
+                created_at TIMESTAMP(0) WITHOUT TIME ZONE NOT NULL
             )'
         );
     }

@@ -155,8 +155,8 @@ final class DerivedUploadApiTest extends WebTestCase
                 sha256 VARCHAR(64) DEFAULT NULL,
                 status VARCHAR(16) NOT NULL,
                 parts_count INTEGER NOT NULL,
-                created_at DATETIME NOT NULL,
-                updated_at DATETIME NOT NULL
+                created_at TIMESTAMP(0) WITHOUT TIME ZONE NOT NULL,
+                updated_at TIMESTAMP(0) WITHOUT TIME ZONE NOT NULL
             )'
         );
         $connection->executeStatement(
@@ -168,7 +168,7 @@ final class DerivedUploadApiTest extends WebTestCase
                 size_bytes INTEGER NOT NULL,
                 sha256 VARCHAR(64) DEFAULT NULL,
                 storage_path VARCHAR(255) NOT NULL,
-                created_at DATETIME NOT NULL
+                created_at TIMESTAMP(0) WITHOUT TIME ZONE NOT NULL
             )'
         );
     }
