@@ -6,6 +6,7 @@ use App\Asset\AssetState;
 use App\Asset\Repository\AssetRepositoryInterface;
 use App\Entity\Asset;
 use App\Ingest\Port\ScanStateStoreInterface;
+use App\Ingest\Service\WatchPathResolver;
 use App\Job\Repository\JobRepository;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -19,6 +20,7 @@ final class IngestEnqueueStableCommand extends Command
 {
     public function __construct(
         private ScanStateStoreInterface $scanStateStore,
+        private WatchPathResolver $watchPathResolver,
         private AssetRepositoryInterface $assets,
         private JobRepository $jobs,
     ) {
@@ -36,8 +38,18 @@ final class IngestEnqueueStableCommand extends Command
         $limit = max(1, (int) $input->getOption('limit'));
         $stableFiles = $this->scanStateStore->listStableFiles($limit);
         $queued = 0;
+        $missing = 0;
+        $root = $this->watchPathResolver->resolveRoot();
 
         foreach ($stableFiles as $file) {
+            $sourcePath = ltrim((string) $file['path'], '/');
+            $absoluteSource = $root.DIRECTORY_SEPARATOR.$sourcePath;
+            if (!is_file($absoluteSource)) {
+                $this->scanStateStore->markMissing($sourcePath, new \DateTimeImmutable());
+                ++$missing;
+                continue;
+            }
+
             $assetUuid = $this->assetUuidFromPath((string) $file['path']);
             $asset = $this->assets->findByUuid($assetUuid);
             if (!$asset instanceof Asset) {
@@ -48,7 +60,7 @@ final class IngestEnqueueStableCommand extends Command
                     AssetState::DISCOVERED,
                     [],
                     null,
-                    ['source_path' => (string) $file['path']]
+                    ['source_path' => $sourcePath]
                 );
                 $this->assets->save($asset);
             }
@@ -58,10 +70,10 @@ final class IngestEnqueueStableCommand extends Command
                 ++$queued;
             }
 
-            $this->scanStateStore->markQueued((string) $file['path'], new \DateTimeImmutable());
+            $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
         }
 
-        $io->success(sprintf('Queued %d stable file(s).', $queued));
+        $io->success(sprintf('Queued %d stable file(s). Missing: %d.', $queued, $missing));
 
         return Command::SUCCESS;
     }
@@ -91,4 +103,3 @@ final class IngestEnqueueStableCommand extends Command
         };
     }
 }
-

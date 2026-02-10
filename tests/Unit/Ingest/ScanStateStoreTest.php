@@ -39,5 +39,9 @@ final class ScanStateStoreTest extends TestCase
 
         $store->markQueued('INBOX/test.mov', new \DateTimeImmutable('2026-01-01 10:05:00'));
         self::assertCount(0, $store->listStableFiles());
+
+        $store->markMissing('INBOX/test.mov', new \DateTimeImmutable('2026-01-01 10:06:00'));
+        $status = (string) $connection->fetchOne('SELECT status FROM ingest_scan_file WHERE path = :path', ['path' => 'INBOX/test.mov']);
+        self::assertSame('missing', $status);
     }
 }

@@ -16,6 +16,16 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
 
     public function testStableFilesAreQueuedIntoAssetsAndJobs(): void
     {
+        $root = sys_get_temp_dir().'/retaia-enqueue-ok-'.bin2hex(random_bytes(4));
+        mkdir($root.'/INBOX', 0777, true);
+        mkdir($root.'/ARCHIVE', 0777, true);
+        mkdir($root.'/REJECTS', 0777, true);
+        file_put_contents($root.'/INBOX/new-rush.mov', 'ok');
+        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
+        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        static::ensureKernelShutdown();
+
         static::bootKernel();
         $container = static::getContainer();
         /** @var Connection $connection */
@@ -36,7 +46,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         $command = $application->find('app:ingest:enqueue-stable');
         $tester = new CommandTester($command);
         $tester->execute(['--limit' => 10]);
-        self::assertStringContainsString('Queued 1 stable file(s).', $tester->getDisplay());
+        self::assertStringContainsString('Queued 1 stable file(s). Missing: 0.', $tester->getDisplay());
 
         $jobCount = (int) $connection->fetchOne('SELECT COUNT(*) FROM processing_job');
         self::assertSame(1, $jobCount);
@@ -49,6 +59,45 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         $asset = $entityManager->find(Asset::class, $assetUuid);
         self::assertInstanceOf(Asset::class, $asset);
         self::assertSame('new-rush.mov', $asset->getFilename());
+    }
+
+    public function testMissingStableFileIsMarkedMissingAndNotQueued(): void
+    {
+        $root = sys_get_temp_dir().'/retaia-enqueue-'.bin2hex(random_bytes(4));
+        mkdir($root.'/INBOX', 0777, true);
+        mkdir($root.'/ARCHIVE', 0777, true);
+        mkdir($root.'/REJECTS', 0777, true);
+        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
+        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        static::ensureKernelShutdown();
+
+        static::bootKernel();
+        $container = static::getContainer();
+        /** @var Connection $connection */
+        $connection = $container->get(Connection::class);
+        $this->ensureTables($connection);
+
+        $connection->insert('ingest_scan_file', [
+            'path' => 'INBOX/missing-rush.mov',
+            'size_bytes' => 50,
+            'mtime' => '2026-02-10 12:00:00',
+            'stable_count' => 2,
+            'status' => 'stable',
+            'first_seen_at' => '2026-02-10 12:00:00',
+            'last_seen_at' => '2026-02-10 12:01:00',
+        ]);
+
+        $application = new Application(static::$kernel);
+        $command = $application->find('app:ingest:enqueue-stable');
+        $tester = new CommandTester($command);
+        $tester->execute(['--limit' => 10]);
+        self::assertStringContainsString('Missing: 1.', $tester->getDisplay());
+
+        $jobCount = (int) $connection->fetchOne('SELECT COUNT(*) FROM processing_job');
+        self::assertSame(0, $jobCount);
+        $scanStatus = (string) $connection->fetchOne('SELECT status FROM ingest_scan_file WHERE path = :path', ['path' => 'INBOX/missing-rush.mov']);
+        self::assertSame('missing', $scanStatus);
     }
 
     private function ensureTables(Connection $connection): void
@@ -94,4 +143,3 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         );
     }
 }
-
