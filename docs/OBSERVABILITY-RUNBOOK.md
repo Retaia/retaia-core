@@ -39,6 +39,9 @@ Table: `ops_metric_event`
 Clés émises:
 
 - `api.error.STATE_CONFLICT` (et plus généralement `api.error.<CODE>`)
+- `lock.active.detected`
+- `lock.active.detected.asset_move_lock`
+- `lock.active.detected.asset_purge_lock`
 - `lock.acquire.success.asset_move_lock`
 - `lock.acquire.failed.asset_move_lock`
 - `lock.release.asset_move_lock`
@@ -49,7 +52,7 @@ Clés émises:
 Commande d'alerte:
 
 ```bash
-php bin/console app:alerts:state-conflicts --window-minutes=15 --state-conflicts-threshold=20 --lock-failed-threshold=10
+php bin/console app:alerts:state-conflicts --window-minutes=15 --state-conflicts-threshold=20 --lock-failed-threshold=10 --active-locks-threshold=200 --stale-locks-threshold=0 --stale-lock-minutes=30
 ```
 
 La commande retourne un code non-zéro si un seuil est dépassé.

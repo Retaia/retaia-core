@@ -106,6 +106,9 @@ php bin/console app:alerts:state-conflicts --window-minutes=15 --state-conflicts
 php bin/console app:ops:readiness-check
 ```
 
+`app:alerts:state-conflicts` also supports lock pressure/staleness thresholds:
+`--active-locks-threshold`, `--stale-locks-threshold`, `--stale-lock-minutes`.
+
 DX shortcuts:
 
 ```bash

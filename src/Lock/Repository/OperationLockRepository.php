@@ -16,10 +16,16 @@ class OperationLockRepository
 
     public function hasActiveLock(string $assetUuid): bool
     {
-        return (int) $this->connection->fetchOne(
+        $count = (int) $this->connection->fetchOne(
             'SELECT COUNT(*) FROM asset_operation_lock WHERE asset_uuid = :assetUuid AND released_at IS NULL',
             ['assetUuid' => $assetUuid]
-        ) > 0;
+        );
+
+        if ($count > 0) {
+            $this->metrics->record('lock.active.detected');
+        }
+
+        return $count > 0;
     }
 
     public function acquire(string $assetUuid, OperationLockType $type, string $actorId): bool
@@ -66,7 +72,7 @@ class OperationLockRepository
 
     private function hasTypeLock(string $assetUuid, OperationLockType $type): bool
     {
-        return (int) $this->connection->fetchOne(
+        $count = (int) $this->connection->fetchOne(
             'SELECT COUNT(*) FROM asset_operation_lock
              WHERE asset_uuid = :assetUuid
                AND lock_type = :lockType
@@ -75,6 +81,31 @@ class OperationLockRepository
                 'assetUuid' => $assetUuid,
                 'lockType' => $type->value,
             ]
-        ) > 0;
+        );
+
+        if ($count > 0) {
+            $this->metrics->record(sprintf('lock.active.detected.%s', $type->value));
+        }
+
+        return $count > 0;
+    }
+
+    public function countActiveLocks(): int
+    {
+        return (int) $this->connection->fetchOne(
+            'SELECT COUNT(*) FROM asset_operation_lock WHERE released_at IS NULL'
+        );
+    }
+
+    public function countStaleActiveLocks(\DateTimeImmutable $before): int
+    {
+        return (int) $this->connection->fetchOne(
+            'SELECT COUNT(*) FROM asset_operation_lock
+             WHERE released_at IS NULL
+               AND acquired_at < :before',
+            [
+                'before' => $before->format('Y-m-d H:i:s'),
+            ]
+        );
     }
 }
