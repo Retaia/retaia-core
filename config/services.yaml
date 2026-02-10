@@ -14,6 +14,7 @@ parameters:
     app.password_policy.require_mixed_case: true
     app.password_policy.require_number: true
     app.password_policy.require_special: true
+    app.ingest.watch_path: '%env(string:APP_INGEST_WATCH_PATH)%'
 
 services:
     # default configuration for services in *this* file
@@ -29,6 +30,7 @@ services:
     App\User\Repository\UserRepositoryInterface: '@App\User\Repository\UserRepository'
     App\User\Repository\PasswordResetTokenRepositoryInterface: '@App\User\Repository\PasswordResetTokenRepository'
     App\Asset\Repository\AssetRepositoryInterface: '@App\Asset\Repository\AssetRepository'
+    App\Ingest\Port\FilePollerInterface: '@App\Ingest\Service\FilesystemFilePoller'
 
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

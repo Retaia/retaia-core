@@ -5,10 +5,12 @@ services:
     working_dir: /var/www/html
     volumes:
       - ./:/var/www/html
+      - ./docker/watch:/var/local/ingest
     environment:
       APP_ENV: dev
       APP_DEBUG: "1"
       DATABASE_URL: postgresql://app:app@database:5432/app?serverVersion=16&charset=utf8
+      APP_INGEST_WATCH_PATH: /var/local/ingest
     depends_on:
       database:
         condition: service_healthy
@@ -32,8 +34,10 @@ services:
     working_dir: /var/www/html
     volumes:
       - ./:/var/www/html
+      - ./docker/watch:/var/local/ingest
     environment:
       DATABASE_URL: postgresql://app:app@database:5432/app?serverVersion=16&charset=utf8
+      APP_INGEST_WATCH_PATH: /var/local/ingest
     depends_on:
       database:
         condition: service_healthy

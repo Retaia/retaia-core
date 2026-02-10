@@ -48,6 +48,16 @@ php bin/console doctrine:migrations:migrate --no-interaction
 symfony server:start
 ```
 
+## Ingest Polling (Bootstrap)
+
+- Config path via env: `APP_INGEST_WATCH_PATH` (default: `./docker/watch` in local env).
+- Manual poll command:
+
+```bash
+php bin/console app:ingest:poll --limit=100
+php bin/console app:ingest:poll --json
+```
+
 ## Tests
 
 Run full test suite:
