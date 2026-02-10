@@ -75,8 +75,12 @@ make ci-local
 
 This repository supports Husky hooks for local commit quality gates:
 
-- `pre-commit`: runs `composer test`
+- `pre-commit`: runs `composer test`, `composer test:coverage`, then `composer check:coverage` (80% gate)
 - `commit-msg`: enforces Conventional Commits via `commitlint`
+
+Coverage prerequisite for `pre-commit`:
+
+- install/enable a PHP coverage driver locally (`xdebug` or `pcov`)
 
 Setup once locally:
 

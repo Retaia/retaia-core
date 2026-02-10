@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+mkdir -p var/coverage
+
 if php -r 'exit((int) !(extension_loaded("xdebug") || extension_loaded("pcov")));'; then
-  mkdir -p var/coverage
   vendor/bin/phpunit --coverage-clover var/coverage/clover.xml
   exit 0
 fi
 
-echo "No coverage driver available. Install/enable xdebug or pcov to generate coverage." >&2
+if command -v phpdbg >/dev/null 2>&1; then
+  phpdbg -qrr vendor/bin/phpunit --coverage-clover var/coverage/clover.xml
+  exit 0
+fi
+
+echo "No coverage driver available. Install/enable xdebug or pcov, or install phpdbg." >&2
 exit 1
