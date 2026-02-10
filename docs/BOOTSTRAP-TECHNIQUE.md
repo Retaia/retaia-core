@@ -75,7 +75,7 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
 ## Base de données
 
 - développement : PostgreSQL (`DATABASE_URL` dans `.env`)
-- tests fonctionnels : PostgreSQL (`DATABASE_URL` dans `.env.test`)
+- tests : mémoire (`DATABASE_URL=sqlite:///:memory:` dans `.env.test`)
 
 ## Points d’attention
 

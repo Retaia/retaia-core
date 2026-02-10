@@ -54,11 +54,11 @@ final class IngestCronTickCommandTest extends KernelTestCase
             'CREATE TABLE IF NOT EXISTS ingest_scan_file (
                 path VARCHAR(1024) PRIMARY KEY NOT NULL,
                 size_bytes INTEGER NOT NULL,
-                mtime TIMESTAMP(0) WITHOUT TIME ZONE NOT NULL,
+                mtime DATETIME NOT NULL,
                 stable_count INTEGER NOT NULL,
                 status VARCHAR(32) NOT NULL,
-                first_seen_at TIMESTAMP(0) WITHOUT TIME ZONE NOT NULL,
-                last_seen_at TIMESTAMP(0) WITHOUT TIME ZONE NOT NULL
+                first_seen_at DATETIME NOT NULL,
+                last_seen_at DATETIME NOT NULL
             )'
         );
         $connection->executeStatement(
@@ -69,10 +69,10 @@ final class IngestCronTickCommandTest extends KernelTestCase
                 status VARCHAR(16) NOT NULL,
                 claimed_by VARCHAR(32) DEFAULT NULL,
                 lock_token VARCHAR(64) DEFAULT NULL,
-                locked_until TIMESTAMP(0) WITHOUT TIME ZONE DEFAULT NULL,
-                result_payload TEXT DEFAULT NULL,
-                created_at TIMESTAMP(0) WITHOUT TIME ZONE NOT NULL,
-                updated_at TIMESTAMP(0) WITHOUT TIME ZONE NOT NULL
+                locked_until DATETIME DEFAULT NULL,
+                result_payload CLOB DEFAULT NULL,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL
             )'
         );
         $connection->executeStatement(
@@ -82,7 +82,7 @@ final class IngestCronTickCommandTest extends KernelTestCase
                 from_path VARCHAR(1024) NOT NULL,
                 to_path VARCHAR(1024) NOT NULL,
                 reason VARCHAR(64) NOT NULL,
-                created_at TIMESTAMP(0) WITHOUT TIME ZONE NOT NULL
+                created_at DATETIME NOT NULL
             )'
         );
     }

@@ -12,7 +12,7 @@ Core API repository for the Retaia project.
 - PHP 8.4+
 - Symfony 7.4
 - Doctrine ORM + Migrations
-- PostgreSQL (dev/prod/test-functional)
+- PostgreSQL (dev/prod)
 - PHPUnit + Behat
 - Faker + AliceBundle (test fixtures)
 
@@ -80,8 +80,6 @@ Run full test suite:
 ```bash
 composer test
 ```
-
-Functional tests run against PostgreSQL in `APP_ENV=test` (`DATABASE_URL` from `.env.test`, default DB: `app_test`).
 
 Run coverage and enforce threshold (80%):
 
