@@ -185,9 +185,11 @@ final class ApiAuthFlowTest extends WebTestCase
     public function testLoginFailsWhenEmailIsNotVerified(): void
     {
         $client = $this->createIsolatedClient('10.0.0.16');
+        $email = sprintf('pending-%s@retaia.local', bin2hex(random_bytes(4)));
+        $this->insertUser($email, 'change-me', ['ROLE_USER'], false);
 
         $client->jsonRequest('POST', '/api/v1/auth/login', [
-            'email' => 'pending@retaia.local',
+            'email' => $email,
             'password' => 'change-me',
         ]);
 
@@ -223,15 +225,17 @@ final class ApiAuthFlowTest extends WebTestCase
     public function testEmailVerificationFlowEnablesLogin(): void
     {
         $client = $this->createIsolatedClient('10.0.0.18');
+        $email = sprintf('verify-%s@retaia.local', bin2hex(random_bytes(4)));
+        $this->insertUser($email, 'change-me', ['ROLE_USER'], false);
 
         $client->jsonRequest('POST', '/api/v1/auth/login', [
-            'email' => 'pending@retaia.local',
+            'email' => $email,
             'password' => 'change-me',
         ]);
         self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
 
         $client->jsonRequest('POST', '/api/v1/auth/verify-email/request', [
-            'email' => 'pending@retaia.local',
+            'email' => $email,
         ]);
         self::assertResponseStatusCodeSame(Response::HTTP_ACCEPTED);
         $requestPayload = json_decode($client->getResponse()->getContent(), true);
@@ -247,7 +251,7 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame(true, $confirmPayload['email_verified'] ?? null);
 
         $client->jsonRequest('POST', '/api/v1/auth/login', [
-            'email' => 'pending@retaia.local',
+            'email' => $email,
             'password' => 'change-me',
         ]);
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
@@ -446,5 +450,21 @@ final class ApiAuthFlowTest extends WebTestCase
         $client->disableReboot();
 
         return $client;
+    }
+
+    /**
+     * @param array<int, string> $roles
+     */
+    private function insertUser(string $email, string $plainPassword, array $roles, bool $emailVerified): void
+    {
+        /** @var Connection $connection */
+        $connection = static::getContainer()->get(Connection::class);
+        $connection->insert('app_user', [
+            'id' => bin2hex(random_bytes(16)),
+            'email' => $email,
+            'password_hash' => password_hash($plainPassword, PASSWORD_DEFAULT),
+            'roles' => json_encode($roles, JSON_THROW_ON_ERROR),
+            'email_verified' => $emailVerified ? 1 : 0,
+        ]);
     }
 }
