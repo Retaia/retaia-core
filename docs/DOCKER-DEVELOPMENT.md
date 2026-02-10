@@ -70,6 +70,7 @@ Lancer un poll manuel des fichiers à ingérer :
 docker compose exec app php bin/console app:ingest:poll --limit=50
 docker compose exec app php bin/console app:ingest:poll --json
 docker compose exec app php bin/console app:ingest:enqueue-stable --limit=50
+docker compose exec app php bin/console app:ingest:apply-outbox --limit=50
 ```
 
 Arrêter l'environnement :

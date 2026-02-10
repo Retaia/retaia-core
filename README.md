@@ -57,6 +57,7 @@ symfony server:start
 php bin/console app:ingest:poll --limit=100
 php bin/console app:ingest:poll --json
 php bin/console app:ingest:enqueue-stable --limit=100
+php bin/console app:ingest:apply-outbox --limit=100
 ```
 
 ## Tests
