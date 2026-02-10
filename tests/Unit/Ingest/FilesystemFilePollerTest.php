@@ -93,4 +93,25 @@ final class FilesystemFilePollerTest extends TestCase
         $paths = array_map(static fn (array $item): string => (string) $item['path'], $items);
         self::assertContains('readable.txt', $paths);
     }
+
+    public function testPollHandlesUnreadableChildDirectoryWithoutCrashing(): void
+    {
+        $root = sys_get_temp_dir().'/retaia-watch-poller-unreadable-dir-'.bin2hex(random_bytes(4));
+        mkdir($root, 0777, true);
+        mkdir($root.'/ok', 0777, true);
+        file_put_contents($root.'/ok/readable.txt', 'OK');
+        mkdir($root.'/blocked', 0777, true);
+        file_put_contents($root.'/blocked/hidden.txt', 'HIDDEN');
+        @chmod($root.'/blocked', 0000);
+
+        $resolver = new WatchPathResolver($root, '.');
+        $poller = new FilesystemFilePoller($resolver);
+        $items = $poller->poll(10);
+
+        @chmod($root.'/blocked', 0755);
+
+        self::assertNotSame([], $items);
+        $paths = array_map(static fn (array $item): string => (string) $item['path'], $items);
+        self::assertContains('ok/readable.txt', $paths);
+    }
 }

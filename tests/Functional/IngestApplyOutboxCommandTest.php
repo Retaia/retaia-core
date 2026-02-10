@@ -121,6 +121,64 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
         self::assertSame(['first', 'second'], $contents);
     }
 
+    public function testHighVolumeCollisionsDoNotOverwriteAndMoveAllFiles(): void
+    {
+        $root = sys_get_temp_dir().'/retaia-move-collision-massive-'.bin2hex(random_bytes(4));
+        mkdir($root.'/INBOX', 0777, true);
+        mkdir($root.'/ARCHIVE', 0777, true);
+        mkdir($root.'/REJECTS', 0777, true);
+
+        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+
+        static::bootKernel();
+        $container = static::getContainer();
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = $container->get(EntityManagerInterface::class);
+        /** @var Connection $connection */
+        $connection = $container->get(Connection::class);
+        $this->ensureAuditTable($connection);
+
+        $assetCount = 16;
+        for ($i = 1; $i <= $assetCount; ++$i) {
+            $folder = sprintf('%s/INBOX/%02d', $root, $i);
+            mkdir($folder, 0777, true);
+            file_put_contents($folder.'/rush.mov', sprintf('payload-%02d', $i));
+
+            $asset = new Asset(
+                sprintf('%08d-aaaa-4aaa-8aaa-%012d', $i, $i),
+                'VIDEO',
+                'rush.mov',
+                AssetState::ARCHIVED,
+                [],
+                null,
+                ['source_path' => sprintf('INBOX/%02d/rush.mov', $i)]
+            );
+            $entityManager->persist($asset);
+        }
+        $entityManager->flush();
+
+        $application = new Application(static::$kernel);
+        $command = $application->find('app:ingest:apply-outbox');
+        $tester = new CommandTester($command);
+        $tester->execute(['--limit' => 100]);
+
+        $archiveFiles = glob($root.'/ARCHIVE/rush*.mov');
+        self::assertIsArray($archiveFiles);
+        self::assertCount($assetCount, $archiveFiles);
+
+        $basenames = array_map('basename', $archiveFiles);
+        self::assertCount($assetCount, array_unique($basenames));
+
+        $contents = array_map(static fn (string $file): string => (string) file_get_contents($file), $archiveFiles);
+        sort($contents);
+        $expected = [];
+        for ($i = 1; $i <= $assetCount; ++$i) {
+            $expected[] = sprintf('payload-%02d', $i);
+        }
+        self::assertSame($expected, $contents);
+    }
+
     public function testRetryDoesNotDuplicatePathHistoryWhenTargetAlreadyExists(): void
     {
         $root = sys_get_temp_dir().'/retaia-move-retry-'.bin2hex(random_bytes(4));
