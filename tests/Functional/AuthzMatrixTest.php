@@ -47,12 +47,67 @@ final class AuthzMatrixTest extends WebTestCase
         self::assertSame('FORBIDDEN_SCOPE', $payload['code'] ?? null);
     }
 
+    public function testAnonymousActorGetsUnauthorizedOnAgentJobEndpoint(): void
+    {
+        $client = static::createClient();
+
+        $client->request('GET', '/api/v1/jobs');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
+    }
+
+    public function testOperatorGetsForbiddenScopeOnAgentRegistrationEndpoint(): void
+    {
+        $client = $this->createOperatorClient();
+
+        $client->jsonRequest('POST', '/api/v1/agents/register', [
+            'agent_name' => 'ffmpeg-worker',
+            'agent_version' => '1.0.0',
+            'capabilities' => ['extract_facts'],
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('FORBIDDEN_SCOPE', $payload['code'] ?? null);
+    }
+
     public function testNonAdminUserGetsForbiddenActorOnAdminEndpoint(): void
     {
         $client = $this->createOperatorClient();
 
         $client->jsonRequest('POST', '/api/v1/auth/verify-email/admin-confirm', [
             'email' => 'pending@retaia.local',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('FORBIDDEN_ACTOR', $payload['code'] ?? null);
+    }
+
+    public function testAgentGetsForbiddenActorOnHumanWorkflowBatchEndpoint(): void
+    {
+        $client = $this->createAgentClient();
+
+        $client->jsonRequest('POST', '/api/v1/batches/moves/preview', [
+            'uuids' => ['11111111-1111-1111-1111-111111111111'],
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('FORBIDDEN_ACTOR', $payload['code'] ?? null);
+    }
+
+    public function testOperatorGetsForbiddenActorOnDerivedUploadInit(): void
+    {
+        $client = $this->createOperatorClient();
+        $this->seedDecisionPendingAsset();
+
+        $client->jsonRequest('POST', '/api/v1/assets/11111111-1111-1111-1111-111111111111/derived/upload/init', [
+            'kind' => 'proxy_video',
+            'content_type' => 'video/mp4',
+            'size_bytes' => 1024,
         ]);
 
         self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
