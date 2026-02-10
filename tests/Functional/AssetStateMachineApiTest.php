@@ -51,6 +51,72 @@ final class AssetStateMachineApiTest extends WebTestCase
         self::assertSame('DECISION_PENDING', $payload['state'] ?? null);
     }
 
+    public function testReprocessTransitionsArchivedAssetBackToReady(): void
+    {
+        $client = $this->createAuthenticatedClient(true);
+
+        $client->jsonRequest('POST', '/api/v1/assets/33333333-3333-3333-3333-333333333333/reprocess');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('READY', $payload['state'] ?? null);
+    }
+
+    public function testReprocessReturnsNotFoundForUnknownAsset(): void
+    {
+        $client = $this->createAuthenticatedClient();
+
+        $client->jsonRequest('POST', '/api/v1/assets/00000000-0000-0000-0000-000000000000/reprocess');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_NOT_FOUND);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('NOT_FOUND', $payload['code'] ?? null);
+    }
+
+    public function testPatchUpdatesTagsNotesAndFields(): void
+    {
+        $client = $this->createAuthenticatedClient(true);
+
+        $client->jsonRequest('PATCH', '/api/v1/assets/11111111-1111-1111-1111-111111111111', [
+            'tags' => ['updated', 'updated', 'news'],
+            'notes' => 'patched note',
+            'fields' => ['camera' => 'fx3', 'fps' => 25],
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame(['updated', 'news'], $payload['tags'] ?? []);
+        self::assertSame('patched note', $payload['notes'] ?? null);
+        self::assertSame('fx3', $payload['fields']['camera'] ?? null);
+    }
+
+    public function testPatchReturnsNotFoundForUnknownAsset(): void
+    {
+        $client = $this->createAuthenticatedClient();
+
+        $client->jsonRequest('PATCH', '/api/v1/assets/00000000-0000-0000-0000-000000000000', [
+            'notes' => 'anything',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_NOT_FOUND);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('NOT_FOUND', $payload['code'] ?? null);
+    }
+
+    public function testPatchReturnsGoneForPurgedAsset(): void
+    {
+        $client = $this->createAuthenticatedClient();
+        $this->seedPurgedAsset();
+
+        $client->jsonRequest('PATCH', '/api/v1/assets/44444444-4444-4444-4444-444444444444', [
+            'notes' => 'should fail',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_GONE);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('STATE_CONFLICT', $payload['code'] ?? null);
+    }
+
     public function testListAssetsFiltersByState(): void
     {
         $client = $this->createAuthenticatedClient(true);
@@ -99,6 +165,19 @@ final class AssetStateMachineApiTest extends WebTestCase
         $entityManager->persist($asset1);
         $entityManager->persist($asset2);
         $entityManager->persist($asset3);
+        $entityManager->flush();
+    }
+
+    private function seedPurgedAsset(): void
+    {
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = self::getContainer()->get(EntityManagerInterface::class);
+        if ($entityManager->find(Asset::class, '44444444-4444-4444-4444-444444444444') instanceof Asset) {
+            return;
+        }
+
+        $asset = new Asset('44444444-4444-4444-4444-444444444444', 'VIDEO', 'purged.mov', AssetState::PURGED);
+        $entityManager->persist($asset);
         $entityManager->flush();
     }
 }

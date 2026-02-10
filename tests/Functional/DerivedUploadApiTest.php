@@ -95,6 +95,36 @@ final class DerivedUploadApiTest extends WebTestCase
         self::assertSame('STATE_CONFLICT', $payload['code'] ?? null);
     }
 
+    public function testUploadValidationAndNotFoundBranches(): void
+    {
+        $client = $this->login('agent@retaia.local');
+        $this->seedAsset();
+
+        $client->jsonRequest('POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/part', []);
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $validationPart = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $validationPart['code'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/complete', []);
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $validationComplete = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $validationComplete['code'] ?? null);
+
+        $unknownAsset = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+        $client->jsonRequest('POST', "/api/v1/assets/{$unknownAsset}/derived/upload/init", [
+            'kind' => 'proxy_video',
+            'content_type' => 'video/mp4',
+            'size_bytes' => 1024,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_NOT_FOUND);
+
+        $client->request('GET', "/api/v1/assets/{$unknownAsset}/derived");
+        self::assertResponseStatusCodeSame(Response::HTTP_NOT_FOUND);
+
+        $client->request('GET', "/api/v1/assets/{$unknownAsset}/derived/proxy_video");
+        self::assertResponseStatusCodeSame(Response::HTTP_NOT_FOUND);
+    }
+
     private function seedAsset(): void
     {
         $this->ensureDerivedSchema();
