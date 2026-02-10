@@ -116,6 +116,100 @@ final class JobApiTest extends WebTestCase
         self::assertSame('IDEMPOTENCY_CONFLICT', $conflictPayload['code'] ?? null);
     }
 
+    public function testListReturnsClaimableJobsForAgent(): void
+    {
+        $client = $this->bootClient();
+        $this->seedJob('job-list-1');
+        $this->seedJob('job-list-2');
+        $this->loginAgent($client);
+
+        $client->request('GET', '/api/v1/jobs?limit=1');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        self::assertCount(1, $payload['items'] ?? []);
+    }
+
+    public function testSubmitRejectsMissingIdempotencyKeyAndMissingLockToken(): void
+    {
+        $client = $this->bootClient();
+        $this->seedJob('job-submit-validation');
+        $this->loginAgent($client);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-submit-validation/submit', [
+            'lock_token' => 'any-lock',
+            'result' => ['ok' => true],
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $missingKey = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('MISSING_IDEMPOTENCY_KEY', $missingKey['code'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-submit-validation/submit', [
+            'result' => ['ok' => true],
+        ], [
+            'HTTP_IDEMPOTENCY_KEY' => 'submit-missing-lock',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $missingLock = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $missingLock['code'] ?? null);
+    }
+
+    public function testFailHandlesValidationConflictAndSuccess(): void
+    {
+        $client = $this->bootClient();
+        $this->seedJob('job-fail-1');
+        $this->seedJob('job-fail-2');
+        $this->loginAgent($client);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-fail-1/claim');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $claimPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        $lockToken = (string) ($claimPayload['lock_token'] ?? '');
+        self::assertNotSame('', $lockToken);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-fail-1/fail', [
+            'lock_token' => $lockToken,
+            'error_code' => 'ERR_GENERIC',
+            'message' => 'failed',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $missingKey = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('MISSING_IDEMPOTENCY_KEY', $missingKey['code'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-fail-1/fail', [
+            'lock_token' => $lockToken,
+            'error_code' => 'ERR_GENERIC',
+        ], [
+            'HTTP_IDEMPOTENCY_KEY' => 'job-fail-validation',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $validationPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $validationPayload['code'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-fail-2/fail', [
+            'lock_token' => 'wrong-lock',
+            'error_code' => 'ERR_GENERIC',
+            'message' => 'failed',
+        ], [
+            'HTTP_IDEMPOTENCY_KEY' => 'job-fail-conflict',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
+        $conflictPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('STATE_CONFLICT', $conflictPayload['code'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-fail-1/fail', [
+            'lock_token' => $lockToken,
+            'error_code' => 'ERR_RETRYABLE',
+            'message' => 'temporary failure',
+            'retryable' => true,
+        ], [
+            'HTTP_IDEMPOTENCY_KEY' => 'job-fail-success',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $successPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('pending', $successPayload['status'] ?? null);
+    }
+
     private function seedJob(string $jobId): void
     {
         /** @var Connection $connection */

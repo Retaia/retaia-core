@@ -5,6 +5,7 @@ namespace App\Job\Repository;
 use App\Job\Job;
 use App\Job\JobStatus;
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\ParameterType;
 
 final class JobRepository
 {
@@ -31,7 +32,7 @@ final class JobRepository
                 'limit' => $limit,
             ],
             [
-                'limit' => \PDO::PARAM_INT,
+                'limit' => ParameterType::INTEGER,
             ]
         );
 
