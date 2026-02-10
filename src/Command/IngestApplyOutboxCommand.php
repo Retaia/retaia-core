@@ -73,16 +73,7 @@ final class IngestApplyOutboxCommand extends Command
         }
 
         if (is_file($fromAbsolute)) {
-            $finalAbsolute = $targetAbsolute;
-            $finalRelative = $targetRelative;
-            if (is_file($targetAbsolute)) {
-                $ext = pathinfo($targetAbsolute, PATHINFO_EXTENSION);
-                $name = pathinfo($targetAbsolute, PATHINFO_FILENAME);
-                $suffix = substr(str_replace('-', '', $asset->getUuid()), 0, 6);
-                $filename = $ext === '' ? sprintf('%s__%s', $name, $suffix) : sprintf('%s__%s.%s', $name, $suffix, $ext);
-                $finalRelative = $targetFolder.DIRECTORY_SEPARATOR.$filename;
-                $finalAbsolute = $root.DIRECTORY_SEPARATOR.$finalRelative;
-            }
+            [$finalRelative, $finalAbsolute] = $this->resolveAvailableTarget($root, $targetFolder, $targetRelative, $asset->getUuid());
             rename($fromAbsolute, $finalAbsolute);
             $this->persistPathUpdate($asset, $fromRelative, $finalRelative);
 
@@ -128,5 +119,35 @@ final class IngestApplyOutboxCommand extends Command
         }
 
         return !str_starts_with($path, '/') && !str_contains($path, '..'.DIRECTORY_SEPARATOR) && !str_contains($path, '../');
+    }
+
+    /**
+     * @return array{0:string,1:string}
+     */
+    private function resolveAvailableTarget(string $root, string $targetFolder, string $defaultRelative, string $assetUuid): array
+    {
+        $baseAbsolute = $root.DIRECTORY_SEPARATOR.$defaultRelative;
+        if (!is_file($baseAbsolute)) {
+            return [$defaultRelative, $baseAbsolute];
+        }
+
+        $ext = pathinfo($baseAbsolute, PATHINFO_EXTENSION);
+        $name = pathinfo($baseAbsolute, PATHINFO_FILENAME);
+        $suffix = substr(str_replace('-', '', $assetUuid), 0, 6);
+        $attempt = 0;
+
+        while (true) {
+            $candidateName = $attempt === 0
+                ? ($ext === '' ? sprintf('%s__%s', $name, $suffix) : sprintf('%s__%s.%s', $name, $suffix, $ext))
+                : ($ext === '' ? sprintf('%s__%s_%d', $name, $suffix, $attempt) : sprintf('%s__%s_%d.%s', $name, $suffix, $attempt, $ext));
+
+            $relative = $targetFolder.DIRECTORY_SEPARATOR.$candidateName;
+            $absolute = $root.DIRECTORY_SEPARATOR.$relative;
+            if (!is_file($absolute)) {
+                return [$relative, $absolute];
+            }
+
+            ++$attempt;
+        }
     }
 }
