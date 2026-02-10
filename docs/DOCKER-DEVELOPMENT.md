@@ -30,6 +30,18 @@ Exécuter les tests :
 docker compose run --rm app composer test
 ```
 
+Exécuter les tests + coverage gate (80%) :
+
+```bash
+docker compose run --rm app composer test:quality
+```
+
+Si l'image n'a pas de driver coverage actif, activer `pcov` dans le conteneur :
+
+```bash
+docker compose run --rm app sh -lc "pecl install pcov && echo 'extension=pcov.so' >> /usr/local/etc/php/conf.d/pcov.ini"
+```
+
 Appliquer les migrations Doctrine :
 
 ```bash
