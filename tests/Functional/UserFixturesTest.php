@@ -20,7 +20,7 @@ final class UserFixturesTest extends KernelTestCase
         $repository = $entityManager->getRepository(User::class);
         $users = $repository->findAll();
 
-        self::assertCount(7, $users);
+        self::assertCount(8, $users);
 
         $admin = $repository->findOneBy(['email' => 'admin@retaia.local']);
         self::assertInstanceOf(User::class, $admin);
@@ -30,5 +30,9 @@ final class UserFixturesTest extends KernelTestCase
         $unverified = $repository->findOneBy(['email' => 'pending@retaia.local']);
         self::assertInstanceOf(User::class, $unverified);
         self::assertFalse($unverified->isEmailVerified());
+
+        $agent = $repository->findOneBy(['email' => 'agent@retaia.local']);
+        self::assertInstanceOf(User::class, $agent);
+        self::assertContains('ROLE_AGENT', $agent->getRoles());
     }
 }
