@@ -185,6 +185,106 @@ final class OpenApiContractTest extends WebTestCase
         self::assertSame('TOO_MANY_ATTEMPTS', $payload['code'] ?? null);
     }
 
+    public function testAllDeclaredErrorResponsesUseErrorResponseSchema(): void
+    {
+        $openApi = $this->openApi();
+        $paths = $openApi['paths'] ?? [];
+        self::assertIsArray($paths);
+
+        foreach ($paths as $path => $operations) {
+            if (!is_array($operations)) {
+                continue;
+            }
+            foreach ($operations as $method => $operation) {
+                if (!is_array($operation)) {
+                    continue;
+                }
+                $responses = $operation['responses'] ?? [];
+                if (!is_array($responses)) {
+                    continue;
+                }
+                foreach ($responses as $status => $response) {
+                    if (!is_array($response) || !preg_match('/^[45]\d{2}$/', (string) $status)) {
+                        continue;
+                    }
+                    $content = $response['content']['application/json']['schema'] ?? null;
+                    if (!is_array($content)) {
+                        continue;
+                    }
+                    $schemaRef = $content['$ref'] ?? null;
+                    self::assertSame(
+                        '#/components/schemas/ErrorResponse',
+                        $schemaRef,
+                        sprintf('OpenAPI path %s %s response %s must reference ErrorResponse.', strtoupper((string) $method), (string) $path, (string) $status)
+                    );
+                }
+            }
+        }
+    }
+
+    public function testRuntimeContractErrorsMatchOpenApiForCriticalEndpoints(): void
+    {
+        $openApi = $this->openApi();
+        $errorCodes = $this->errorCodes($this->errorSchema($openApi));
+
+        $client = $this->createAuthenticatedClient();
+        $this->ensureAuxiliaryTables();
+        $this->seedAsset('33333333-3333-3333-3333-333333333333', AssetState::PROCESSED);
+
+        $cases = [
+            [
+                'method' => 'POST',
+                'url' => '/api/v1/assets/33333333-3333-3333-3333-333333333333/decision',
+                'payload' => ['action' => 'KEEP'],
+                'headers' => ['HTTP_IDEMPOTENCY_KEY' => 'contract-decision-conflict-2'],
+                'status' => Response::HTTP_CONFLICT,
+                'openapi_path' => '/assets/{uuid}/decision',
+                'openapi_method' => 'post',
+                'openapi_status' => '409',
+            ],
+            [
+                'method' => 'POST',
+                'url' => '/api/v1/auth/lost-password/request',
+                'payload' => [],
+                'headers' => [],
+                'status' => Response::HTTP_UNPROCESSABLE_ENTITY,
+                'openapi_path' => '/auth/lost-password/request',
+                'openapi_method' => 'post',
+                'openapi_status' => '422',
+            ],
+            [
+                'method' => 'POST',
+                'url' => '/api/v1/auth/login',
+                'payload' => ['email' => 'admin@retaia.local', 'password' => 'wrong-password'],
+                'headers' => [],
+                'status' => Response::HTTP_UNAUTHORIZED,
+                'openapi_path' => '/auth/login',
+                'openapi_method' => 'post',
+                'openapi_status' => '401',
+            ],
+        ];
+
+        foreach ($cases as $case) {
+            $this->assertPathStatusUsesErrorResponse(
+                $openApi,
+                (string) $case['openapi_path'],
+                (string) $case['openapi_method'],
+                (string) $case['openapi_status']
+            );
+
+            $client->jsonRequest(
+                (string) $case['method'],
+                (string) $case['url'],
+                (array) $case['payload'],
+                (array) $case['headers']
+            );
+
+            self::assertSame((int) $case['status'], $client->getResponse()->getStatusCode(), (string) $case['url']);
+            $payload = json_decode((string) $client->getResponse()->getContent(), true);
+            $this->assertErrorPayloadMatchesModel($payload, $errorCodes);
+        }
+    }
+
     /**
      * @return array<string, mixed>
      */
