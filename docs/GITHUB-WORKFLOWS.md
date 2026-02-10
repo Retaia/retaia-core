@@ -26,6 +26,10 @@ Détail :
   - `php bin/console lint:yaml config`
   - `php bin/console lint:container`
   - `php scripts/check-translation-keys.php` (gate bloquant en/fr)
+  - le gate i18n bloque aussi :
+    - clés critiques manquantes (`auth.error.*` critiques)
+    - valeurs de traduction vides
+    - placeholders interdits (`TODO`, `FIXME`, `TRANSLATE_ME`)
 
 - `test` :
   - `composer test` (PHPUnit + Behat)

@@ -367,6 +367,30 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('Token invalid or expired', $payload['message'] ?? null);
     }
 
+    public function testFrenchLocaleTranslatesAuthenticationRequiredMessage(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.34', 'fr');
+
+        $client->request('GET', '/api/v1/auth/me');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
+        self::assertSame('Authentification requise', $payload['message'] ?? null);
+    }
+
+    public function testUnsupportedLocaleFallsBackToEnglishAuthenticationRequiredMessage(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.35', 'de');
+
+        $client->request('GET', '/api/v1/auth/me');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
+        self::assertSame('Authentication required', $payload['message'] ?? null);
+    }
+
     public function testAgentRegisterRequiresAgentScope(): void
     {
         $client = $this->createIsolatedClient('10.0.0.32');

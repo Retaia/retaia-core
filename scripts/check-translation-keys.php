@@ -24,11 +24,11 @@ function loadCatalog(string $path): array
 
 /**
  * @param array<string, mixed> $data
- * @return list<string>
+ * @return array<string, string>
  */
-function flattenKeys(array $data, string $prefix = ''): array
+function flattenCatalog(array $data, string $prefix = ''): array
 {
-    $keys = [];
+    $flat = [];
     foreach ($data as $key => $value) {
         if (!is_string($key)) {
             continue;
@@ -36,29 +36,72 @@ function flattenKeys(array $data, string $prefix = ''): array
 
         $fullKey = $prefix === '' ? $key : $prefix.'.'.$key;
         if (is_array($value)) {
-            array_push($keys, ...flattenKeys($value, $fullKey));
+            $flat += flattenCatalog($value, $fullKey);
             continue;
         }
 
-        $keys[] = $fullKey;
+        if (is_scalar($value) || $value === null) {
+            $flat[$fullKey] = trim((string) $value);
+        }
     }
 
-    sort($keys);
+    ksort($flat);
 
-    return $keys;
+    return $flat;
 }
 
 $baseDir = dirname(__DIR__).'/translations';
 $enPath = $baseDir.'/messages.en.yaml';
 $frPath = $baseDir.'/messages.fr.yaml';
 
-$enKeys = flattenKeys(loadCatalog($enPath));
-$frKeys = flattenKeys(loadCatalog($frPath));
+$enCatalog = flattenCatalog(loadCatalog($enPath));
+$frCatalog = flattenCatalog(loadCatalog($frPath));
+$enKeys = array_keys($enCatalog);
+$frKeys = array_keys($frCatalog);
 
 $missingInFr = array_values(array_diff($enKeys, $frKeys));
 $missingInEn = array_values(array_diff($frKeys, $enKeys));
+$emptyValues = [];
+$forbiddenMarkers = [];
 
-if ($missingInFr === [] && $missingInEn === []) {
+/** @var list<string> $criticalKeys */
+$criticalKeys = [
+    'auth.error.authentication_required',
+    'auth.error.invalid_credentials',
+    'auth.error.email_not_verified',
+    'auth.error.too_many_login_attempts',
+    'auth.error.invalid_or_expired_token',
+];
+
+foreach ($criticalKeys as $key) {
+    if (!array_key_exists($key, $enCatalog)) {
+        $missingInEn[] = $key;
+    }
+
+    if (!array_key_exists($key, $frCatalog)) {
+        $missingInFr[] = $key;
+    }
+}
+
+$missingInFr = array_values(array_unique($missingInFr));
+$missingInEn = array_values(array_unique($missingInEn));
+sort($missingInFr);
+sort($missingInEn);
+
+foreach (['en' => $enCatalog, 'fr' => $frCatalog] as $locale => $catalog) {
+    foreach ($catalog as $key => $value) {
+        if ($value === '') {
+            $emptyValues[] = sprintf('%s:%s', $locale, $key);
+        }
+
+        $upperValue = strtoupper($value);
+        if (str_contains($upperValue, 'TODO') || str_contains($upperValue, 'FIXME') || str_contains($upperValue, 'TRANSLATE_ME')) {
+            $forbiddenMarkers[] = sprintf('%s:%s', $locale, $key);
+        }
+    }
+}
+
+if ($missingInFr === [] && $missingInEn === [] && $emptyValues === [] && $forbiddenMarkers === []) {
     fwrite(STDOUT, "Translation key sync OK (en <-> fr)\n");
     exit(0);
 }
@@ -74,6 +117,20 @@ if ($missingInEn !== []) {
     fwrite(STDERR, "Missing in en:\n");
     foreach ($missingInEn as $key) {
         fwrite(STDERR, " - {$key}\n");
+    }
+}
+
+if ($emptyValues !== []) {
+    fwrite(STDERR, "Empty translations are not allowed:\n");
+    foreach ($emptyValues as $entry) {
+        fwrite(STDERR, " - {$entry}\n");
+    }
+}
+
+if ($forbiddenMarkers !== []) {
+    fwrite(STDERR, "Forbidden placeholder markers detected:\n");
+    foreach ($forbiddenMarkers as $entry) {
+        fwrite(STDERR, " - {$entry}\n");
     }
 }
 
