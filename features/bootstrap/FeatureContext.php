@@ -6,6 +6,7 @@ use App\Tests\Support\TestUserPasswordHasher;
 use App\User\Service\AuthService;
 use App\User\Service\PasswordResetService;
 use Behat\Behat\Context\Context;
+use Psr\Log\NullLogger;
 use PHPUnit\Framework\Assert;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -42,6 +43,7 @@ final class FeatureContext implements Context
             $this->users,
             new InMemoryPasswordResetTokenRepository(),
             new TestUserPasswordHasher(),
+            new NullLogger(),
             'test',
             3600,
         );

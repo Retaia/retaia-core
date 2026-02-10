@@ -3,6 +3,7 @@
 namespace App\Security;
 
 use App\Entity\User;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -21,6 +22,11 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
 {
     private const LOGIN_ROUTE = 'api_auth_login';
 
+    public function __construct(
+        private LoggerInterface $logger,
+    ) {
+    }
+
     public function supports(Request $request): ?bool
     {
         return $request->attributes->get('_route') === self::LOGIN_ROUTE
@@ -38,6 +44,11 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
         $password = (string) ($payload['password'] ?? '');
 
         if ($email === '' || $password === '') {
+            $this->logger->info('auth.login.failed', [
+                'reason' => 'validation',
+                'email_hash' => $this->hashEmail($email),
+            ]);
+
             throw new CustomUserMessageAuthenticationException('VALIDATION_FAILED');
         }
 
@@ -49,11 +60,20 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
         $user = $token->getUser();
 
         if (!$user instanceof UserInterface) {
+            $this->logger->warning('auth.login.failed', [
+                'reason' => 'invalid_user_type',
+            ]);
+
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => 'Invalid credentials'],
                 Response::HTTP_UNAUTHORIZED
             );
         }
+
+        $this->logger->info('auth.login.succeeded', [
+            'user_identifier' => $user->getUserIdentifier(),
+            'roles' => $user->getRoles(),
+        ]);
 
         return new JsonResponse(
             [
@@ -66,6 +86,8 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
 
     public function onAuthenticationFailure(Request $request, AuthenticationException $exception): ?Response
     {
+        $emailHash = $this->emailHashFromRequest($request);
+
         if ($exception->getMessageKey() === 'VALIDATION_FAILED') {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => 'email and password are required'],
@@ -80,8 +102,18 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
                 $response['retry_in_minutes'] = $minutes;
             }
 
+            $this->logger->warning('auth.login.throttled', [
+                'email_hash' => $emailHash,
+                'retry_in_minutes' => is_int($minutes) ? $minutes : null,
+            ]);
+
             return new JsonResponse($response, Response::HTTP_TOO_MANY_REQUESTS);
         }
+
+        $this->logger->info('auth.login.failed', [
+            'reason' => 'invalid_credentials',
+            'email_hash' => $emailHash,
+        ]);
 
         return new JsonResponse(
             ['code' => 'UNAUTHORIZED', 'message' => 'Invalid credentials'],
@@ -115,5 +147,20 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
             'email' => $user->getUserIdentifier(),
             'roles' => $user->getRoles(),
         ];
+    }
+
+    private function emailHashFromRequest(Request $request): string
+    {
+        $payload = json_decode($request->getContent(), true);
+        if (!is_array($payload)) {
+            return $this->hashEmail('');
+        }
+
+        return $this->hashEmail((string) ($payload['email'] ?? ''));
+    }
+
+    private function hashEmail(string $email): string
+    {
+        return hash('sha256', mb_strtolower(trim($email)));
     }
 }
