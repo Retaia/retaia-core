@@ -73,5 +73,40 @@ final class ScanStateStore implements ScanStateStoreInterface
             'last_seen_at' => $scannedAt,
         ];
     }
-}
 
+    public function listStableFiles(int $limit = 100): array
+    {
+        $rows = $this->connection->fetchAllAssociative(
+            'SELECT path, size_bytes, mtime, stable_count, status
+             FROM ingest_scan_file
+             WHERE status = :status
+             ORDER BY last_seen_at ASC
+             LIMIT :limit',
+            [
+                'status' => 'stable',
+                'limit' => max(1, $limit),
+            ],
+            [
+                'limit' => \Doctrine\DBAL\ParameterType::INTEGER,
+            ]
+        );
+
+        return array_map(static fn (array $row): array => [
+            'path' => (string) $row['path'],
+            'size' => (int) $row['size_bytes'],
+            'mtime' => new \DateTimeImmutable((string) $row['mtime']),
+            'stable_count' => (int) $row['stable_count'],
+            'status' => (string) $row['status'],
+        ], $rows);
+    }
+
+    public function markQueued(string $path, \DateTimeImmutable $queuedAt): void
+    {
+        $this->connection->update('ingest_scan_file', [
+            'status' => 'queued',
+            'last_seen_at' => $queuedAt->format('Y-m-d H:i:s'),
+        ], [
+            'path' => $path,
+        ]);
+    }
+}

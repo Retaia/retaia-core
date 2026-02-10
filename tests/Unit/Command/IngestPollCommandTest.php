@@ -41,6 +41,15 @@ final class IngestPollCommandTest extends TestCase
                     'last_seen_at' => $scannedAt,
                 ];
             }
+
+            public function listStableFiles(int $limit = 100): array
+            {
+                return [];
+            }
+
+            public function markQueued(string $path, \DateTimeImmutable $queuedAt): void
+            {
+            }
         };
 
         $command = new IngestPollCommand($resolver, $poller, $scanStore);

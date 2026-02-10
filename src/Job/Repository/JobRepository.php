@@ -51,6 +51,39 @@ final class JobRepository
         return is_array($row) ? $this->hydrate($row) : null;
     }
 
+    public function hasJobForAssetAndType(string $assetUuid, string $jobType): bool
+    {
+        $row = $this->connection->fetchAssociative(
+            'SELECT id FROM processing_job WHERE asset_uuid = :assetUuid AND job_type = :jobType LIMIT 1',
+            [
+                'assetUuid' => $assetUuid,
+                'jobType' => $jobType,
+            ]
+        );
+
+        return is_array($row);
+    }
+
+    public function enqueuePending(string $assetUuid, string $jobType): Job
+    {
+        $id = bin2hex(random_bytes(16));
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        $this->connection->insert('processing_job', [
+            'id' => $id,
+            'asset_uuid' => $assetUuid,
+            'job_type' => $jobType,
+            'status' => JobStatus::PENDING->value,
+            'claimed_by' => null,
+            'lock_token' => null,
+            'locked_until' => null,
+            'result_payload' => null,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        return $this->find($id) ?? throw new \RuntimeException('Unable to load queued job.');
+    }
+
     public function claim(string $id, string $agentId, int $ttlSeconds): ?Job
     {
         $lockToken = bin2hex(random_bytes(16));
