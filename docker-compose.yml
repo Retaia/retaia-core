@@ -48,7 +48,7 @@ services:
       app:
         condition: service_started
     ports:
-      - "8080:80"
+      - "${RETAIA_HTTP_PORT:-8081}:80"
     volumes:
       - ./:/var/www/html
       - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
@@ -75,6 +75,7 @@ services:
       POSTGRES_DB: app
       POSTGRES_PASSWORD: app
       POSTGRES_USER: app
+      PGDATA: /var/lib/postgresql/data/pgdata
     healthcheck:
       test: ["CMD", "pg_isready", "-d", "app", "-U", "app"]
       interval: 10s
@@ -82,6 +83,6 @@ services:
       retries: 5
       start_period: 20s
     ports:
-      - "5432:5432"
+      - "${RETAIA_DB_PORT:-5433}:5432"
     volumes:
       - ./docker/db-data:/var/lib/postgresql/data
