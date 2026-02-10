@@ -28,6 +28,7 @@ Détail :
 
 - `test` :
   - `composer test` (PHPUnit + Behat)
+  - inclut des non-régressions token auth (token expiré/invalide, payload/signature altérés)
 
 - `security-audit` :
   - `composer audit --no-interaction`
