@@ -72,6 +72,8 @@ Selon le scope :
 - Les sidecars sont associés par règles déterministes, pas heuristiques locales.
 - Tout comportement ambigu doit rester explicite (ex: sidecar non matché).
 - Le polling filesystem doit ignorer les symlinks et refuser les chemins non sûrs (`..`, null-byte, absolu inattendu).
+- Le polling doit rester résilient aux races filesystem (rename/delete pendant scan) et aux erreurs de permission.
+- Les collisions de noms en move outbox doivent rester déterministes et sans écrasement.
 - Ne pas committer de contenu généré : `vendor/`, `var/cache/`, `config/reference.php` et fichiers auto-générés équivalents.
 
 ## Persistance locale

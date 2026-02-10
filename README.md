@@ -90,6 +90,7 @@ php bin/console lint:yaml config
 php bin/console lint:container
 composer audit --no-interaction
 php bin/console app:sentry:probe
+php bin/console app:alerts:state-conflicts --window-minutes=15 --state-conflicts-threshold=20 --lock-failed-threshold=10
 ```
 
 DX shortcuts:
@@ -113,6 +114,7 @@ make ci-local
 - Operation locks are enforced for move/purge concurrency safety (`asset_operation_lock` table).
 - Job claimability is blocked when an asset is `MOVE_QUEUED`, `PURGED`, or under active operation lock.
 - Ingest polling ignores symlinks and unsafe paths.
+- Ingest polling tolerates transient file races (rename/delete during scan), permission issues, and large filename collisions on outbox moves.
 - API localization supports `Accept-Language` (`en`, `fr`) with fallback to `en`.
 
 ## Git Hooks (Husky)

@@ -53,6 +53,43 @@ final class IngestPipelineE2ETest extends KernelTestCase
         self::assertSame('queued', $status);
     }
 
+    public function testRenameBetweenPollsDoesNotCrashAndDoesNotQueueUnstableFile(): void
+    {
+        $root = sys_get_temp_dir().'/retaia-pipeline-rename-'.bin2hex(random_bytes(4));
+        mkdir($root.'/INBOX', 0777, true);
+        mkdir($root.'/ARCHIVE', 0777, true);
+        mkdir($root.'/REJECTS', 0777, true);
+        file_put_contents($root.'/INBOX/source.mov', 'payload');
+
+        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
+        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        static::ensureKernelShutdown();
+
+        static::bootKernel();
+        $container = static::getContainer();
+        /** @var Connection $connection */
+        $connection = $container->get(Connection::class);
+        $this->ensureTables($connection);
+
+        $application = new Application(static::$kernel);
+        $poll = new CommandTester($application->find('app:ingest:poll'));
+        $enqueue = new CommandTester($application->find('app:ingest:enqueue-stable'));
+
+        $poll->execute(['--limit' => 10]);
+        rename($root.'/INBOX/source.mov', $root.'/INBOX/renamed.mov');
+        $poll->execute(['--limit' => 10]);
+
+        $sourceStatus = (string) $connection->fetchOne('SELECT status FROM ingest_scan_file WHERE path = :path', ['path' => 'INBOX/source.mov']);
+        $renamedStatus = (string) $connection->fetchOne('SELECT status FROM ingest_scan_file WHERE path = :path', ['path' => 'INBOX/renamed.mov']);
+        self::assertSame('discovered', $sourceStatus);
+        self::assertSame('discovered', $renamedStatus);
+
+        $enqueue->execute(['--limit' => 10]);
+        $jobCount = (int) $connection->fetchOne('SELECT COUNT(*) FROM processing_job');
+        self::assertSame(0, $jobCount);
+    }
+
     private function ensureTables(Connection $connection): void
     {
         $connection->executeStatement(

@@ -3,12 +3,14 @@
 namespace App\Lock\Repository;
 
 use App\Lock\OperationLockType;
+use App\Observability\Repository\MetricEventRepository;
 use Doctrine\DBAL\Connection;
 
 class OperationLockRepository
 {
     public function __construct(
         private Connection $connection,
+        private MetricEventRepository $metrics,
     ) {
     }
 
@@ -23,6 +25,7 @@ class OperationLockRepository
     public function acquire(string $assetUuid, OperationLockType $type, string $actorId): bool
     {
         if ($this->hasTypeLock($assetUuid, $type)) {
+            $this->metrics->record(sprintf('lock.acquire.failed.%s', $type->value));
             return false;
         }
 
@@ -36,8 +39,10 @@ class OperationLockRepository
                 'released_at' => null,
             ]);
 
+            $this->metrics->record(sprintf('lock.acquire.success.%s', $type->value));
             return true;
         } catch (\Throwable) {
+            $this->metrics->record(sprintf('lock.acquire.failed.%s', $type->value));
             return false;
         }
     }
@@ -56,6 +61,7 @@ class OperationLockRepository
                 'lockType' => $type->value,
             ]
         );
+        $this->metrics->record(sprintf('lock.release.%s', $type->value));
     }
 
     private function hasTypeLock(string $assetUuid, OperationLockType $type): bool

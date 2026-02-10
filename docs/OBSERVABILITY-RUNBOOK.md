@@ -32,6 +32,28 @@ Fournir un socle opérationnel minimal pour diagnostiquer les incidents API côt
 - `error_code` (sur fail)
 - `retryable` (sur fail)
 
+## Métriques opérationnelles persistées
+
+Table: `ops_metric_event`
+
+Clés émises:
+
+- `api.error.STATE_CONFLICT` (et plus généralement `api.error.<CODE>`)
+- `lock.acquire.success.asset_move_lock`
+- `lock.acquire.failed.asset_move_lock`
+- `lock.release.asset_move_lock`
+- `lock.acquire.success.asset_purge_lock`
+- `lock.acquire.failed.asset_purge_lock`
+- `lock.release.asset_purge_lock`
+
+Commande d'alerte:
+
+```bash
+php bin/console app:alerts:state-conflicts --window-minutes=15 --state-conflicts-threshold=20 --lock-failed-threshold=10
+```
+
+La commande retourne un code non-zéro si un seuil est dépassé.
+
 ## Procédure de triage rapide
 
 1. Vérifier `/api/v1/health` et l’état base PostgreSQL.
@@ -41,4 +63,5 @@ Fournir un socle opérationnel minimal pour diagnostiquer les incidents API côt
 5. Vérifier la sonde Sentry (prod):
    - `php bin/console app:sentry:probe`
    - DSN attendu: host `sentry.fullfrontend.be`
-6. En cas de correction, passer par PR avec tests de non-régression.
+6. Pour les incidents de concurrence, lancer `app:alerts:state-conflicts` puis investiguer les clés lock + `STATE_CONFLICT`.
+7. En cas de correction, passer par PR avec tests de non-régression.
