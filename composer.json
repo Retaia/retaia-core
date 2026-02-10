@@ -60,6 +60,7 @@
         "symfony/polyfill-php82": "*"
     },
     "scripts": {
+        "check:i18n": "php scripts/check-translation-keys.php",
         "test:unit": "vendor/bin/phpunit",
         "test:behat": "vendor/bin/behat",
         "test": [
