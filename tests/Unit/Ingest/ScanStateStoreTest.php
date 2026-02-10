@@ -3,18 +3,50 @@
 namespace App\Tests\Unit\Ingest;
 
 use App\Ingest\Repository\ScanStateStore;
-use Doctrine\DBAL\DriverManager;
+use Doctrine\DBAL\Connection;
 use PHPUnit\Framework\TestCase;
 
 final class ScanStateStoreTest extends TestCase
 {
     public function testRecordDetectedFileTracksStableCountAcrossScans(): void
     {
-        $connection = DriverManager::getConnection([
-            'driver' => 'pdo_sqlite',
-            'memory' => true,
-        ]);
-        $connection->executeStatement('CREATE TABLE ingest_scan_file (path VARCHAR(1024) PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, mtime DATETIME NOT NULL, stable_count INTEGER NOT NULL, status VARCHAR(32) NOT NULL, first_seen_at DATETIME NOT NULL, last_seen_at DATETIME NOT NULL)');
+        $rows = [];
+        $connection = $this->createMock(Connection::class);
+        $connection->method('fetchAssociative')->willReturnCallback(static function (string $sql, array $params = []) use (&$rows): array|false {
+            $path = (string) ($params['path'] ?? '');
+
+            return $rows[$path] ?? false;
+        });
+        $connection->method('insert')->willReturnCallback(static function (string $table, array $data) use (&$rows): int {
+            if ($table === 'ingest_scan_file') {
+                $rows[(string) $data['path']] = $data;
+            }
+
+            return 1;
+        });
+        $connection->method('update')->willReturnCallback(static function (string $table, array $data, array $criteria) use (&$rows): int {
+            $path = (string) ($criteria['path'] ?? '');
+            if ($table !== 'ingest_scan_file' || $path === '' || !isset($rows[$path])) {
+                return 0;
+            }
+
+            $rows[$path] = array_merge($rows[$path], $data);
+
+            return 1;
+        });
+        $connection->method('fetchAllAssociative')->willReturnCallback(static function (string $sql, array $params = []) use (&$rows): array {
+            $status = (string) ($params['status'] ?? '');
+            $limit = (int) ($params['limit'] ?? 100);
+            $filtered = array_values(array_filter($rows, static fn (array $row): bool => (string) ($row['status'] ?? '') === $status));
+            usort($filtered, static fn (array $a, array $b): int => strcmp((string) ($a['last_seen_at'] ?? ''), (string) ($b['last_seen_at'] ?? '')));
+
+            return array_slice($filtered, 0, max(1, $limit));
+        });
+        $connection->method('fetchOne')->willReturnCallback(static function (string $sql, array $params = []) use (&$rows): string {
+            $path = (string) ($params['path'] ?? '');
+
+            return (string) (($rows[$path]['status'] ?? ''));
+        });
 
         $store = new ScanStateStore($connection);
         $mtime = new \DateTimeImmutable('2026-01-01 10:00:00');

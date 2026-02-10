@@ -4,7 +4,7 @@ namespace App\Tests\Unit\Command;
 
 use App\Command\AlertsStateConflictsCommand;
 use App\Observability\Repository\MetricEventRepository;
-use Doctrine\DBAL\DriverManager;
+use Doctrine\DBAL\Connection;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -48,19 +48,32 @@ final class AlertsStateConflictsCommandTest extends TestCase
 
     private function repositoryWithSchema(): MetricEventRepository
     {
-        $connection = DriverManager::getConnection([
-            'driver' => 'pdo_sqlite',
-            'memory' => true,
-        ]);
-        $connection->executeStatement(
-            'CREATE TABLE ops_metric_event (
-                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                metric_key VARCHAR(128) NOT NULL,
-                created_at DATETIME NOT NULL
-            )'
-        );
+        $events = [];
+        $connection = $this->createMock(Connection::class);
+        $connection->method('insert')->willReturnCallback(static function (string $table, array $data) use (&$events): int {
+            if ($table === 'ops_metric_event') {
+                $events[] = $data;
+            }
+
+            return 1;
+        });
+        $connection->method('fetchOne')->willReturnCallback(static function (string $sql, array $params = []) use (&$events): int {
+            $metricKey = (string) ($params['metricKey'] ?? '');
+            $since = (string) ($params['since'] ?? '');
+            $count = 0;
+            foreach ($events as $event) {
+                if (($event['metric_key'] ?? null) !== $metricKey) {
+                    continue;
+                }
+                if ((string) ($event['created_at'] ?? '') < $since) {
+                    continue;
+                }
+                ++$count;
+            }
+
+            return $count;
+        });
 
         return new MetricEventRepository($connection);
     }
 }
-
