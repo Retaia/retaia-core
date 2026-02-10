@@ -48,6 +48,13 @@ Run full test suite:
 composer test
 ```
 
+Run coverage and enforce threshold (80%):
+
+```bash
+composer test:coverage
+composer check:coverage
+```
+
 Useful checks:
 
 ```bash

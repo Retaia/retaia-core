@@ -14,6 +14,7 @@ Il exécute quatre jobs :
 2. `lint`
 3. `test`
 4. `security-audit`
+5. `coverage`
 
 Détail :
 
@@ -37,6 +38,10 @@ Détail :
 
 - `security-audit` :
   - `composer audit --no-interaction`
+
+- `coverage` :
+  - `composer test:coverage` (génère `var/coverage/clover.xml` via PHPUnit)
+  - `composer check:coverage` (gate bloquant à **80%** minimum)
 
 ## Déclenchement
 
