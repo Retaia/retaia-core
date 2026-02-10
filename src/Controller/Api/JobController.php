@@ -5,6 +5,7 @@ namespace App\Controller\Api;
 use App\Api\Service\IdempotencyService;
 use App\Entity\User;
 use App\Job\Job;
+use App\Job\JobStatus;
 use App\Job\Repository\JobRepository;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -75,13 +76,15 @@ final class JobController
 
         $job = $this->jobs->heartbeat($jobId, $lockToken, 300);
         if ($job === null) {
+            $conflictCode = $this->lockConflictCode($jobId, $lockToken);
             $this->logger->warning('jobs.heartbeat.conflict', [
                 'job_id' => $jobId,
                 'agent_id' => $this->actorId(),
+                'code' => $conflictCode,
             ]);
 
             return new JsonResponse([
-                'code' => 'STATE_CONFLICT',
+                'code' => $conflictCode,
                 'message' => 'Invalid lock token or expired lock',
             ], Response::HTTP_CONFLICT);
         }
@@ -113,13 +116,15 @@ final class JobController
 
             $job = $this->jobs->submit($jobId, $lockToken, $result);
             if ($job === null) {
+                $conflictCode = $this->lockConflictCode($jobId, $lockToken);
                 $this->logger->warning('jobs.submit.conflict', [
                     'job_id' => $jobId,
                     'agent_id' => $this->actorId(),
+                    'code' => $conflictCode,
                 ]);
 
                 return new JsonResponse([
-                    'code' => 'STATE_CONFLICT',
+                    'code' => $conflictCode,
                     'message' => 'Invalid lock token or expired lock',
                 ], Response::HTTP_CONFLICT);
             }
@@ -149,15 +154,17 @@ final class JobController
 
             $job = $this->jobs->fail($jobId, $lockToken, $retryable, $errorCode, $message);
             if ($job === null) {
+                $conflictCode = $this->lockConflictCode($jobId, $lockToken);
                 $this->logger->warning('jobs.fail.conflict', [
                     'job_id' => $jobId,
                     'agent_id' => $this->actorId(),
                     'error_code' => $errorCode,
                     'retryable' => $retryable,
+                    'code' => $conflictCode,
                 ]);
 
                 return new JsonResponse([
-                    'code' => 'STATE_CONFLICT',
+                    'code' => $conflictCode,
                     'message' => 'Invalid lock token or expired lock',
                 ], Response::HTTP_CONFLICT);
             }
@@ -190,6 +197,21 @@ final class JobController
         $user = $this->security->getUser();
 
         return $user instanceof User ? $user->getId() : 'anonymous';
+    }
+
+    private function lockConflictCode(string $jobId, string $lockToken): string
+    {
+        $current = $this->jobs->find($jobId);
+        if ($current instanceof Job
+            && $current->status === JobStatus::CLAIMED
+            && is_string($current->lockToken)
+            && $current->lockToken !== ''
+            && !hash_equals($current->lockToken, $lockToken)
+        ) {
+            return 'STALE_LOCK_TOKEN';
+        }
+
+        return 'STATE_CONFLICT';
     }
 
     /**

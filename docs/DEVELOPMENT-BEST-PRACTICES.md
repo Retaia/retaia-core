@@ -60,6 +60,7 @@ Selon le scope :
 
 - Claim de job atomique uniquement.
 - Lease TTL obligatoire sur claim, heartbeat pour jobs longs.
+- Un lock token obsolète sur heartbeat/submit/fail doit renvoyer `409 STALE_LOCK_TOKEN` (pas un conflit générique).
 - Aucun processing sur asset `MOVE_QUEUED`.
 - Purge refusée si un job est encore claimé.
 - Reprocess refusé si lock move actif.
