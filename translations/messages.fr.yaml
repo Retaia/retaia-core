@@ -8,6 +8,7 @@ auth:
     email_required: "email est requis"
     token_new_password_required: "token et new_password sont requis"
     invalid_or_expired_token: "Token invalide ou expiré"
+    too_many_password_reset_requests: "Trop de demandes de réinitialisation de mot de passe"
     too_many_verification_requests: "Trop de demandes de vérification email"
     token_required: "token est requis"
     admin_role_required: "Rôle administrateur requis"
