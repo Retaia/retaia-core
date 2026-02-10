@@ -155,6 +155,38 @@ final class AuthController
         return new JsonResponse(['email_verified' => true], Response::HTTP_OK);
     }
 
+    #[Route('/verify-email/admin-confirm', name: 'api_auth_verify_email_admin_confirm', methods: ['POST'])]
+    public function adminConfirmEmailVerification(Request $request): JsonResponse
+    {
+        if (!$this->security->isGranted('ROLE_ADMIN')) {
+            return new JsonResponse(
+                ['code' => 'FORBIDDEN', 'message' => 'Admin role required'],
+                Response::HTTP_FORBIDDEN
+            );
+        }
+
+        $payload = $this->payload($request);
+        $email = trim((string) ($payload['email'] ?? ''));
+        if ($email === '') {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => 'email is required'],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        $actor = $this->security->getUser();
+        $actorId = $actor instanceof User ? $actor->getId() : null;
+
+        if (!$this->emailVerificationService->forceVerifyByEmail($email, $actorId)) {
+            return new JsonResponse(
+                ['code' => 'USER_NOT_FOUND', 'message' => 'Unknown user'],
+                Response::HTTP_NOT_FOUND
+            );
+        }
+
+        return new JsonResponse(['email_verified' => true], Response::HTTP_OK);
+    }
+
     /**
      * @return array<string, mixed>
      */
