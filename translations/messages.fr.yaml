@@ -12,6 +12,12 @@ auth:
     token_required: "token est requis"
     admin_role_required: "Rôle administrateur requis"
     unknown_user: "Utilisateur inconnu"
+asset:
+  error:
+    not_found: "Asset introuvable"
+    state_conflict: "Transition d'état non autorisée"
+    decision_action_required: "action est requis"
+    purged_read_only: "Les assets purgés sont en lecture seule"
     forbidden_scope: "Scope insuffisant"
 agent:
   error:

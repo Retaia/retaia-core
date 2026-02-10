@@ -28,6 +28,7 @@ services:
 
     App\User\Repository\UserRepositoryInterface: '@App\User\Repository\UserRepository'
     App\User\Repository\PasswordResetTokenRepositoryInterface: '@App\User\Repository\PasswordResetTokenRepository'
+    App\Asset\Repository\AssetRepositoryInterface: '@App\Asset\Repository\AssetRepository'
 
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones
