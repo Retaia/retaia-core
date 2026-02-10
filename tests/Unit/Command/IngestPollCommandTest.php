@@ -4,6 +4,7 @@ namespace App\Tests\Unit\Command;
 
 use App\Command\IngestPollCommand;
 use App\Ingest\Port\FilePollerInterface;
+use App\Ingest\Port\ScanStateStoreInterface;
 use App\Ingest\Service\WatchPathResolver;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Command\Command;
@@ -27,8 +28,22 @@ final class IngestPollCommandTest extends TestCase
                 ]];
             }
         };
+        $scanStore = new class() implements ScanStateStoreInterface {
+            public function recordDetectedFile(string $path, int $size, \DateTimeImmutable $mtime, \DateTimeImmutable $scannedAt): array
+            {
+                return [
+                    'path' => $path,
+                    'size' => $size,
+                    'mtime' => $mtime,
+                    'stable_count' => 1,
+                    'status' => 'discovered',
+                    'first_seen_at' => $scannedAt,
+                    'last_seen_at' => $scannedAt,
+                ];
+            }
+        };
 
-        $command = new IngestPollCommand($resolver, $poller);
+        $command = new IngestPollCommand($resolver, $poller, $scanStore);
         $tester = new CommandTester($command);
         $exitCode = $tester->execute(['--json' => true]);
 
@@ -37,6 +52,6 @@ final class IngestPollCommandTest extends TestCase
         self::assertIsArray($payload);
         self::assertSame(1, $payload['count'] ?? null);
         self::assertSame('rush/test.mov', $payload['items'][0]['path'] ?? null);
+        self::assertSame('discovered', $payload['items'][0]['status'] ?? null);
     }
 }
-

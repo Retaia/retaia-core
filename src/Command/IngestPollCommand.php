@@ -3,6 +3,7 @@
 namespace App\Command;
 
 use App\Ingest\Port\FilePollerInterface;
+use App\Ingest\Port\ScanStateStoreInterface;
 use App\Ingest\Service\WatchPathResolver;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -17,6 +18,7 @@ final class IngestPollCommand extends Command
     public function __construct(
         private WatchPathResolver $watchPathResolver,
         private FilePollerInterface $poller,
+        private ScanStateStoreInterface $scanStateStore,
     ) {
         parent::__construct();
     }
@@ -32,7 +34,23 @@ final class IngestPollCommand extends Command
         $io = new SymfonyStyle($input, $output);
         $limit = max(1, (int) $input->getOption('limit'));
         $watchPath = $this->watchPathResolver->resolve();
-        $files = $this->poller->poll($limit);
+        $scannedAt = new \DateTimeImmutable();
+        $files = array_map(function (array $item) use ($scannedAt): array {
+            $state = $this->scanStateStore->recordDetectedFile(
+                (string) $item['path'],
+                (int) $item['size'],
+                $item['mtime'],
+                $scannedAt
+            );
+
+            return [
+                'path' => $state['path'],
+                'size' => $state['size'],
+                'mtime' => $state['mtime'],
+                'stable_count' => $state['stable_count'],
+                'status' => $state['status'],
+            ];
+        }, $this->poller->poll($limit));
 
         if ((bool) $input->getOption('json')) {
             $payload = [
@@ -42,6 +60,8 @@ final class IngestPollCommand extends Command
                     'path' => $item['path'],
                     'size' => $item['size'],
                     'mtime' => $item['mtime']->format(DATE_ATOM),
+                    'stable_count' => $item['stable_count'],
+                    'status' => $item['status'],
                 ], $files),
             ];
             $output->writeln((string) json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
@@ -59,15 +79,16 @@ final class IngestPollCommand extends Command
         }
 
         $io->table(
-            ['Path', 'Size (bytes)', 'MTime'],
+            ['Path', 'Size (bytes)', 'MTime', 'Stable Count', 'Status'],
             array_map(static fn (array $item): array => [
                 $item['path'],
                 (string) $item['size'],
                 $item['mtime']->format('Y-m-d H:i:s'),
+                (string) $item['stable_count'],
+                $item['status'],
             ], $files)
         );
 
         return Command::SUCCESS;
     }
 }
-
