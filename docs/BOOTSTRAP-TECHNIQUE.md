@@ -32,6 +32,7 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
   - login refusé (`403 EMAIL_NOT_VERIFIED`) si le compte n’a pas d’email vérifié
   - throttling login activé (`5` tentatives / `15` minutes)
   - réponse `429` explicite en cas de trop nombreuses tentatives de login
+  - logs structurés d’auth (login success/fail/throttled, logout, reset request/reset done)
 
 - persistance utilisateurs :
   - table PostgreSQL `app_user` (Doctrine ORM)
@@ -50,9 +51,11 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
 
 - PHPUnit :
   - `vendor/bin/phpunit`
+  - couvre explicitement : throttling login, reset token expiré, logout non authentifié
 
 - Behat :
   - `vendor/bin/behat`
+  - inclut un scénario d’expiration du token de reset en mémoire
 
 - Fixtures de test Faker/AliceBundle :
   - `fixtures/test/users.yaml`
@@ -69,6 +72,7 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
 - Les tests fonctionnels Doctrine chargent des fixtures via AliceBundle + Faker.
 - En environnement non `prod`, `lost-password/request` retourne aussi un `reset_token` pour faciliter les tests.
 - `lost-password/reset` applique une policy configurable (longueur + complexité).
+- Les logs auth n’incluent ni mot de passe ni token brut (email hashé).
 - Changer les secrets et mots de passe par défaut avant tout usage réel.
 
 ## Paramètres configurables

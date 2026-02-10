@@ -6,6 +6,7 @@ use App\Tests\Support\TestUserPasswordHasher;
 use App\User\Service\AuthService;
 use App\User\Service\PasswordResetService;
 use Behat\Behat\Context\Context;
+use Psr\Log\NullLogger;
 use PHPUnit\Framework\Assert;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -19,6 +20,7 @@ final class FeatureContext implements Context
     private RequestStack $requestStack;
     private AuthService $authService;
     private PasswordResetService $passwordResetService;
+    private InMemoryPasswordResetTokenRepository $tokenRepository;
     private bool $lastLoginSucceeded = false;
     private ?string $lastToken = null;
 
@@ -38,10 +40,12 @@ final class FeatureContext implements Context
         $this->requestStack->push($request);
 
         $this->authService = new AuthService($this->users, $this->requestStack);
+        $this->tokenRepository = new InMemoryPasswordResetTokenRepository();
         $this->passwordResetService = new PasswordResetService(
             $this->users,
-            new InMemoryPasswordResetTokenRepository(),
+            $this->tokenRepository,
             new TestUserPasswordHasher(),
+            new NullLogger(),
             'test',
             3600,
         );
@@ -79,6 +83,24 @@ final class FeatureContext implements Context
     {
         Assert::assertIsString($this->lastToken);
         Assert::assertTrue($this->passwordResetService->resetPassword((string) $this->lastToken, $newPassword));
+    }
+
+    /**
+     * @When the reset token has expired
+     */
+    public function theResetTokenHasExpired(): void
+    {
+        Assert::assertIsString($this->lastToken);
+        $this->tokenRepository->forceExpire((string) $this->lastToken);
+    }
+
+    /**
+     * @Then the password reset should be rejected for :newPassword
+     */
+    public function thePasswordResetShouldBeRejectedFor(string $newPassword): void
+    {
+        Assert::assertIsString($this->lastToken);
+        Assert::assertFalse($this->passwordResetService->resetPassword((string) $this->lastToken, $newPassword));
     }
 
     /**

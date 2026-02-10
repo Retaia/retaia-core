@@ -2,6 +2,7 @@
 
 namespace App\Tests\Functional;
 
+use Doctrine\DBAL\Connection;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\HttpFoundation\Response;
@@ -128,6 +129,57 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_TOO_MANY_REQUESTS);
         $payload = json_decode($client->getResponse()->getContent(), true);
         self::assertSame('TOO_MANY_ATTEMPTS', $payload['code'] ?? null);
+        self::assertGreaterThanOrEqual(1, (int) ($payload['retry_in_minutes'] ?? 0));
+    }
+
+    public function testLostPasswordResetFailsWhenTokenExpired(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.16');
+
+        $client->jsonRequest('POST', '/api/v1/auth/lost-password/request', [
+            'email' => 'admin@retaia.local',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_ACCEPTED);
+        $requestPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($requestPayload);
+        $token = $requestPayload['reset_token'] ?? null;
+        self::assertIsString($token);
+
+        $this->forceTokenExpired($token);
+
+        $client->jsonRequest('POST', '/api/v1/auth/lost-password/reset', [
+            'token' => $token,
+            'new_password' => 'New-password1!',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('INVALID_TOKEN', $payload['code'] ?? null);
+    }
+
+    public function testLogoutWithoutAuthenticationReturns401(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.17');
+
+        $client->jsonRequest('POST', '/api/v1/auth/logout');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
+    }
+
+    private function forceTokenExpired(string $token): void
+    {
+        /** @var Connection $connection */
+        $connection = static::getContainer()->get(Connection::class);
+        $connection->executeStatement(
+            'UPDATE password_reset_token SET expires_at = :expiresAt WHERE token_hash = :tokenHash',
+            [
+                'expiresAt' => (new \DateTimeImmutable('-1 minute'))->format('Y-m-d H:i:s'),
+                'tokenHash' => hash('sha256', $token),
+            ],
+        );
     }
 
     public function testLoginFailsWhenEmailIsNotVerified(): void

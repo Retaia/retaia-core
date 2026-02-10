@@ -7,6 +7,7 @@ use App\Tests\Support\InMemoryPasswordResetTokenRepository;
 use App\Tests\Support\TestUserPasswordHasher;
 use App\User\Service\PasswordResetService;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
 
 final class PasswordResetServiceTest extends TestCase
 {
@@ -22,6 +23,7 @@ final class PasswordResetServiceTest extends TestCase
             $users,
             new InMemoryPasswordResetTokenRepository(),
             new TestUserPasswordHasher(),
+            new NullLogger(),
             'test',
             3600,
         );
@@ -45,6 +47,7 @@ final class PasswordResetServiceTest extends TestCase
             $users,
             new InMemoryPasswordResetTokenRepository(),
             new TestUserPasswordHasher(),
+            new NullLogger(),
             'test',
             3600,
         );
@@ -60,6 +63,7 @@ final class PasswordResetServiceTest extends TestCase
             $users,
             new InMemoryPasswordResetTokenRepository(),
             new TestUserPasswordHasher(),
+            new NullLogger(),
             'test',
             0,
         );
