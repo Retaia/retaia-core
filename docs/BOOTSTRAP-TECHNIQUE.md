@@ -60,7 +60,7 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
 
 - Behat :
   - `vendor/bin/behat`
-  - inclut un scénario d’expiration du token de reset en mémoire
+  - couvre les cas positifs et négatifs auth/reset/verify en mémoire (credentials invalides, token invalide/expiré)
 
 - Fixtures de test Faker/AliceBundle :
   - `fixtures/test/users.yaml`

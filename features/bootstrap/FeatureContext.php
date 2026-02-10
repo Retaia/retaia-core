@@ -24,6 +24,8 @@ final class FeatureContext implements Context
     private EmailVerificationService $emailVerificationService;
     private InMemoryPasswordResetTokenRepository $tokenRepository;
     private bool $lastLoginSucceeded = false;
+    private bool $lastPasswordResetSucceeded = false;
+    private bool $lastEmailVerificationSucceeded = false;
     private ?string $lastToken = null;
     private ?string $lastVerificationToken = null;
 
@@ -101,7 +103,8 @@ final class FeatureContext implements Context
     public function iResetThePasswordUsingTheResetToken(string $newPassword): void
     {
         Assert::assertIsString($this->lastToken);
-        Assert::assertTrue($this->passwordResetService->resetPassword((string) $this->lastToken, $newPassword));
+        $this->lastPasswordResetSucceeded = $this->passwordResetService->resetPassword((string) $this->lastToken, $newPassword);
+        Assert::assertTrue($this->lastPasswordResetSucceeded);
     }
 
     /**
@@ -119,7 +122,24 @@ final class FeatureContext implements Context
     public function thePasswordResetShouldBeRejectedFor(string $newPassword): void
     {
         Assert::assertIsString($this->lastToken);
-        Assert::assertFalse($this->passwordResetService->resetPassword((string) $this->lastToken, $newPassword));
+        $this->lastPasswordResetSucceeded = $this->passwordResetService->resetPassword((string) $this->lastToken, $newPassword);
+        Assert::assertFalse($this->lastPasswordResetSucceeded);
+    }
+
+    /**
+     * @When I try to reset the password to :newPassword with token :token
+     */
+    public function iTryToResetThePasswordWithToken(string $newPassword, string $token): void
+    {
+        $this->lastPasswordResetSucceeded = $this->passwordResetService->resetPassword($token, $newPassword);
+    }
+
+    /**
+     * @Then the password reset should fail
+     */
+    public function thePasswordResetShouldFail(): void
+    {
+        Assert::assertFalse($this->lastPasswordResetSucceeded);
     }
 
     /**
@@ -154,6 +174,23 @@ final class FeatureContext implements Context
     public function iConfirmTheEmailVerificationToken(): void
     {
         Assert::assertIsString($this->lastVerificationToken);
-        Assert::assertTrue($this->emailVerificationService->confirmVerification((string) $this->lastVerificationToken));
+        $this->lastEmailVerificationSucceeded = $this->emailVerificationService->confirmVerification((string) $this->lastVerificationToken);
+        Assert::assertTrue($this->lastEmailVerificationSucceeded);
+    }
+
+    /**
+     * @When I try to verify email with token :token
+     */
+    public function iTryToVerifyEmailWithToken(string $token): void
+    {
+        $this->lastEmailVerificationSucceeded = $this->emailVerificationService->confirmVerification($token);
+    }
+
+    /**
+     * @Then email verification should fail
+     */
+    public function emailVerificationShouldFail(): void
+    {
+        Assert::assertFalse($this->lastEmailVerificationSucceeded);
     }
 }
