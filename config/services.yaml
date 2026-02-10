@@ -50,5 +50,9 @@ services:
         bind:
             bool $featureSuggestedTagsFiltersEnabled: '%app.features.ai.suggested_tags_filters%'
 
+    App\Controller\Api\JobController:
+        bind:
+            bool $featureSuggestTagsEnabled: '%app.features.ai.suggest_tags%'
+
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

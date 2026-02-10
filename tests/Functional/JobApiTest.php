@@ -274,7 +274,61 @@ final class JobApiTest extends WebTestCase
         self::assertSame('pending', $successPayload['status'] ?? null);
     }
 
-    private function seedJob(string $jobId): void
+    public function testSuggestTagsSubmitRequiresFeatureFlagAndSuggestionsScope(): void
+    {
+        $client = $this->bootClient();
+        $this->seedJob('job-suggest-disabled', 'suggest_tags');
+        $this->loginAgent($client);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-suggest-disabled/claim');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $claimPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        $lockToken = (string) ($claimPayload['lock_token'] ?? '');
+        self::assertNotSame('', $lockToken);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-suggest-disabled/submit', [
+            'lock_token' => $lockToken,
+            'result' => ['suggestions_patch' => ['suggested_tags' => ['archive']]],
+        ], [
+            'HTTP_IDEMPOTENCY_KEY' => 'job-suggest-disabled-submit',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        $disabledPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('FORBIDDEN_SCOPE', $disabledPayload['code'] ?? null);
+
+        putenv('APP_FEATURE_AI_SUGGEST_TAGS=1');
+        $_ENV['APP_FEATURE_AI_SUGGEST_TAGS'] = '1';
+        $_SERVER['APP_FEATURE_AI_SUGGEST_TAGS'] = '1';
+        static::ensureKernelShutdown();
+
+        try {
+            $clientEnabled = $this->bootClient();
+            $this->seedJob('job-suggest-enabled', 'suggest_tags');
+            $this->insertAgent('agent-suggest@retaia.local', ['ROLE_AGENT', 'ROLE_SUGGESTIONS_WRITE']);
+            $this->loginAs($clientEnabled, 'agent-suggest@retaia.local');
+
+            $clientEnabled->jsonRequest('POST', '/api/v1/jobs/job-suggest-enabled/claim');
+            self::assertResponseStatusCodeSame(Response::HTTP_OK);
+            $enabledClaimPayload = json_decode((string) $clientEnabled->getResponse()->getContent(), true);
+            $enabledLockToken = (string) ($enabledClaimPayload['lock_token'] ?? '');
+            self::assertNotSame('', $enabledLockToken);
+
+            $clientEnabled->jsonRequest('POST', '/api/v1/jobs/job-suggest-enabled/submit', [
+                'lock_token' => $enabledLockToken,
+                'result' => ['suggestions_patch' => ['suggested_tags' => ['archive']]],
+            ], [
+                'HTTP_IDEMPOTENCY_KEY' => 'job-suggest-enabled-submit',
+            ]);
+            self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        } finally {
+            putenv('APP_FEATURE_AI_SUGGEST_TAGS=0');
+            $_ENV['APP_FEATURE_AI_SUGGEST_TAGS'] = '0';
+            $_SERVER['APP_FEATURE_AI_SUGGEST_TAGS'] = '0';
+            static::ensureKernelShutdown();
+        }
+    }
+
+    private function seedJob(string $jobId, string $jobType = 'extract_facts'): void
     {
         /** @var Connection $connection */
         $connection = self::getContainer()->get(Connection::class);
@@ -299,7 +353,7 @@ final class JobApiTest extends WebTestCase
         $connection->insert('processing_job', [
             'id' => $jobId,
             'asset_uuid' => $assetUuid,
-            'job_type' => 'extract_facts',
+            'job_type' => $jobType,
             'status' => 'pending',
             'claimed_by' => null,
             'lock_token' => null,
@@ -376,11 +430,37 @@ final class JobApiTest extends WebTestCase
 
     private function loginAgent(KernelBrowser $client): void
     {
+        $this->loginAs($client, 'agent@retaia.local');
+    }
+
+    private function loginAs(KernelBrowser $client, string $email): void
+    {
         $client->jsonRequest('POST', '/api/v1/auth/login', [
-            'email' => 'agent@retaia.local',
+            'email' => $email,
             'password' => 'change-me',
         ]);
 
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
+    }
+
+    /**
+     * @param array<int, string> $roles
+     */
+    private function insertAgent(string $email, array $roles): void
+    {
+        /** @var Connection $connection */
+        $connection = self::getContainer()->get(Connection::class);
+        $existing = $connection->fetchOne('SELECT COUNT(*) FROM app_user WHERE email = :email', ['email' => $email]);
+        if ((int) $existing > 0) {
+            return;
+        }
+
+        $connection->insert('app_user', [
+            'id' => bin2hex(random_bytes(16)),
+            'email' => $email,
+            'password_hash' => password_hash('change-me', PASSWORD_DEFAULT),
+            'roles' => json_encode($roles, JSON_THROW_ON_ERROR),
+            'email_verified' => 1,
+        ]);
     }
 }

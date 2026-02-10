@@ -13,6 +13,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[Route('/api/v1/jobs')]
 final class JobController
@@ -22,6 +23,8 @@ final class JobController
         private IdempotencyService $idempotency,
         private Security $security,
         private LoggerInterface $logger,
+        private TranslatorInterface $translator,
+        private bool $featureSuggestTagsEnabled,
     ) {
     }
 
@@ -113,6 +116,16 @@ final class JobController
             if (!is_array($result)) {
                 $result = [];
             }
+            $current = $this->jobs->find($jobId);
+            if ($current instanceof Job
+                && $current->jobType === 'suggest_tags'
+                && (
+                    !$this->featureSuggestTagsEnabled
+                    || !$this->security->isGranted('ROLE_SUGGESTIONS_WRITE')
+                )
+            ) {
+                return $this->forbiddenScope();
+            }
 
             $job = $this->jobs->submit($jobId, $lockToken, $result);
             if ($job === null) {
@@ -197,6 +210,14 @@ final class JobController
         $user = $this->security->getUser();
 
         return $user instanceof User ? $user->getId() : 'anonymous';
+    }
+
+    private function forbiddenScope(): JsonResponse
+    {
+        return new JsonResponse([
+            'code' => 'FORBIDDEN_SCOPE',
+            'message' => $this->translator->trans('auth.error.forbidden_scope'),
+        ], Response::HTTP_FORBIDDEN);
     }
 
     private function lockConflictCode(string $jobId, string $lockToken): string
