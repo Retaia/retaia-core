@@ -74,6 +74,23 @@ final class JobApiTest extends WebTestCase
         );
     }
 
+    public function testHeartbeatReturnsStaleLockTokenWhenClaimedByAnotherToken(): void
+    {
+        $client = $this->bootClient();
+        $this->seedJob('job-heartbeat-stale');
+        $this->loginAgent($client);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-heartbeat-stale/claim');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-heartbeat-stale/heartbeat', [
+            'lock_token' => 'wrong-lock-token',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('STALE_LOCK_TOKEN', $payload['code'] ?? null);
+    }
+
     public function testSubmitIsIdempotentWithSamePayloadAndConflictsOnDifferentPayload(): void
     {
         $client = $this->bootClient();
@@ -154,6 +171,26 @@ final class JobApiTest extends WebTestCase
         self::assertSame('VALIDATION_FAILED', $missingLock['code'] ?? null);
     }
 
+    public function testSubmitReturnsStaleLockTokenWhenClaimedByAnotherToken(): void
+    {
+        $client = $this->bootClient();
+        $this->seedJob('job-submit-stale');
+        $this->loginAgent($client);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-submit-stale/claim');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-submit-stale/submit', [
+            'lock_token' => 'wrong-lock-token',
+            'result' => ['ok' => true],
+        ], [
+            'HTTP_IDEMPOTENCY_KEY' => 'submit-stale-lock',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('STALE_LOCK_TOKEN', $payload['code'] ?? null);
+    }
+
     public function testClaimReturnsConflictWhenAssetHasActiveOperationLock(): void
     {
         $client = $this->bootClient();
@@ -210,6 +247,9 @@ final class JobApiTest extends WebTestCase
         $validationPayload = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertSame('VALIDATION_FAILED', $validationPayload['code'] ?? null);
 
+        $client->jsonRequest('POST', '/api/v1/jobs/job-fail-2/claim');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
         $client->jsonRequest('POST', '/api/v1/jobs/job-fail-2/fail', [
             'lock_token' => 'wrong-lock',
             'error_code' => 'ERR_GENERIC',
@@ -219,7 +259,7 @@ final class JobApiTest extends WebTestCase
         ]);
         self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
         $conflictPayload = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('STATE_CONFLICT', $conflictPayload['code'] ?? null);
+        self::assertSame('STALE_LOCK_TOKEN', $conflictPayload['code'] ?? null);
 
         $client->jsonRequest('POST', '/api/v1/jobs/job-fail-1/fail', [
             'lock_token' => $lockToken,
