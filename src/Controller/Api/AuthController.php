@@ -6,9 +6,11 @@ use App\Entity\User;
 use App\User\Service\EmailVerificationService;
 use App\User\Service\PasswordPolicy;
 use App\User\Service\PasswordResetService;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Bundle\SecurityBundle\Security;
 
@@ -20,6 +22,8 @@ final class AuthController
         private PasswordResetService $passwordResetService,
         private EmailVerificationService $emailVerificationService,
         private PasswordPolicy $passwordPolicy,
+        #[Autowire(service: 'limiter.verify_email_request')]
+        private RateLimiterFactory $verifyEmailRequestLimiter,
     ) {
     }
 
@@ -121,6 +125,22 @@ final class AuthController
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => 'email is required'],
                 Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        $remoteAddress = (string) ($request->getClientIp() ?? 'unknown');
+        $limiterKey = hash('sha256', mb_strtolower($email).'|'.$remoteAddress);
+        $limit = $this->verifyEmailRequestLimiter->create($limiterKey)->consume(1);
+        if (!$limit->isAccepted()) {
+            $retryAfter = $limit->getRetryAfter();
+
+            return new JsonResponse(
+                [
+                    'code' => 'TOO_MANY_ATTEMPTS',
+                    'message' => 'Too many verification requests',
+                    'retry_in_seconds' => $retryAfter !== null ? max(1, $retryAfter->getTimestamp() - time()) : 60,
+                ],
+                Response::HTTP_TOO_MANY_REQUESTS
             );
         }
 
