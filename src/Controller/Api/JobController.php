@@ -4,7 +4,9 @@ namespace App\Controller\Api;
 
 use App\Api\Service\IdempotencyService;
 use App\Entity\User;
+use App\Job\Job;
 use App\Job\Repository\JobRepository;
+use Psr\Log\LoggerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -18,6 +20,7 @@ final class JobController
         private JobRepository $jobs,
         private IdempotencyService $idempotency,
         private Security $security,
+        private LoggerInterface $logger,
     ) {
     }
 
@@ -27,6 +30,11 @@ final class JobController
         $limit = max(1, (int) $request->query->get('limit', 20));
 
         $jobs = $this->jobs->listClaimable($limit);
+        $this->logger->info('jobs.list_claimable', [
+            'agent_id' => $this->actorId(),
+            'limit' => $limit,
+            'count' => count($jobs),
+        ]);
 
         return new JsonResponse([
             'items' => array_map(static fn ($job): array => $job->toArray(), $jobs),
@@ -38,11 +46,18 @@ final class JobController
     {
         $job = $this->jobs->claim($jobId, $this->actorId(), 300);
         if ($job === null) {
+            $this->logger->warning('jobs.claim.conflict', [
+                'job_id' => $jobId,
+                'agent_id' => $this->actorId(),
+            ]);
+
             return new JsonResponse([
                 'code' => 'STATE_CONFLICT',
                 'message' => 'Job is not claimable',
             ], Response::HTTP_CONFLICT);
         }
+
+        $this->logger->info('jobs.claim.succeeded', $this->jobContext($job));
 
         return new JsonResponse($job->toArray(), Response::HTTP_OK);
     }
@@ -60,11 +75,18 @@ final class JobController
 
         $job = $this->jobs->heartbeat($jobId, $lockToken, 300);
         if ($job === null) {
+            $this->logger->warning('jobs.heartbeat.conflict', [
+                'job_id' => $jobId,
+                'agent_id' => $this->actorId(),
+            ]);
+
             return new JsonResponse([
                 'code' => 'STATE_CONFLICT',
                 'message' => 'Invalid lock token or expired lock',
             ], Response::HTTP_CONFLICT);
         }
+
+        $this->logger->info('jobs.heartbeat.succeeded', $this->jobContext($job));
 
         return new JsonResponse([
             'locked_until' => $job->lockedUntil?->format(DATE_ATOM),
@@ -91,11 +113,18 @@ final class JobController
 
             $job = $this->jobs->submit($jobId, $lockToken, $result);
             if ($job === null) {
+                $this->logger->warning('jobs.submit.conflict', [
+                    'job_id' => $jobId,
+                    'agent_id' => $this->actorId(),
+                ]);
+
                 return new JsonResponse([
                     'code' => 'STATE_CONFLICT',
                     'message' => 'Invalid lock token or expired lock',
                 ], Response::HTTP_CONFLICT);
             }
+
+            $this->logger->info('jobs.submit.succeeded', $this->jobContext($job));
 
             return new JsonResponse($job->toArray(), Response::HTTP_OK);
         });
@@ -120,11 +149,23 @@ final class JobController
 
             $job = $this->jobs->fail($jobId, $lockToken, $retryable, $errorCode, $message);
             if ($job === null) {
+                $this->logger->warning('jobs.fail.conflict', [
+                    'job_id' => $jobId,
+                    'agent_id' => $this->actorId(),
+                    'error_code' => $errorCode,
+                    'retryable' => $retryable,
+                ]);
+
                 return new JsonResponse([
                     'code' => 'STATE_CONFLICT',
                     'message' => 'Invalid lock token or expired lock',
                 ], Response::HTTP_CONFLICT);
             }
+
+            $context = $this->jobContext($job);
+            $context['error_code'] = $errorCode;
+            $context['retryable'] = $retryable;
+            $this->logger->info('jobs.fail.succeeded', $context);
 
             return new JsonResponse($job->toArray(), Response::HTTP_OK);
         });
@@ -149,5 +190,19 @@ final class JobController
         $user = $this->security->getUser();
 
         return $user instanceof User ? $user->getId() : 'anonymous';
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function jobContext(Job $job): array
+    {
+        return [
+            'job_id' => $job->id,
+            'asset_uuid' => $job->assetUuid,
+            'agent_id' => $this->actorId(),
+            'job_type' => $job->jobType,
+            'status' => $job->status->value,
+        ];
     }
 }
