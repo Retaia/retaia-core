@@ -74,6 +74,7 @@ Selon le scope :
 - Le polling filesystem doit ignorer les symlinks et refuser les chemins non sûrs (`..`, null-byte, absolu inattendu).
 - Le polling doit rester résilient aux races filesystem (rename/delete pendant scan) et aux erreurs de permission.
 - Les collisions de noms en move outbox doivent rester déterministes et sans écrasement.
+- Les retries de `apply-outbox` doivent être idempotents (pas de doublon `path_history`/audit si déjà appliqué) et tolérer les erreurs par asset sans bloquer tout le lot.
 - Ne pas committer de contenu généré : `vendor/`, `var/cache/`, `config/reference.php` et fichiers auto-générés équivalents.
 
 ## Persistance locale
