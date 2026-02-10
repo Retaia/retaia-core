@@ -128,6 +128,57 @@ final class OpenApiContractTest extends WebTestCase
         self::assertArrayHasKey('correlation_id', $payload);
     }
 
+    public function testAuthUnauthorizedErrorMatchesOpenApiModel(): void
+    {
+        $openApi = $this->openApi();
+        $errorCodes = $this->errorCodes($this->errorSchema($openApi));
+
+        $client = static::createClient();
+        $client->request('GET', '/api/v1/auth/me');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        $this->assertErrorPayloadMatchesModel($payload, $errorCodes);
+        self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
+    }
+
+    public function testAuthValidationErrorMatchesOpenApiModel(): void
+    {
+        $openApi = $this->openApi();
+        $errorCodes = $this->errorCodes($this->errorSchema($openApi));
+
+        $client = static::createClient();
+        $client->jsonRequest('POST', '/api/v1/auth/lost-password/request', []);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        $this->assertErrorPayloadMatchesModel($payload, $errorCodes);
+        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
+    }
+
+    public function testAuthRateLimitErrorMatchesOpenApiModel(): void
+    {
+        $openApi = $this->openApi();
+        $errorCodes = $this->errorCodes($this->errorSchema($openApi));
+
+        $client = static::createClient();
+        $status = Response::HTTP_ACCEPTED;
+        for ($i = 0; $i < 6; ++$i) {
+            $client->jsonRequest('POST', '/api/v1/auth/lost-password/request', [
+                'email' => 'admin@retaia.local',
+            ]);
+            $status = $client->getResponse()->getStatusCode();
+            if ($status === Response::HTTP_TOO_MANY_REQUESTS) {
+                break;
+            }
+        }
+
+        self::assertSame(Response::HTTP_TOO_MANY_REQUESTS, $status);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        $this->assertErrorPayloadMatchesModel($payload, $errorCodes);
+        self::assertSame('TOO_MANY_ATTEMPTS', $payload['code'] ?? null);
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -198,6 +249,20 @@ final class OpenApiContractTest extends WebTestCase
         self::assertIsArray($enum);
 
         return array_values(array_map('strval', $enum));
+    }
+
+    /**
+     * @param mixed $payload
+     * @param array<int, string> $errorCodes
+     */
+    private function assertErrorPayloadMatchesModel(mixed $payload, array $errorCodes): void
+    {
+        self::assertIsArray($payload);
+        self::assertIsString($payload['code'] ?? null);
+        self::assertContains((string) $payload['code'], $errorCodes);
+        self::assertIsString($payload['message'] ?? null);
+        self::assertIsBool($payload['retryable'] ?? null);
+        self::assertIsString($payload['correlation_id'] ?? null);
     }
 
     private function createAuthenticatedClient(): KernelBrowser
