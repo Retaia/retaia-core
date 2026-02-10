@@ -34,10 +34,13 @@ final class IngestPollCommand extends Command
         $io = new SymfonyStyle($input, $output);
         $limit = max(1, (int) $input->getOption('limit'));
         $watchPath = $this->watchPathResolver->resolve();
+        $inboxPrefix = basename($watchPath);
         $scannedAt = new \DateTimeImmutable();
-        $files = array_map(function (array $item) use ($scannedAt): array {
+        $files = array_map(function (array $item) use ($scannedAt, $inboxPrefix): array {
+            $relativePath = ltrim((string) $item['path'], '/');
+            $scanPath = sprintf('%s/%s', $inboxPrefix, $relativePath);
             $state = $this->scanStateStore->recordDetectedFile(
-                (string) $item['path'],
+                $scanPath,
                 (int) $item['size'],
                 $item['mtime'],
                 $scannedAt

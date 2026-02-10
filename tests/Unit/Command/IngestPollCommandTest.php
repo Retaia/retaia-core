@@ -50,6 +50,10 @@ final class IngestPollCommandTest extends TestCase
             public function markQueued(string $path, \DateTimeImmutable $queuedAt): void
             {
             }
+
+            public function markMissing(string $path, \DateTimeImmutable $at): void
+            {
+            }
         };
 
         $command = new IngestPollCommand($resolver, $poller, $scanStore);
@@ -60,7 +64,8 @@ final class IngestPollCommandTest extends TestCase
         $payload = json_decode($tester->getDisplay(), true);
         self::assertIsArray($payload);
         self::assertSame(1, $payload['count'] ?? null);
-        self::assertSame('rush/test.mov', $payload['items'][0]['path'] ?? null);
+        self::assertIsString($payload['items'][0]['path'] ?? null);
+        self::assertStringEndsWith('/rush/test.mov', (string) $payload['items'][0]['path']);
         self::assertSame('discovered', $payload['items'][0]['status'] ?? null);
     }
 }

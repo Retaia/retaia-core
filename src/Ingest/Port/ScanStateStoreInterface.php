@@ -15,4 +15,6 @@ interface ScanStateStoreInterface
     public function listStableFiles(int $limit = 100): array;
 
     public function markQueued(string $path, \DateTimeImmutable $queuedAt): void;
+
+    public function markMissing(string $path, \DateTimeImmutable $at): void;
 }

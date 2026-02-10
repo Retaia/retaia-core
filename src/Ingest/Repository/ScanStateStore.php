@@ -109,4 +109,14 @@ final class ScanStateStore implements ScanStateStoreInterface
             'path' => $path,
         ]);
     }
+
+    public function markMissing(string $path, \DateTimeImmutable $at): void
+    {
+        $this->connection->update('ingest_scan_file', [
+            'status' => 'missing',
+            'last_seen_at' => $at->format('Y-m-d H:i:s'),
+        ], [
+            'path' => $path,
+        ]);
+    }
 }

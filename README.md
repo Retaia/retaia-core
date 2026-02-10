@@ -51,13 +51,23 @@ symfony server:start
 ## Ingest Polling (Bootstrap)
 
 - Config path via env: `APP_INGEST_WATCH_PATH` (default: `./docker/RETAIA/INBOX` in local env).
-- Manual poll command:
+- Pipeline commands:
 
 ```bash
 php bin/console app:ingest:poll --limit=100
 php bin/console app:ingest:poll --json
 php bin/console app:ingest:enqueue-stable --limit=100
+php bin/console app:ingest:apply-outbox --limit=100
+php bin/console app:ingest:cron-tick --poll-limit=100 --enqueue-limit=100 --apply-limit=200
 ```
+
+- Recommended scheduler: cron runs a single tick every minute.
+
+```bash
+* * * * * cd /var/www/html && php bin/console app:ingest:cron-tick --no-interaction >> var/log/ingest-cron.log 2>&1
+```
+
+In Docker dev, run the dedicated `ingest-cron` service so file polling/moves stay isolated from API/UI workers.
 
 ## Tests
 

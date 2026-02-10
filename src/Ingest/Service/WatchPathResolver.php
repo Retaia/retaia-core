@@ -38,6 +38,11 @@ final class WatchPathResolver
         return rtrim($normalized, DIRECTORY_SEPARATOR);
     }
 
+    public function resolveRoot(): string
+    {
+        return dirname($this->resolve());
+    }
+
     private function toAbsolutePath(string $path): string
     {
         if ($this->isAbsolute($path)) {
