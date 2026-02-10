@@ -60,8 +60,8 @@ La commande retourne un code non-zéro si un seuil est dépassé.
 2. Corréler les erreurs API avec les événements structurés sur la même fenêtre temporelle.
 3. Pour les conflits jobs, regrouper par `job_id` puis vérifier `agent_id` et fréquence.
 4. Pour les incidents auth, vérifier les spikes `auth.login.throttled` et les codes API `429`.
-5. Vérifier la sonde Sentry (prod):
+5. Pour les incidents de concurrence, lancer `app:alerts:state-conflicts` puis investiguer les clés lock + `STATE_CONFLICT`.
+6. Vérifier la sonde Sentry (prod):
    - `php bin/console app:sentry:probe`
    - DSN attendu: host `sentry.fullfrontend.be`
-6. Pour les incidents de concurrence, lancer `app:alerts:state-conflicts` puis investiguer les clés lock + `STATE_CONFLICT`.
 7. En cas de correction, passer par PR avec tests de non-régression.

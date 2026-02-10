@@ -91,6 +91,7 @@ php bin/console lint:container
 composer audit --no-interaction
 php bin/console app:sentry:probe
 php bin/console app:alerts:state-conflicts --window-minutes=15 --state-conflicts-threshold=20 --lock-failed-threshold=10
+php bin/console app:sentry:probe
 ```
 
 DX shortcuts:
