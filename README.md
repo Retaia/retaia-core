@@ -90,6 +90,7 @@ php bin/console lint:yaml config
 php bin/console lint:container
 composer audit --no-interaction
 php bin/console app:alerts:state-conflicts --window-minutes=15 --state-conflicts-threshold=20 --lock-failed-threshold=10
+php bin/console app:ops:readiness-check
 ```
 
 DX shortcuts:
@@ -177,3 +178,4 @@ See details in:
 - `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/BOOTSTRAP-TECHNIQUE.md`
 - `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/AUTH-OPS-RUNBOOK.md`
 - `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/OBSERVABILITY-RUNBOOK.md`
+- `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/OPS-READINESS-CHECKLIST.md`
