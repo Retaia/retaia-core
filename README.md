@@ -125,6 +125,13 @@ See details in:
 
 - `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/GITHUB-WORKFLOWS.md`
 
+## Branching & PR Policy
+
+- Never commit or push directly to `master`.
+- Always work from a dedicated feature branch (recommended: `codex/<feature>`).
+- All changes must go through a Pull Request.
+- Conventional Commit messages are required.
+
 ## Additional Docs
 
 - `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/AGENT.md`
