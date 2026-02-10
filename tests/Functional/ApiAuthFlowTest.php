@@ -266,6 +266,26 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('INVALID_TOKEN', $payload['code'] ?? null);
     }
 
+    public function testVerifyEmailRequestIsRateLimited(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.21');
+
+        for ($attempt = 1; $attempt <= 3; ++$attempt) {
+            $client->jsonRequest('POST', '/api/v1/auth/verify-email/request', [
+                'email' => 'pending@retaia.local',
+            ]);
+            self::assertResponseStatusCodeSame(Response::HTTP_ACCEPTED);
+        }
+
+        $client->jsonRequest('POST', '/api/v1/auth/verify-email/request', [
+            'email' => 'pending@retaia.local',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_TOO_MANY_REQUESTS);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('TOO_MANY_ATTEMPTS', $payload['code'] ?? null);
+        self::assertGreaterThanOrEqual(1, (int) ($payload['retry_in_seconds'] ?? 0));
+    }
+
     private function createIsolatedClient(string $ipAddress): \Symfony\Bundle\FrameworkBundle\KernelBrowser
     {
         $client = static::createClient([], ['REMOTE_ADDR' => $ipAddress]);

@@ -4,6 +4,11 @@ framework:
 
     # Note that the session will be started ONLY if you read or write from it.
     session: true
+    rate_limiter:
+        verify_email_request:
+            policy: 'fixed_window'
+            limit: 3
+            interval: '1 minute'
 
     #esi: true
     #fragments: true
