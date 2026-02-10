@@ -69,7 +69,7 @@ make ci-local
 This repository supports Husky hooks for local commit quality gates:
 
 - `pre-commit`: runs `composer test`
-- `commit-msg`: enforces Conventional Commits
+- `commit-msg`: enforces Conventional Commits via `commitlint`
 
 Setup once locally:
 

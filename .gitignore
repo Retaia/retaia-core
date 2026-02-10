@@ -4,6 +4,7 @@
 /var/*
 !/var/.gitignore
 /vendor/
+/node_modules/
 
 ###> phpunit/phpunit ###
 /phpunit.xml
