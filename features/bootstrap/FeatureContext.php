@@ -1,5 +1,9 @@
 <?php
 
+use App\Asset\AssetState;
+use App\Asset\Service\AssetStateMachine;
+use App\Asset\Service\StateConflictException;
+use App\Entity\Asset;
 use App\Tests\Support\InMemoryUserRepository;
 use App\Tests\Support\InMemoryPasswordResetTokenRepository;
 use App\Tests\Support\TestUserPasswordHasher;
@@ -28,6 +32,8 @@ final class FeatureContext implements Context
     private bool $lastEmailVerificationSucceeded = false;
     private ?string $lastToken = null;
     private ?string $lastVerificationToken = null;
+    private ?Asset $asset = null;
+    private bool $lastTransitionSucceeded = false;
     /** @var array<string, bool> */
     private array $pendingJobs = [];
     /** @var array<string, string> */
@@ -198,6 +204,54 @@ final class FeatureContext implements Context
     public function emailVerificationShouldFail(): void
     {
         Assert::assertFalse($this->lastEmailVerificationSucceeded);
+    }
+
+    /**
+     * @Given an asset exists in state :state
+     */
+    public function anAssetExistsInState(string $state): void
+    {
+        $this->asset = new Asset(
+            'behat-asset-00000000-0000-0000-0000',
+            'VIDEO',
+            'behat.mov',
+            AssetState::from($state)
+        );
+        $this->lastTransitionSucceeded = false;
+    }
+
+    /**
+     * @When I apply decision action :action
+     */
+    public function iApplyDecisionAction(string $action): void
+    {
+        Assert::assertInstanceOf(Asset::class, $this->asset);
+        $stateMachine = new AssetStateMachine();
+
+        try {
+            $stateMachine->decide($this->asset, $action);
+            $this->lastTransitionSucceeded = true;
+        } catch (StateConflictException) {
+            $this->lastTransitionSucceeded = false;
+        }
+    }
+
+    /**
+     * @Then the asset state should be :state
+     */
+    public function theAssetStateShouldBe(string $state): void
+    {
+        Assert::assertInstanceOf(Asset::class, $this->asset);
+        Assert::assertSame($state, $this->asset->getState()->value);
+        Assert::assertTrue($this->lastTransitionSucceeded);
+    }
+
+    /**
+     * @Then the decision transition should be rejected
+     */
+    public function theDecisionTransitionShouldBeRejected(): void
+    {
+        Assert::assertFalse($this->lastTransitionSucceeded);
     }
 
     /**
