@@ -22,3 +22,11 @@ App\Entity\User:
       - '<identity("$2y$12$6AGCXyao1Z/Rc2ippIQ8xOhoWwyKr1TaReDVu/jayjEclIawUJjUm")>'
       - ['ROLE_USER']
       - false
+
+  user_agent:
+    __construct:
+      - 'fixtureagent000000000000000000001'
+      - 'agent@retaia.local'
+      - '<identity("$2y$12$6AGCXyao1Z/Rc2ippIQ8xOhoWwyKr1TaReDVu/jayjEclIawUJjUm")>'
+      - ['ROLE_AGENT']
+      - true
