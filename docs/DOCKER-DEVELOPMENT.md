@@ -10,6 +10,7 @@
 - `database`: `postgres:16-alpine`
 
 Le code du repo est monté dans `/var/www/html`.
+La configuration Docker est centralisée dans `/docker` (ex: `/docker/Caddyfile`, `/docker/db-data`).
 
 ## Démarrage
 
@@ -67,8 +68,10 @@ Arrêter l'environnement :
 docker compose down
 ```
 
-Supprimer aussi le volume PostgreSQL (reset complet) :
+Supprimer aussi les données PostgreSQL locales (reset complet) :
 
 ```bash
-docker compose down -v
+docker compose down
+rm -rf docker/db-data
+mkdir -p docker/db-data
 ```
