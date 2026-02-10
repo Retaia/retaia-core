@@ -17,6 +17,7 @@ servers:
 tags:
   - name: Assets
   - name: Agents
+  - name: Auth
   - name: Jobs
   - name: Derived
   - name: Batches
@@ -147,7 +148,7 @@ paths:
 
   /agents/register:
     post:
-      tags: [Agents]
+      tags: [Auth]
       summary: Register a processing agent
       security:
         - OAuth2ClientCredentials: ["jobs:claim"]
@@ -183,6 +184,251 @@ paths:
                     type: string
                   server_policy:
                     type: object
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Authenticate a user with email/password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Login successful
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Email not verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Too many attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout the current user session
+      security:
+        - SessionCookieAuth: []
+      responses:
+        "200":
+          description: Logged out
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current authenticated user
+      security:
+        - SessionCookieAuth: []
+      responses:
+        "200":
+          description: Current user profile
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/lost-password/request:
+    post:
+      tags: [Auth]
+      summary: Request a lost-password reset token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "202":
+          description: Reset request accepted
+        "422":
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Too many attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/lost-password/reset:
+    post:
+      tags: [Auth]
+      summary: Reset password with token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, new_password]
+              properties:
+                token:
+                  type: string
+                new_password:
+                  type: string
+      responses:
+        "200":
+          description: Password reset completed
+        "400":
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/verify-email/request:
+    post:
+      tags: [Auth]
+      summary: Request an email verification token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "202":
+          description: Verification request accepted
+        "422":
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Too many attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/verify-email/confirm:
+    post:
+      tags: [Agents]
+      summary: Confirm an email verification token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        "200":
+          description: Email verification completed
+        "400":
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/verify-email/admin-confirm:
+    post:
+      tags: [Auth]
+      summary: Force-verify a user email (admin only)
+      security:
+        - SessionCookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "200":
+          description: Email verification forced
+        "403":
+          description: Forbidden actor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /assets/{uuid}/reprocess:
     post:
@@ -1168,16 +1414,23 @@ components:
         code:
           type: string
           enum:
+            - UNAUTHORIZED
             - FORBIDDEN_SCOPE
             - FORBIDDEN_ACTOR
+            - EMAIL_NOT_VERIFIED
             - STATE_CONFLICT
             - IDEMPOTENCY_CONFLICT
+            - MISSING_IDEMPOTENCY_KEY
             - STALE_LOCK_TOKEN
             - NAME_COLLISION_EXHAUSTED
             - PURGED
+            - NOT_FOUND
+            - INVALID_TOKEN
+            - USER_NOT_FOUND
             - VALIDATION_FAILED
             - LOCK_REQUIRED
             - LOCK_INVALID
+            - TOO_MANY_ATTEMPTS
             - RATE_LIMITED
             - TEMPORARY_UNAVAILABLE
         message:

@@ -56,6 +56,58 @@ final class OpenApiContractTest extends WebTestCase
         self::assertSame('contract-correlation-id', $payload['correlation_id'] ?? null);
     }
 
+    public function testAuthEndpointsDeclareErrorModelInOpenApi(): void
+    {
+        $openApi = $this->openApi();
+
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/login', 'post', '401');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/login', 'post', '403');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/login', 'post', '422');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/login', 'post', '429');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/me', 'get', '401');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/lost-password/request', 'post', '422');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/lost-password/request', 'post', '429');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/lost-password/reset', 'post', '400');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/lost-password/reset', 'post', '422');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/verify-email/request', 'post', '422');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/verify-email/request', 'post', '429');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/verify-email/confirm', 'post', '400');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/verify-email/confirm', 'post', '422');
+    }
+
+    public function testErrorCodeEnumIncludesRuntimeCodes(): void
+    {
+        $openApi = $this->openApi();
+        $errorSchema = $this->errorSchema($openApi);
+        $errorCodes = $this->errorCodes($errorSchema);
+
+        $runtimeCodes = [
+            'UNAUTHORIZED',
+            'FORBIDDEN_SCOPE',
+            'FORBIDDEN_ACTOR',
+            'EMAIL_NOT_VERIFIED',
+            'STATE_CONFLICT',
+            'IDEMPOTENCY_CONFLICT',
+            'MISSING_IDEMPOTENCY_KEY',
+            'STALE_LOCK_TOKEN',
+            'NAME_COLLISION_EXHAUSTED',
+            'PURGED',
+            'NOT_FOUND',
+            'INVALID_TOKEN',
+            'USER_NOT_FOUND',
+            'VALIDATION_FAILED',
+            'LOCK_REQUIRED',
+            'LOCK_INVALID',
+            'TOO_MANY_ATTEMPTS',
+            'RATE_LIMITED',
+            'TEMPORARY_UNAVAILABLE',
+        ];
+
+        foreach ($runtimeCodes as $code) {
+            self::assertContains($code, $errorCodes, sprintf('OpenAPI ErrorResponse enum must include %s.', $code));
+        }
+    }
+
     public function testDecisionRequestWithoutIdempotencyKeyIsRejected(): void
     {
         $openApi = $this->openApi();
@@ -108,6 +160,19 @@ final class OpenApiContractTest extends WebTestCase
         }
 
         self::assertTrue($hasReference, sprintf('OpenAPI path %s %s must reference IdempotencyKey.', strtoupper($method), $path));
+    }
+
+    /**
+     * @param array<string, mixed> $openApi
+     */
+    private function assertPathStatusUsesErrorResponse(array $openApi, string $path, string $method, string $status): void
+    {
+        $schemaRef = $openApi['paths'][$path][$method]['responses'][$status]['content']['application/json']['schema']['$ref'] ?? null;
+        self::assertSame(
+            '#/components/schemas/ErrorResponse',
+            $schemaRef,
+            sprintf('OpenAPI path %s %s response %s must reference ErrorResponse.', strtoupper($method), $path, $status)
+        );
     }
 
     /**
