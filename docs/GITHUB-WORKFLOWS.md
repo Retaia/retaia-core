@@ -37,6 +37,7 @@ Détail :
 - `test` :
   - `composer test:quality` (PHPUnit avec coverage + Behat + gate coverage 80%)
   - inclut des non-régressions token auth (token expiré/invalide, payload/signature altérés)
+  - inclut des tests contractuels OpenAPI automatiques (schéma `ErrorResponse`, runtime request/response/error model sur endpoints critiques)
 
 - `security-audit` :
   - `composer audit --no-interaction`
