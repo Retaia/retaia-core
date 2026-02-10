@@ -266,6 +266,31 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('INVALID_TOKEN', $payload['code'] ?? null);
     }
 
+    public function testEmailVerificationConfirmRejectsTamperedToken(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.22');
+
+        $client->jsonRequest('POST', '/api/v1/auth/verify-email/request', [
+            'email' => 'pending@retaia.local',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_ACCEPTED);
+        $requestPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($requestPayload);
+        $token = $requestPayload['verification_token'] ?? null;
+        self::assertIsString($token);
+
+        [$payloadPart, $signaturePart] = explode('.', $token, 2);
+        $tamperedToken = ('X'.substr($payloadPart, 1)).'.'.$signaturePart;
+
+        $client->jsonRequest('POST', '/api/v1/auth/verify-email/confirm', [
+            'token' => $tamperedToken,
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('INVALID_TOKEN', $payload['code'] ?? null);
+    }
+
     private function createIsolatedClient(string $ipAddress): \Symfony\Bundle\FrameworkBundle\KernelBrowser
     {
         $client = static::createClient([], ['REMOTE_ADDR' => $ipAddress]);
