@@ -28,5 +28,16 @@ final class ScanStateStoreTest extends TestCase
         self::assertSame(2, $second['stable_count']);
         self::assertSame('discovered', $third['status']);
         self::assertSame(1, $third['stable_count']);
+
+        $stable = $store->listStableFiles();
+        self::assertCount(0, $stable);
+
+        $store->recordDetectedFile('INBOX/test.mov', 200, new \DateTimeImmutable('2026-01-01 10:03:00'), new \DateTimeImmutable('2026-01-01 10:04:00'));
+        $stable = $store->listStableFiles();
+        self::assertCount(1, $stable);
+        self::assertSame('INBOX/test.mov', $stable[0]['path']);
+
+        $store->markQueued('INBOX/test.mov', new \DateTimeImmutable('2026-01-01 10:05:00'));
+        self::assertCount(0, $store->listStableFiles());
     }
 }
