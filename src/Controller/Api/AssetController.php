@@ -7,6 +7,7 @@ use App\Asset\Repository\AssetRepositoryInterface;
 use App\Asset\Service\AssetStateMachine;
 use App\Asset\Service\StateConflictException;
 use App\Entity\Asset;
+use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -20,6 +21,7 @@ final class AssetController
         private AssetRepositoryInterface $assets,
         private AssetStateMachine $stateMachine,
         private TranslatorInterface $translator,
+        private Security $security,
     ) {
     }
 
@@ -61,6 +63,10 @@ final class AssetController
     #[Route('/{uuid}', name: 'api_assets_patch', methods: ['PATCH'])]
     public function patch(string $uuid, Request $request): JsonResponse
     {
+        if ($this->security->isGranted('ROLE_AGENT')) {
+            return $this->forbiddenActorResponse();
+        }
+
         $asset = $this->assets->findByUuid($uuid);
         if (!$asset instanceof Asset) {
             return new JsonResponse([
@@ -97,6 +103,10 @@ final class AssetController
     #[Route('/{uuid}/decision', name: 'api_assets_decision', methods: ['POST'])]
     public function decision(string $uuid, Request $request): JsonResponse
     {
+        if ($this->security->isGranted('ROLE_AGENT')) {
+            return $this->forbiddenActorResponse();
+        }
+
         $asset = $this->assets->findByUuid($uuid);
         if (!$asset instanceof Asset) {
             return new JsonResponse([
@@ -133,6 +143,10 @@ final class AssetController
     #[Route('/{uuid}/reopen', name: 'api_assets_reopen', methods: ['POST'])]
     public function reopen(string $uuid): JsonResponse
     {
+        if ($this->security->isGranted('ROLE_AGENT')) {
+            return $this->forbiddenActorResponse();
+        }
+
         $asset = $this->assets->findByUuid($uuid);
         if (!$asset instanceof Asset) {
             return new JsonResponse([
@@ -160,6 +174,10 @@ final class AssetController
     #[Route('/{uuid}/reprocess', name: 'api_assets_reprocess', methods: ['POST'])]
     public function reprocess(string $uuid): JsonResponse
     {
+        if ($this->security->isGranted('ROLE_AGENT')) {
+            return $this->forbiddenActorResponse();
+        }
+
         $asset = $this->assets->findByUuid($uuid);
         if (!$asset instanceof Asset) {
             return new JsonResponse([
@@ -228,5 +246,13 @@ final class AssetController
         $decoded = json_decode($request->getContent(), true);
 
         return is_array($decoded) ? $decoded : [];
+    }
+
+    private function forbiddenActorResponse(): JsonResponse
+    {
+        return new JsonResponse([
+            'code' => 'FORBIDDEN_ACTOR',
+            'message' => $this->translator->trans('auth.error.forbidden_actor'),
+        ], Response::HTTP_FORBIDDEN);
     }
 }

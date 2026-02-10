@@ -1,0 +1,101 @@
+<?php
+
+namespace App\Tests\Functional;
+
+use App\Asset\AssetState;
+use App\Entity\Asset;
+use Doctrine\ORM\EntityManagerInterface;
+use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
+use Symfony\Bundle\FrameworkBundle\KernelBrowser;
+use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+use Symfony\Component\HttpFoundation\Response;
+
+final class AuthzMatrixTest extends WebTestCase
+{
+    use RecreateDatabaseTrait;
+
+    public function testAnonymousActorGetsUnauthorizedForMutatingAssetEndpoint(): void
+    {
+        $client = static::createClient();
+        $client->jsonRequest('POST', '/api/v1/assets/11111111-1111-1111-1111-111111111111/decision', ['action' => 'KEEP']);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
+    }
+
+    public function testAgentGetsForbiddenActorOnHumanAssetMutation(): void
+    {
+        $client = $this->createAgentClient();
+        $this->seedDecisionPendingAsset();
+
+        $client->jsonRequest('POST', '/api/v1/assets/11111111-1111-1111-1111-111111111111/decision', ['action' => 'KEEP']);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('FORBIDDEN_ACTOR', $payload['code'] ?? null);
+    }
+
+    public function testAdminGetsForbiddenScopeOnAgentJobEndpoint(): void
+    {
+        $client = $this->createAdminClient();
+
+        $client->request('GET', '/api/v1/jobs');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('FORBIDDEN_SCOPE', $payload['code'] ?? null);
+    }
+
+    public function testNonAdminUserGetsForbiddenActorOnAdminEndpoint(): void
+    {
+        $client = $this->createOperatorClient();
+
+        $client->jsonRequest('POST', '/api/v1/auth/verify-email/admin-confirm', [
+            'email' => 'pending@retaia.local',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('FORBIDDEN_ACTOR', $payload['code'] ?? null);
+    }
+
+    private function seedDecisionPendingAsset(): void
+    {
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = static::getContainer()->get(EntityManagerInterface::class);
+        $asset = new Asset('11111111-1111-1111-1111-111111111111', 'VIDEO', 'authz.mov', AssetState::DECISION_PENDING);
+        $entityManager->persist($asset);
+        $entityManager->flush();
+    }
+
+    private function createAdminClient(): KernelBrowser
+    {
+        return $this->loginClient('admin@retaia.local', 'change-me');
+    }
+
+    private function createAgentClient(): KernelBrowser
+    {
+        return $this->loginClient('agent@retaia.local', 'change-me');
+    }
+
+    private function createOperatorClient(): KernelBrowser
+    {
+        return $this->loginClient('operator@retaia.local', 'change-me');
+    }
+
+    private function loginClient(string $email, string $password): KernelBrowser
+    {
+        $client = static::createClient();
+        $client->disableReboot();
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => $email,
+            'password' => $password,
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        return $client;
+    }
+}
