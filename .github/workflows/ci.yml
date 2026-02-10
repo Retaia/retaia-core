@@ -55,6 +55,9 @@ jobs:
       - name: Lint Symfony container
         run: php bin/console lint:container
 
+      - name: Check translation keys en/fr
+        run: php scripts/check-translation-keys.php
+
   test:
     runs-on: ubuntu-latest
     needs: lint

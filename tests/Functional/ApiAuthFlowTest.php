@@ -338,9 +338,42 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('INVALID_TOKEN', $payload['code'] ?? null);
     }
 
-    private function createIsolatedClient(string $ipAddress): \Symfony\Bundle\FrameworkBundle\KernelBrowser
+    public function testFrenchLocaleReturnsTranslatedAuthMessage(): void
     {
-        $client = static::createClient([], ['REMOTE_ADDR' => $ipAddress]);
+        $client = $this->createIsolatedClient('10.0.0.30', 'fr');
+
+        $client->jsonRequest('POST', '/api/v1/auth/verify-email/confirm', [
+            'token' => 'invalid-token',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('INVALID_TOKEN', $payload['code'] ?? null);
+        self::assertSame('Token invalide ou expiré', $payload['message'] ?? null);
+    }
+
+    public function testUnsupportedLocaleFallsBackToEnglishMessage(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.31', 'de');
+
+        $client->jsonRequest('POST', '/api/v1/auth/verify-email/confirm', [
+            'token' => 'invalid-token',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('INVALID_TOKEN', $payload['code'] ?? null);
+        self::assertSame('Token invalid or expired', $payload['message'] ?? null);
+    }
+
+    private function createIsolatedClient(string $ipAddress, ?string $acceptLanguage = null): \Symfony\Bundle\FrameworkBundle\KernelBrowser
+    {
+        $server = ['REMOTE_ADDR' => $ipAddress];
+        if (is_string($acceptLanguage) && $acceptLanguage !== '') {
+            $server['HTTP_ACCEPT_LANGUAGE'] = $acceptLanguage;
+        }
+
+        $client = static::createClient([], $server);
         $client->disableReboot();
 
         return $client;
