@@ -5,22 +5,16 @@
 ## Stack
 
 - `app`: `fullfrontend/php-fpm:latest`
+- `caddy`: reverse proxy HTTP local vers `app` (upload max `10GB`)
 - `composer`: même image, profil `tools`
 - `database`: `postgres:16-alpine`
-- Traefik (réseau externe `web`) peut router `https://api.retaia.test` vers `app:9000`
 
 Le code du repo est monté dans `/var/www/html`.
-
-Pré-requis Traefik local :
-
-```bash
-docker network create web || true
-```
 
 ## Démarrage
 
 ```bash
-docker compose up -d app database
+docker compose up -d app caddy database
 ```
 
 ## Commandes utiles
@@ -59,6 +53,12 @@ Ouvrir un shell dans le conteneur app :
 
 ```bash
 docker compose exec app sh
+```
+
+Smoke test API (via Caddy) :
+
+```bash
+curl -H "Host: api.retaia.test" http://localhost:8080/api/v1/health
 ```
 
 Arrêter l'environnement :
