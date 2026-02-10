@@ -27,6 +27,7 @@ La commande vérifie:
 3. Observabilité
    - sonde `app:sentry:probe` validée en prod
    - alerte `app:alerts:state-conflicts` branchée sur monitoring
+   - watchdog locks planifié: `app:locks:watchdog-recover --stale-lock-minutes=30`
 4. Sécurité
    - headers API actifs
    - cookies secure en prod HTTPS

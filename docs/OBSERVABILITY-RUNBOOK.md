@@ -57,6 +57,15 @@ php bin/console app:alerts:state-conflicts --window-minutes=15 --state-conflicts
 
 La commande retourne un code non-zéro si un seuil est dépassé.
 
+Commande de recovery (watchdog):
+
+```bash
+php bin/console app:locks:watchdog-recover --stale-lock-minutes=30
+php bin/console app:locks:watchdog-recover --stale-lock-minutes=30 --dry-run
+```
+
+Cette commande relâche les locks `asset_move_lock` / `asset_purge_lock` actifs au-delà du seuil.
+
 ## Procédure de triage rapide
 
 1. Vérifier `/api/v1/health` et l’état base PostgreSQL.
