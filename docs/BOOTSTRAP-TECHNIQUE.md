@@ -65,6 +65,7 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
 
 - Fixtures de test Faker/AliceBundle :
   - `fixtures/test/users.yaml`
+  - seed Faker fixée (`nelmio_alice.seed=1234`) pour limiter la variabilité entre runs CI/local
 
 ## Base de données
 
