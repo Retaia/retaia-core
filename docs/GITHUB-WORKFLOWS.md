@@ -76,6 +76,8 @@ composer validate --strict --no-check-publish
 php bin/console lint:yaml config
 php bin/console lint:container
 composer test
+composer test:coverage
+composer check:coverage
 composer audit --no-interaction
 ```
 

@@ -112,6 +112,7 @@ GitHub Actions workflow:
 - `lint`
 - `test`
 - `security-audit`
+- `coverage` (80% minimum)
 
 See details in:
 
