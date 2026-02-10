@@ -12,3 +12,9 @@ auth:
     token_required: "token is required"
     admin_role_required: "Admin role required"
     unknown_user: "Unknown user"
+asset:
+  error:
+    not_found: "Asset not found"
+    state_conflict: "State transition is not allowed"
+    decision_action_required: "action is required"
+    purged_read_only: "Purged assets are read-only"
