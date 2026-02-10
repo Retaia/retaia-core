@@ -15,6 +15,9 @@ parameters:
     app.password_policy.require_number: true
     app.password_policy.require_special: true
     app.ingest.watch_path: '%env(string:APP_INGEST_WATCH_PATH)%'
+    app.features.ai.suggest_tags: '%env(bool:APP_FEATURE_AI_SUGGEST_TAGS)%'
+    app.features.ai.suggested_tags_filters: '%env(bool:APP_FEATURE_AI_SUGGESTED_TAGS_FILTERS)%'
+    app.features.decisions.bulk: '%env(bool:APP_FEATURE_DECISIONS_BULK)%'
 
 services:
     # default configuration for services in *this* file
@@ -32,6 +35,16 @@ services:
     App\Asset\Repository\AssetRepositoryInterface: '@App\Asset\Repository\AssetRepository'
     App\Ingest\Port\FilePollerInterface: '@App\Ingest\Service\FilesystemFilePoller'
     App\Ingest\Port\ScanStateStoreInterface: '@App\Ingest\Repository\ScanStateStore'
+
+    App\Controller\Api\AgentController:
+        bind:
+            bool $featureSuggestTagsEnabled: '%app.features.ai.suggest_tags%'
+            bool $featureSuggestedTagsFiltersEnabled: '%app.features.ai.suggested_tags_filters%'
+            bool $featureDecisionsBulkEnabled: '%app.features.decisions.bulk%'
+
+    App\Controller\Api\WorkflowController:
+        bind:
+            bool $bulkDecisionsEnabled: '%app.features.decisions.bulk%'
 
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

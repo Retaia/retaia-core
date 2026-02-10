@@ -39,6 +39,10 @@ composer install --no-interaction --prefer-dist --optimize-autoloader
   - `SYMFONY_TRUSTED_PROXIES`
   - `APP_AUTH_LOST_PASSWORD_LIMIT`, `APP_AUTH_LOST_PASSWORD_INTERVAL`
   - `APP_AUTH_VERIFY_EMAIL_LIMIT`, `APP_AUTH_VERIFY_EMAIL_INTERVAL`
+- Feature flags (default `0`, required for `v1.1+` behavior):
+  - `APP_FEATURE_AI_SUGGEST_TAGS`
+  - `APP_FEATURE_AI_SUGGESTED_TAGS_FILTERS`
+  - `APP_FEATURE_DECISIONS_BULK`
 
 3. Run migrations:
 

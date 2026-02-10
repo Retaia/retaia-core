@@ -16,6 +16,9 @@ final class AgentController
     public function __construct(
         private Security $security,
         private TranslatorInterface $translator,
+        private bool $featureSuggestTagsEnabled,
+        private bool $featureSuggestedTagsFiltersEnabled,
+        private bool $featureDecisionsBulkEnabled,
     ) {
     }
 
@@ -55,11 +58,11 @@ final class AgentController
                     ],
                     'features' => [
                         'ai' => [
-                            'suggest_tags' => false,
-                            'suggested_tags_filters' => false,
+                            'suggest_tags' => $this->featureSuggestTagsEnabled,
+                            'suggested_tags_filters' => $this->featureSuggestedTagsFiltersEnabled,
                         ],
                         'decisions' => [
-                            'bulk' => false,
+                            'bulk' => $this->featureDecisionsBulkEnabled,
                         ],
                     ],
                 ],
