@@ -220,6 +220,52 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('new_password must include at least one special character', $payload['message'] ?? null);
     }
 
+    public function testEmailVerificationFlowEnablesLogin(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.18');
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'pending@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+
+        $client->jsonRequest('POST', '/api/v1/auth/verify-email/request', [
+            'email' => 'pending@retaia.local',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_ACCEPTED);
+        $requestPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($requestPayload);
+        $token = $requestPayload['verification_token'] ?? null;
+        self::assertIsString($token);
+
+        $client->jsonRequest('POST', '/api/v1/auth/verify-email/confirm', [
+            'token' => $token,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $confirmPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame(true, $confirmPayload['email_verified'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'pending@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+    }
+
+    public function testEmailVerificationConfirmRejectsInvalidToken(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.19');
+
+        $client->jsonRequest('POST', '/api/v1/auth/verify-email/confirm', [
+            'token' => 'invalid-token',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('INVALID_TOKEN', $payload['code'] ?? null);
+    }
+
     private function createIsolatedClient(string $ipAddress): \Symfony\Bundle\FrameworkBundle\KernelBrowser
     {
         $client = static::createClient([], ['REMOTE_ADDR' => $ipAddress]);

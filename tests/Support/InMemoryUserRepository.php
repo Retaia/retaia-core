@@ -23,6 +23,17 @@ final class InMemoryUserRepository implements UserRepositoryInterface
         ));
     }
 
+    public function seedUnverifiedUser(string $email, string $plainPassword): void
+    {
+        $this->save(new User(
+            substr(hash('sha256', $email), 0, 32),
+            $email,
+            password_hash($plainPassword, PASSWORD_DEFAULT),
+            ['ROLE_USER'],
+            false,
+        ));
+    }
+
     public function findByEmail(string $email): ?User
     {
         foreach ($this->usersById as $user) {
