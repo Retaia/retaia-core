@@ -75,6 +75,16 @@ final class OpenApiContractTest extends WebTestCase
         $this->assertPathStatusUsesErrorResponse($openApi, '/auth/verify-email/confirm', 'post', '422');
     }
 
+    public function testJobEndpointsDeclareLockErrorModelInOpenApi(): void
+    {
+        $openApi = $this->openApi();
+
+        $this->assertPathStatusUsesErrorResponse($openApi, '/jobs/{job_id}/heartbeat', 'post', '409');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/jobs/{job_id}/heartbeat', 'post', '423');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/jobs/{job_id}/submit', 'post', '423');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/jobs/{job_id}/fail', 'post', '423');
+    }
+
     public function testErrorCodeEnumIncludesRuntimeCodes(): void
     {
         $openApi = $this->openApi();

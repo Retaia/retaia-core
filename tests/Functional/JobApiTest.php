@@ -166,9 +166,9 @@ final class JobApiTest extends WebTestCase
         ], [
             'HTTP_IDEMPOTENCY_KEY' => 'submit-missing-lock',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        self::assertResponseStatusCodeSame(Response::HTTP_LOCKED);
         $missingLock = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('VALIDATION_FAILED', $missingLock['code'] ?? null);
+        self::assertSame('LOCK_REQUIRED', $missingLock['code'] ?? null);
     }
 
     public function testSubmitReturnsStaleLockTokenWhenClaimedByAnotherToken(): void
@@ -189,6 +189,23 @@ final class JobApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
         $payload = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertSame('STALE_LOCK_TOKEN', $payload['code'] ?? null);
+    }
+
+    public function testSubmitReturnsLockInvalidWhenNoActiveClaimExists(): void
+    {
+        $client = $this->bootClient();
+        $this->seedJob('job-submit-lock-invalid');
+        $this->loginAgent($client);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-submit-lock-invalid/submit', [
+            'lock_token' => 'no-active-claim',
+            'result' => ['ok' => true],
+        ], [
+            'HTTP_IDEMPOTENCY_KEY' => 'submit-lock-invalid',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_LOCKED);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('LOCK_INVALID', $payload['code'] ?? null);
     }
 
     public function testClaimReturnsConflictWhenAssetHasActiveOperationLock(): void
@@ -246,6 +263,7 @@ final class JobApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
         $validationPayload = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertSame('VALIDATION_FAILED', $validationPayload['code'] ?? null);
+        self::assertStringContainsString('error_code and message are required', (string) ($validationPayload['message'] ?? ''));
 
         $client->jsonRequest('POST', '/api/v1/jobs/job-fail-2/claim');
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
@@ -272,6 +290,55 @@ final class JobApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $successPayload = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertSame('pending', $successPayload['status'] ?? null);
+    }
+
+    public function testFailReturnsLockRequiredAndLockInvalid(): void
+    {
+        $client = $this->bootClient();
+        $this->seedJob('job-fail-lock-cases');
+        $this->loginAgent($client);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-fail-lock-cases/fail', [
+            'error_code' => 'ERR_GENERIC',
+            'message' => 'failed',
+            'retryable' => false,
+        ], [
+            'HTTP_IDEMPOTENCY_KEY' => 'job-fail-lock-required',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_LOCKED);
+        $requiredPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('LOCK_REQUIRED', $requiredPayload['code'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-fail-lock-cases/fail', [
+            'lock_token' => 'no-active-claim',
+            'error_code' => 'ERR_GENERIC',
+            'message' => 'failed',
+            'retryable' => false,
+        ], [
+            'HTTP_IDEMPOTENCY_KEY' => 'job-fail-lock-invalid',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_LOCKED);
+        $invalidPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('LOCK_INVALID', $invalidPayload['code'] ?? null);
+    }
+
+    public function testHeartbeatReturnsLockRequiredAndLockInvalid(): void
+    {
+        $client = $this->bootClient();
+        $this->seedJob('job-heartbeat-lock-cases');
+        $this->loginAgent($client);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-heartbeat-lock-cases/heartbeat', []);
+        self::assertResponseStatusCodeSame(Response::HTTP_LOCKED);
+        $requiredPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('LOCK_REQUIRED', $requiredPayload['code'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-heartbeat-lock-cases/heartbeat', [
+            'lock_token' => 'no-active-claim',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_LOCKED);
+        $invalidPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('LOCK_INVALID', $invalidPayload['code'] ?? null);
     }
 
     public function testSuggestTagsSubmitRequiresFeatureFlagAndSuggestionsScope(): void
