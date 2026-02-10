@@ -108,4 +108,42 @@ class OperationLockRepository
             ]
         );
     }
+
+    public function countStaleActiveLocksByType(OperationLockType $type, \DateTimeImmutable $before): int
+    {
+        return (int) $this->connection->fetchOne(
+            'SELECT COUNT(*) FROM asset_operation_lock
+             WHERE lock_type = :lockType
+               AND released_at IS NULL
+               AND acquired_at < :before',
+            [
+                'lockType' => $type->value,
+                'before' => $before->format('Y-m-d H:i:s'),
+            ]
+        );
+    }
+
+    public function releaseStaleActiveLocksByType(OperationLockType $type, \DateTimeImmutable $before): int
+    {
+        $releasedAt = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+
+        $released = $this->connection->executeStatement(
+            'UPDATE asset_operation_lock
+             SET released_at = :releasedAt
+             WHERE lock_type = :lockType
+               AND released_at IS NULL
+               AND acquired_at < :before',
+            [
+                'releasedAt' => $releasedAt,
+                'lockType' => $type->value,
+                'before' => $before->format('Y-m-d H:i:s'),
+            ]
+        );
+
+        if ($released > 0) {
+            $this->metrics->record(sprintf('lock.watchdog.released.%s', $type->value));
+        }
+
+        return $released;
+    }
 }
