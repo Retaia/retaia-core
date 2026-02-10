@@ -62,6 +62,7 @@
     "scripts": {
         "check:i18n": "php scripts/check-translation-keys.php",
         "check:coverage": "php scripts/check-coverage-threshold.php var/coverage/clover.xml 80",
+        "check:openapi": "php scripts/check-openapi-routes.php",
         "test:unit": "vendor/bin/phpunit",
         "test:coverage": "bash scripts/run-coverage.sh",
         "test:behat": "vendor/bin/behat",

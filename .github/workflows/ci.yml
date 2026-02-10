@@ -58,6 +58,9 @@ jobs:
       - name: Check translation keys en/fr
         run: php scripts/check-translation-keys.php
 
+      - name: Check OpenAPI routes coverage
+        run: php scripts/check-openapi-routes.php
+
   test:
     runs-on: ubuntu-latest
     needs: lint

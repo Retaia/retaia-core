@@ -1,0 +1,1191 @@
+openapi: 3.1.0
+
+info:
+  title: Retaia Core API
+  version: 1.1.0
+  description: |
+    Normative OpenAPI v1 for Retaia Core (minor features up to v1.1).
+
+    This API coordinates assets, processing jobs and agents.
+    Agents are non-reliable by design.
+    Jobs may remain pending indefinitely if no compatible agent is available.
+    AI-powered features are available in v1.1+ (except transcription, available in v1).
+
+servers:
+  - url: /api/v1
+
+tags:
+  - name: Assets
+  - name: Agents
+  - name: Jobs
+  - name: Derived
+  - name: Batches
+  - name: Decisions
+  - name: Purge
+
+paths:
+  /assets:
+    get:
+      tags: [Assets]
+      summary: List assets
+      security:
+        - SessionCookieAuth: []
+        - OAuth2ClientCredentials: ["assets:read"]
+      parameters:
+        - name: state
+          in: query
+          schema:
+            $ref: "#/components/schemas/AssetState"
+        - name: media_type
+          in: query
+          schema:
+            type: string
+            enum: [VIDEO, PHOTO, AUDIO]
+        - name: tags
+          in: query
+          schema:
+            type: string
+        - name: has_proxy
+          in: query
+          schema:
+            type: boolean
+        - name: tags_mode
+          in: query
+          schema:
+            type: string
+            enum: [AND, OR]
+        - name: suggested_tags
+          in: query
+          schema:
+            type: string
+          description: Suggested tags filter (AI-powered, available in v1.1+).
+        - name: suggested_tags_mode
+          in: query
+          schema:
+            type: string
+            enum: [AND, OR]
+          description: Suggested tags matching mode (available in v1.1+).
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Full-text query over filename, notes and transcript_text (available in v1).
+        - name: sort
+          in: query
+          schema:
+            type: string
+            example: -created_at
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Asset list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AssetSummary"
+                  next_cursor:
+                    type: string
+                    nullable: true
+
+  /assets/{uuid}:
+    get:
+      tags: [Assets]
+      summary: Get one asset detail
+      security:
+        - SessionCookieAuth: []
+        - OAuth2ClientCredentials: ["assets:read"]
+      parameters:
+        - $ref: "#/components/parameters/UuidPath"
+      responses:
+        "200":
+          description: Asset detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetDetail"
+    patch:
+      tags: [Assets]
+      summary: Update human metadata on one asset
+      security:
+        - SessionCookieAuth: []
+        - OAuth2ClientCredentials: ["assets:write"]
+      parameters:
+        - $ref: "#/components/parameters/UuidPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tags:
+                  type: array
+                  items:
+                    type: string
+                notes:
+                  type: string
+                fields:
+                  type: object
+                  additionalProperties: true
+      responses:
+        "200":
+          description: Asset updated
+        "410":
+          description: Asset is purged
+
+  /agents/register:
+    post:
+      tags: [Agents]
+      summary: Register a processing agent
+      security:
+        - OAuth2ClientCredentials: ["jobs:claim"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent_name, agent_version, capabilities]
+              properties:
+                agent_name:
+                  type: string
+                agent_version:
+                  type: string
+                platform:
+                  type: string
+                capabilities:
+                  type: array
+                  items:
+                    type: string
+                max_parallel_jobs:
+                  type: integer
+      responses:
+        "200":
+          description: Agent registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agent_id:
+                    type: string
+                  server_policy:
+                    type: object
+
+  /assets/{uuid}/reprocess:
+    post:
+      tags: [Assets]
+      summary: Trigger explicit reprocess
+      security:
+        - SessionCookieAuth: []
+        - OAuth2ClientCredentials: ["assets:write"]
+      parameters:
+        - $ref: "#/components/parameters/UuidPath"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Reprocess accepted
+        "409":
+          description: State conflict or idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /assets/{uuid}/decision:
+    post:
+      tags: [Decisions]
+      summary: Set or update a human decision
+      security:
+        - SessionCookieAuth: []
+        - OAuth2ClientCredentials: ["decisions:write"]
+      parameters:
+        - $ref: "#/components/parameters/UuidPath"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [KEEP, REJECT, CLEAR]
+      responses:
+        "200":
+          description: Decision applied
+        "409":
+          description: State conflict or idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /assets/{uuid}/reopen:
+    post:
+      tags: [Decisions]
+      summary: Reopen archived or rejected asset to decision pending
+      security:
+        - SessionCookieAuth: []
+        - OAuth2ClientCredentials: ["decisions:write"]
+      parameters:
+        - $ref: "#/components/parameters/UuidPath"
+      responses:
+        "200":
+          description: Asset reopened
+        "409":
+          description: State conflict
+
+  /jobs:
+    get:
+      tags: [Jobs]
+      summary: List claimable jobs for the authenticated agent
+      security:
+        - OAuth2ClientCredentials: ["jobs:claim"]
+      description: |
+        Returns jobs with status `pending`
+        and compatible with the agent capabilities.
+      responses:
+        "200":
+          description: List of jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Job"
+
+  /jobs/{job_id}/claim:
+    post:
+      tags: [Jobs]
+      summary: Claim a job (atomic lease)
+      security:
+        - OAuth2ClientCredentials: ["jobs:claim"]
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Job claimed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+        "409":
+          description: Job not claimable
+
+  /jobs/{job_id}/heartbeat:
+    post:
+      tags: [Jobs]
+      summary: Extend job lease
+      security:
+        - OAuth2ClientCredentials: ["jobs:heartbeat"]
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lock_token]
+              properties:
+                lock_token:
+                  type: string
+      responses:
+        "200":
+          description: Lease extended
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  locked_until:
+                    type: string
+                    format: date-time
+
+  /jobs/{job_id}/submit:
+    post:
+      tags: [Jobs]
+      summary: Submit job result patch
+      description: |
+        Submits one job result patch.
+        For `job_type=suggest_tags` (v1.1+), server enforces both scopes `jobs:submit` and `suggestions:write`,
+        and requires feature flag `features.ai.suggest_tags` to be enabled.
+      security:
+        - OAuth2ClientCredentials: ["jobs:submit"]
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JobSubmitRequest"
+      responses:
+        "200":
+          description: Job completed
+        "409":
+          description: Idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "423":
+          description: Invalid or missing lock
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /jobs/{job_id}/fail:
+    post:
+      tags: [Jobs]
+      summary: Mark job as failed
+      security:
+        - OAuth2ClientCredentials: ["jobs:submit"]
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lock_token, error_code, retryable]
+              properties:
+                lock_token:
+                  type: string
+                error_code:
+                  type: string
+                message:
+                  type: string
+                retryable:
+                  type: boolean
+      responses:
+        "200":
+          description: Job failed recorded
+        "409":
+          description: Idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /assets/{uuid}/derived/upload/init:
+    post:
+      tags: [Derived]
+      summary: Initialize derived upload
+      security:
+        - OAuth2ClientCredentials: ["jobs:submit"]
+      parameters:
+        - $ref: "#/components/parameters/UuidPath"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, content_type, size_bytes]
+              properties:
+                kind:
+                  type: string
+                  enum: [proxy_video, proxy_audio, proxy_photo, thumb, waveform]
+                content_type:
+                  type: string
+                size_bytes:
+                  type: integer
+                sha256:
+                  type: string
+      responses:
+        "200":
+          description: Upload initialized
+
+  /assets/{uuid}/derived/upload/part:
+    post:
+      tags: [Derived]
+      summary: Upload one part
+      security:
+        - OAuth2ClientCredentials: ["jobs:submit"]
+      parameters:
+        - $ref: "#/components/parameters/UuidPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [upload_id, part_number]
+              properties:
+                upload_id:
+                  type: string
+                part_number:
+                  type: integer
+      responses:
+        "200":
+          description: Part uploaded
+
+  /assets/{uuid}/derived/upload/complete:
+    post:
+      tags: [Derived]
+      summary: Complete derived upload
+      security:
+        - OAuth2ClientCredentials: ["jobs:submit"]
+      parameters:
+        - $ref: "#/components/parameters/UuidPath"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [upload_id]
+              properties:
+                upload_id:
+                  type: string
+                parts:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        "200":
+          description: Upload completed
+
+  /assets/{uuid}/derived:
+    get:
+      tags: [Derived]
+      summary: List available derived files for one asset
+      security:
+        - SessionCookieAuth: []
+        - OAuth2ClientCredentials: ["assets:read"]
+      parameters:
+        - $ref: "#/components/parameters/UuidPath"
+      responses:
+        "200":
+          description: Derived list
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /assets/{uuid}/derived/{kind}:
+    get:
+      tags: [Derived]
+      summary: Fetch one derived file by kind
+      security:
+        - SessionCookieAuth: []
+        - OAuth2ClientCredentials: ["assets:read"]
+      parameters:
+        - $ref: "#/components/parameters/UuidPath"
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [proxy_video, proxy_audio, proxy_photo, thumb, waveform]
+      responses:
+        "200":
+          description: Derived content
+        "404":
+          description: Not found
+
+  /batches/moves/preview:
+    post:
+      tags: [Batches]
+      summary: Preview move batch
+      security:
+        - SessionCookieAuth: []
+        - OAuth2ClientCredentials: ["batches:execute"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [include]
+              properties:
+                include:
+                  type: string
+                  enum: [KEEP, REJECT, BOTH]
+                limit:
+                  type: integer
+      responses:
+        "200":
+          description: Move preview
+
+  /batches/moves:
+    post:
+      tags: [Batches]
+      summary: Execute or dry-run move batch
+      security:
+        - SessionCookieAuth: []
+        - OAuth2ClientCredentials: ["batches:execute"]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [selection, mode]
+              properties:
+                selection:
+                  type: object
+                  additionalProperties: true
+                mode:
+                  type: string
+                  enum: [DRY_RUN, EXECUTE]
+      responses:
+        "200":
+          description: Batch accepted
+
+  /batches/moves/{batch_id}:
+    get:
+      tags: [Batches]
+      summary: Get move batch status and report
+      security:
+        - SessionCookieAuth: []
+        - OAuth2ClientCredentials: ["batches:execute"]
+      parameters:
+        - name: batch_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Batch status
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /decisions/preview:
+    post:
+      tags: [Decisions]
+      summary: Preview bulk decisions
+      description: Available in v1.1+.
+      security:
+        - SessionCookieAuth: []
+        - OAuth2ClientCredentials: ["decisions:write"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, filter, max_items]
+              properties:
+                action:
+                  type: string
+                  enum: [KEEP, REJECT]
+                filter:
+                  type: object
+                  additionalProperties: true
+                max_items:
+                  type: integer
+      responses:
+        "200":
+          description: Decision preview
+
+  /decisions/apply:
+    post:
+      tags: [Decisions]
+      summary: Apply bulk decisions from preview token
+      description: Available in v1.1+.
+      security:
+        - SessionCookieAuth: []
+        - OAuth2ClientCredentials: ["decisions:write"]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [approval_token, confirm]
+              properties:
+                approval_token:
+                  type: string
+                confirm:
+                  type: boolean
+                  enum: [true]
+      responses:
+        "200":
+          description: Decisions applied
+
+  /assets/{uuid}/purge:
+    post:
+      tags: [Purge]
+      summary: Purge one rejected asset
+      security:
+        - SessionCookieAuth: []
+        - OAuth2ClientCredentials: ["purge:execute"]
+      parameters:
+        - $ref: "#/components/parameters/UuidPath"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirm]
+              properties:
+                confirm:
+                  type: boolean
+                  enum: [true]
+      responses:
+        "200":
+          description: Purge executed
+        "409":
+          description: State conflict or idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /assets/{uuid}/purge/preview:
+    post:
+      tags: [Purge]
+      summary: Preview purge impact for one asset
+      security:
+        - SessionCookieAuth: []
+        - OAuth2ClientCredentials: ["purge:execute"]
+      parameters:
+        - $ref: "#/components/parameters/UuidPath"
+      responses:
+        "200":
+          description: Purge preview
+
+components:
+  securitySchemes:
+    SessionCookieAuth:
+      type: apiKey
+      in: cookie
+      name: retaia_session
+    OAuth2ClientCredentials:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: /api/v1/oauth/token
+          scopes:
+            assets:read: Read assets and derived metadata.
+            assets:write: Update human metadata and trigger reprocess.
+            decisions:write: Apply human decisions.
+            jobs:claim: Discover and claim jobs.
+            jobs:heartbeat: Extend job leases.
+            jobs:submit: Submit job completion/failure and derived uploads.
+            suggestions:write: Submit AI-powered suggestions (v1.1+).
+            batches:execute: Preview and execute move batches.
+            purge:execute: Preview and execute purge operations.
+
+  parameters:
+    UuidPath:
+      name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+
+  schemas:
+    AssetState:
+      type: string
+      enum:
+        - DISCOVERED
+        - READY
+        - PROCESSING_REVIEW
+        - PROCESSED
+        - DECISION_PENDING
+        - DECIDED_KEEP
+        - DECIDED_REJECT
+        - MOVE_QUEUED
+        - ARCHIVED
+        - REJECTED
+        - PURGED
+
+    AssetSummary:
+      type: object
+      required: [uuid, media_type, state, created_at]
+      additionalProperties: false
+      properties:
+        uuid:
+          type: string
+        media_type:
+          type: string
+          enum: [VIDEO, PHOTO, AUDIO]
+        state:
+          $ref: "#/components/schemas/AssetState"
+        created_at:
+          type: string
+          format: date-time
+        captured_at:
+          type: string
+          format: date-time
+          nullable: true
+        duration:
+          type: number
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+        has_proxy:
+          type: boolean
+        thumb_url:
+          type: string
+          nullable: true
+
+    AssetDetail:
+      type: object
+      required: [summary]
+      additionalProperties: false
+      properties:
+        summary:
+          $ref: "#/components/schemas/AssetSummary"
+        paths:
+          $ref: "#/components/schemas/AssetPaths"
+        processing:
+          $ref: "#/components/schemas/AssetProcessing"
+        derived:
+          $ref: "#/components/schemas/AssetDerived"
+        transcript:
+          $ref: "#/components/schemas/AssetTranscript"
+        suggestions:
+          description: Available in v1.1+.
+          $ref: "#/components/schemas/AssetSuggestions"
+        decisions:
+          $ref: "#/components/schemas/AssetDecisions"
+        audit:
+          $ref: "#/components/schemas/AssetAudit"
+
+    AssetPaths:
+      type: object
+      additionalProperties: false
+      properties:
+        original_relative:
+          type: string
+        sidecars_relative:
+          type: array
+          items:
+            type: string
+
+    AssetProcessing:
+      type: object
+      additionalProperties: false
+      properties:
+        facts_done:
+          type: boolean
+        thumbs_done:
+          type: boolean
+        proxy_done:
+          type: boolean
+        waveform_done:
+          type: boolean
+        processing_profile:
+          type: string
+        review_processing_version:
+          type: string
+
+    AssetDerived:
+      type: object
+      additionalProperties: false
+      properties:
+        proxy_video_url:
+          type: string
+          nullable: true
+        proxy_audio_url:
+          type: string
+          nullable: true
+        proxy_photo_url:
+          type: string
+          nullable: true
+        waveform_url:
+          type: string
+          nullable: true
+        thumbs:
+          type: array
+          items:
+            type: string
+
+    AssetTranscript:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [NONE, RUNNING, DONE, FAILED]
+        text_preview:
+          type: string
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    AssetSuggestions:
+      type: object
+      description: AI-powered suggestions payload (available in v1.1+).
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [NONE, RUNNING, DONE, FAILED]
+        tags_suggested:
+          type: array
+          items:
+            type: string
+        source:
+          type: string
+          nullable: true
+
+    AssetDecisions:
+      type: object
+      additionalProperties: false
+      properties:
+        current:
+          type: string
+          enum: [KEEP, REJECT]
+          nullable: true
+        history:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              action:
+                type: string
+                enum: [KEEP, REJECT, CLEAR]
+              at:
+                type: string
+                format: date-time
+              by:
+                type: string
+
+    AssetAudit:
+      type: object
+      additionalProperties: false
+      properties:
+        path_history:
+          type: array
+          items:
+            type: string
+
+    Job:
+      type: object
+      description: Processing job
+      required:
+        - job_id
+        - job_type
+        - status
+        - asset_uuid
+        - required_capabilities
+      additionalProperties: false
+      properties:
+        job_id:
+          type: string
+        job_type:
+          type: string
+          description: suggest_tags is available in v1.1+, transcribe_audio is available in v1.
+          enum:
+            - extract_facts
+            - generate_proxy
+            - generate_thumbnails
+            - generate_audio_waveform
+            - transcribe_audio
+            - suggest_tags
+        status:
+          type: string
+          enum: [pending, claimed, completed, failed]
+        asset_uuid:
+          type: string
+        required_capabilities:
+          type: array
+          items:
+            type: string
+        claimed_by:
+          type: string
+          nullable: true
+        lock_token:
+          type: string
+          nullable: true
+        locked_until:
+          type: string
+          format: date-time
+          nullable: true
+
+    JobSubmitRequest:
+      oneOf:
+        - $ref: "#/components/schemas/SubmitExtractFacts"
+        - $ref: "#/components/schemas/SubmitDerived"
+        - $ref: "#/components/schemas/SubmitTranscribe"
+        - $ref: "#/components/schemas/SubmitSuggest"
+
+    SubmitExtractFacts:
+      type: object
+      additionalProperties: false
+      required: [lock_token, job_type, result]
+      properties:
+        lock_token:
+          type: string
+        job_type:
+          type: string
+          enum: [extract_facts]
+        result:
+          type: object
+          additionalProperties: false
+          required: [facts_patch]
+          properties:
+            facts_patch:
+              $ref: "#/components/schemas/FactsPatch"
+            warnings:
+              type: array
+              items:
+                type: string
+            metrics:
+              type: object
+              additionalProperties: true
+
+    SubmitDerived:
+      type: object
+      additionalProperties: false
+      required: [lock_token, job_type, result]
+      properties:
+        lock_token:
+          type: string
+        job_type:
+          type: string
+          enum: [generate_proxy, generate_thumbnails, generate_audio_waveform]
+        result:
+          type: object
+          additionalProperties: false
+          required: [derived_patch]
+          properties:
+            derived_patch:
+              $ref: "#/components/schemas/DerivedPatch"
+            warnings:
+              type: array
+              items:
+                type: string
+            metrics:
+              type: object
+              additionalProperties: true
+
+    SubmitTranscribe:
+      type: object
+      additionalProperties: false
+      required: [lock_token, job_type, result]
+      properties:
+        lock_token:
+          type: string
+        job_type:
+          type: string
+          enum: [transcribe_audio]
+        result:
+          type: object
+          additionalProperties: false
+          required: [transcript_patch]
+          properties:
+            transcript_patch:
+              $ref: "#/components/schemas/TranscriptPatch"
+            warnings:
+              type: array
+              items:
+                type: string
+            metrics:
+              type: object
+              additionalProperties: true
+
+    SubmitSuggest:
+      type: object
+      description: AI-powered suggestions submission (available in v1.1+, requires jobs:submit and suggestions:write).
+      additionalProperties: false
+      required: [lock_token, job_type, result]
+      properties:
+        lock_token:
+          type: string
+        job_type:
+          type: string
+          enum: [suggest_tags]
+        result:
+          type: object
+          additionalProperties: false
+          required: [suggestions_patch]
+          properties:
+            suggestions_patch:
+              $ref: "#/components/schemas/SuggestionsPatch"
+            warnings:
+              type: array
+              items:
+                type: string
+            metrics:
+              type: object
+              additionalProperties: true
+
+    ProcessingResultPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        facts_patch:
+          $ref: "#/components/schemas/FactsPatch"
+        derived_patch:
+          $ref: "#/components/schemas/DerivedPatch"
+        transcript_patch:
+          $ref: "#/components/schemas/TranscriptPatch"
+        suggestions_patch:
+          description: Available in v1.1+.
+          $ref: "#/components/schemas/SuggestionsPatch"
+        warnings:
+          type: array
+          items:
+            type: string
+        metrics:
+          type: object
+          additionalProperties: true
+
+    FactsPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        duration_ms:
+          type: integer
+        media_format:
+          type: string
+        video_codec:
+          type: string
+        audio_codec:
+          type: string
+        width:
+          type: integer
+        height:
+          type: integer
+        fps:
+          type: number
+
+    DerivedPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        derived_manifest:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [kind, ref]
+            properties:
+              kind:
+                type: string
+                enum: [proxy_video, proxy_audio, proxy_photo, thumb, waveform]
+              ref:
+                type: string
+              size_bytes:
+                type: integer
+              sha256:
+                type: string
+
+    TranscriptPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        transcript_text:
+          type: string
+        confidence:
+          type: number
+        segments:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [start_ms, end_ms, text]
+            properties:
+              start_ms:
+                type: integer
+              end_ms:
+                type: integer
+              text:
+                type: string
+
+    SuggestionsPatch:
+      type: object
+      description: AI-powered suggestions patch (available in v1.1+).
+      additionalProperties: false
+      properties:
+        suggested_tags:
+          type: array
+          items:
+            type: string
+        source:
+          type: string
+
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [code, message, retryable, correlation_id]
+      properties:
+        code:
+          type: string
+          enum:
+            - FORBIDDEN_SCOPE
+            - FORBIDDEN_ACTOR
+            - STATE_CONFLICT
+            - IDEMPOTENCY_CONFLICT
+            - STALE_LOCK_TOKEN
+            - NAME_COLLISION_EXHAUSTED
+            - PURGED
+            - VALIDATION_FAILED
+            - LOCK_REQUIRED
+            - LOCK_INVALID
+            - RATE_LIMITED
+            - TEMPORARY_UNAVAILABLE
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        retryable:
+          type: boolean
+        correlation_id:
+          type: string

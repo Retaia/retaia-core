@@ -182,7 +182,7 @@ final class AuthController
     {
         if (!$this->security->isGranted('ROLE_ADMIN')) {
             return new JsonResponse(
-                ['code' => 'FORBIDDEN', 'message' => $this->translator->trans('auth.error.admin_role_required')],
+                ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
                 Response::HTTP_FORBIDDEN
             );
         }
