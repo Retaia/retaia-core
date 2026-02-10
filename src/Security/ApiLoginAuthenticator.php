@@ -17,6 +17,7 @@ use Symfony\Component\Security\Http\Authenticator\Passport\Badge\UserBadge;
 use Symfony\Component\Security\Http\Authenticator\Passport\Credentials\PasswordCredentials;
 use Symfony\Component\Security\Http\Authenticator\Passport\Passport;
 use Symfony\Component\Security\Http\EntryPoint\AuthenticationEntryPointInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class ApiLoginAuthenticator extends AbstractAuthenticator implements AuthenticationEntryPointInterface
 {
@@ -24,6 +25,7 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
 
     public function __construct(
         private LoggerInterface $logger,
+        private TranslatorInterface $translator,
     ) {
     }
 
@@ -65,7 +67,7 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
             ]);
 
             return new JsonResponse(
-                ['code' => 'UNAUTHORIZED', 'message' => 'Invalid credentials'],
+                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.invalid_credentials')],
                 Response::HTTP_UNAUTHORIZED
             );
         }
@@ -90,21 +92,21 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
 
         if ($exception->getMessageKey() === 'VALIDATION_FAILED') {
             return new JsonResponse(
-                ['code' => 'VALIDATION_FAILED', 'message' => 'email and password are required'],
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.email_password_required')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
 
         if ($exception->getMessageKey() === 'EMAIL_NOT_VERIFIED') {
             return new JsonResponse(
-                ['code' => 'EMAIL_NOT_VERIFIED', 'message' => 'Email address must be verified'],
+                ['code' => 'EMAIL_NOT_VERIFIED', 'message' => $this->translator->trans('auth.error.email_not_verified')],
                 Response::HTTP_FORBIDDEN
             );
         }
 
         if ($exception instanceof TooManyLoginAttemptsAuthenticationException) {
             $minutes = $exception->getMessageData()['%minutes%'] ?? null;
-            $response = ['code' => 'TOO_MANY_ATTEMPTS', 'message' => 'Too many login attempts'];
+            $response = ['code' => 'TOO_MANY_ATTEMPTS', 'message' => $this->translator->trans('auth.error.too_many_login_attempts')];
             if (is_int($minutes) && $minutes > 0) {
                 $response['retry_in_minutes'] = $minutes;
             }
@@ -123,7 +125,7 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
         ]);
 
         return new JsonResponse(
-            ['code' => 'UNAUTHORIZED', 'message' => 'Invalid credentials'],
+            ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.invalid_credentials')],
             Response::HTTP_UNAUTHORIZED
         );
     }
@@ -131,7 +133,7 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
     public function start(Request $request, ?AuthenticationException $authException = null): Response
     {
         return new JsonResponse(
-            ['code' => 'UNAUTHORIZED', 'message' => 'Authentication required'],
+            ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
             Response::HTTP_UNAUTHORIZED
         );
     }

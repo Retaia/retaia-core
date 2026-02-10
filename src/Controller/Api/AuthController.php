@@ -13,6 +13,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Bundle\SecurityBundle\Security;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[Route('/api/v1/auth')]
 final class AuthController
@@ -22,6 +23,7 @@ final class AuthController
         private PasswordResetService $passwordResetService,
         private EmailVerificationService $emailVerificationService,
         private PasswordPolicy $passwordPolicy,
+        private TranslatorInterface $translator,
         #[Autowire(service: 'limiter.verify_email_request')]
         private RateLimiterFactory $verifyEmailRequestLimiter,
     ) {
@@ -45,7 +47,7 @@ final class AuthController
         $user = $this->security->getUser();
         if (!$user instanceof User) {
             return new JsonResponse(
-                ['code' => 'UNAUTHORIZED', 'message' => 'Authentication required'],
+                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
                 Response::HTTP_UNAUTHORIZED
             );
         }
@@ -67,7 +69,7 @@ final class AuthController
         $email = trim((string) ($payload['email'] ?? ''));
         if ($email === '') {
             return new JsonResponse(
-                ['code' => 'VALIDATION_FAILED', 'message' => 'email is required'],
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.email_required')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
@@ -90,7 +92,7 @@ final class AuthController
 
         if ($token === '' || $newPassword === '') {
             return new JsonResponse(
-                ['code' => 'VALIDATION_FAILED', 'message' => 'token and new_password are required'],
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.token_new_password_required')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
@@ -108,7 +110,7 @@ final class AuthController
 
         if (!$this->passwordResetService->resetPassword($token, $newPassword)) {
             return new JsonResponse(
-                ['code' => 'INVALID_TOKEN', 'message' => 'Token invalid or expired'],
+                ['code' => 'INVALID_TOKEN', 'message' => $this->translator->trans('auth.error.invalid_or_expired_token')],
                 Response::HTTP_BAD_REQUEST
             );
         }
@@ -123,7 +125,7 @@ final class AuthController
         $email = trim((string) ($payload['email'] ?? ''));
         if ($email === '') {
             return new JsonResponse(
-                ['code' => 'VALIDATION_FAILED', 'message' => 'email is required'],
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.email_required')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
@@ -137,7 +139,7 @@ final class AuthController
             return new JsonResponse(
                 [
                     'code' => 'TOO_MANY_ATTEMPTS',
-                    'message' => 'Too many verification requests',
+                    'message' => $this->translator->trans('auth.error.too_many_verification_requests'),
                     'retry_in_seconds' => $retryAfter !== null ? max(1, $retryAfter->getTimestamp() - time()) : 60,
                 ],
                 Response::HTTP_TOO_MANY_REQUESTS
@@ -160,14 +162,14 @@ final class AuthController
         $token = trim((string) ($payload['token'] ?? ''));
         if ($token === '') {
             return new JsonResponse(
-                ['code' => 'VALIDATION_FAILED', 'message' => 'token is required'],
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.token_required')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
 
         if (!$this->emailVerificationService->confirmVerification($token)) {
             return new JsonResponse(
-                ['code' => 'INVALID_TOKEN', 'message' => 'Token invalid or expired'],
+                ['code' => 'INVALID_TOKEN', 'message' => $this->translator->trans('auth.error.invalid_or_expired_token')],
                 Response::HTTP_BAD_REQUEST
             );
         }
@@ -180,7 +182,7 @@ final class AuthController
     {
         if (!$this->security->isGranted('ROLE_ADMIN')) {
             return new JsonResponse(
-                ['code' => 'FORBIDDEN', 'message' => 'Admin role required'],
+                ['code' => 'FORBIDDEN', 'message' => $this->translator->trans('auth.error.admin_role_required')],
                 Response::HTTP_FORBIDDEN
             );
         }
@@ -189,7 +191,7 @@ final class AuthController
         $email = trim((string) ($payload['email'] ?? ''));
         if ($email === '') {
             return new JsonResponse(
-                ['code' => 'VALIDATION_FAILED', 'message' => 'email is required'],
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.email_required')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
@@ -199,7 +201,7 @@ final class AuthController
 
         if (!$this->emailVerificationService->forceVerifyByEmail($email, $actorId)) {
             return new JsonResponse(
-                ['code' => 'USER_NOT_FOUND', 'message' => 'Unknown user'],
+                ['code' => 'USER_NOT_FOUND', 'message' => $this->translator->trans('auth.error.unknown_user')],
                 Response::HTTP_NOT_FOUND
             );
         }

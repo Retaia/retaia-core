@@ -1,0 +1,14 @@
+auth:
+  error:
+    authentication_required: "Authentification requise"
+    invalid_credentials: "Identifiants invalides"
+    email_password_required: "email et mot de passe sont requis"
+    email_not_verified: "L'adresse email doit être vérifiée"
+    too_many_login_attempts: "Trop de tentatives de connexion"
+    email_required: "email est requis"
+    token_new_password_required: "token et new_password sont requis"
+    invalid_or_expired_token: "Token invalide ou expiré"
+    too_many_verification_requests: "Trop de demandes de vérification email"
+    token_required: "token est requis"
+    admin_role_required: "Rôle administrateur requis"
+    unknown_user: "Utilisateur inconnu"
