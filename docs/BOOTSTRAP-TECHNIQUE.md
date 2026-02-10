@@ -90,6 +90,8 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
 - `decision` et `reprocess` exigent `Idempotency-Key` (conforme contrat API v1).
 - Les workflows move/purge sont protégés par locks persistés pour éviter les courses concurrentes.
 - Le poller ingest ignore les symlinks et les chemins non sûrs.
+- Le poller ingest reste tolérant aux races de scan (fichier renommé/supprimé pendant scan) et aux sous-dossiers non lisibles.
+- Le move outbox gère les collisions massives de nom sans écrasement (suffixes déterministes par asset).
 - Changer les secrets et mots de passe par défaut avant tout usage réel.
 
 ## Paramètres configurables
