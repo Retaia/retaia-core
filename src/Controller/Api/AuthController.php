@@ -24,6 +24,8 @@ final class AuthController
         private EmailVerificationService $emailVerificationService,
         private PasswordPolicy $passwordPolicy,
         private TranslatorInterface $translator,
+        #[Autowire(service: 'limiter.lost_password_request')]
+        private RateLimiterFactory $lostPasswordRequestLimiter,
         #[Autowire(service: 'limiter.verify_email_request')]
         private RateLimiterFactory $verifyEmailRequestLimiter,
     ) {
@@ -71,6 +73,22 @@ final class AuthController
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.email_required')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        $remoteAddress = (string) ($request->getClientIp() ?? 'unknown');
+        $limiterKey = hash('sha256', mb_strtolower($email).'|'.$remoteAddress);
+        $limit = $this->lostPasswordRequestLimiter->create($limiterKey)->consume(1);
+        if (!$limit->isAccepted()) {
+            $retryAfter = $limit->getRetryAfter();
+
+            return new JsonResponse(
+                [
+                    'code' => 'TOO_MANY_ATTEMPTS',
+                    'message' => $this->translator->trans('auth.error.too_many_password_reset_requests'),
+                    'retry_in_seconds' => $retryAfter !== null ? max(1, $retryAfter->getTimestamp() - time()) : 60,
+                ],
+                Response::HTTP_TOO_MANY_REQUESTS
             );
         }
 

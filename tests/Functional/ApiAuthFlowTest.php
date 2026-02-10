@@ -109,6 +109,27 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
     }
 
+    public function testLostPasswordRequestIsRateLimited(): void
+    {
+        $email = sprintf('reset-limit-%s@retaia.local', bin2hex(random_bytes(6)));
+        $client = $this->createIsolatedClient(sprintf('10.0.%d.%d', random_int(1, 200), random_int(1, 200)));
+
+        for ($attempt = 1; $attempt <= 5; ++$attempt) {
+            $client->jsonRequest('POST', '/api/v1/auth/lost-password/request', [
+                'email' => $email,
+            ]);
+            self::assertResponseStatusCodeSame(Response::HTTP_ACCEPTED);
+        }
+
+        $client->jsonRequest('POST', '/api/v1/auth/lost-password/request', [
+            'email' => $email,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_TOO_MANY_REQUESTS);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('TOO_MANY_ATTEMPTS', $payload['code'] ?? null);
+        self::assertGreaterThanOrEqual(1, (int) ($payload['retry_in_seconds'] ?? 0));
+    }
+
     public function testLoginThrottlingReturns429AfterTooManyFailures(): void
     {
         $client = $this->createIsolatedClient(sprintf('10.0.%d.%d', random_int(1, 200), random_int(1, 200)));
@@ -153,6 +174,34 @@ final class ApiAuthFlowTest extends WebTestCase
             'new_password' => 'New-password1!',
         ]);
 
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('INVALID_TOKEN', $payload['code'] ?? null);
+    }
+
+    public function testLostPasswordResetTokenCannotBeReused(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.37');
+
+        $client->jsonRequest('POST', '/api/v1/auth/lost-password/request', [
+            'email' => 'admin@retaia.local',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_ACCEPTED);
+        $requestPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($requestPayload);
+        $token = $requestPayload['reset_token'] ?? null;
+        self::assertIsString($token);
+
+        $client->jsonRequest('POST', '/api/v1/auth/lost-password/reset', [
+            'token' => $token,
+            'new_password' => 'New-password1!',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/lost-password/reset', [
+            'token' => $token,
+            'new_password' => 'Another-password1!',
+        ]);
         self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
         $payload = json_decode($client->getResponse()->getContent(), true);
         self::assertSame('INVALID_TOKEN', $payload['code'] ?? null);

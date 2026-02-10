@@ -35,6 +35,7 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
   - messages localisables via `Accept-Language` (`en`, `fr`) avec fallback `en`
   - login refusé (`403 EMAIL_NOT_VERIFIED`) si le compte n’a pas d’email vérifié
   - throttling login activé (`5` tentatives / `15` minutes)
+  - throttling lost-password/request activé (`5` tentatives / `15` minutes par email+IP)
   - throttling verify-email/request activé (`3` tentatives / `1` minute par email+IP)
   - réponse `429` explicite en cas de trop nombreuses tentatives de login
   - logs structurés d’auth (login success/fail/throttled, logout, reset request/reset done)
