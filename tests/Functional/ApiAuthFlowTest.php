@@ -367,6 +367,50 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('Token invalid or expired', $payload['message'] ?? null);
     }
 
+    public function testAgentRegisterRequiresAgentScope(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.32');
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/agents/register', [
+            'agent_name' => 'ffmpeg-worker',
+            'agent_version' => '1.0.0',
+            'capabilities' => ['extract_facts'],
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('FORBIDDEN_SCOPE', $payload['code'] ?? null);
+    }
+
+    public function testAgentRegisterReturnsServerPolicy(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.33');
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'agent@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/agents/register', [
+            'agent_name' => 'ffmpeg-worker',
+            'agent_version' => '1.0.0',
+            'capabilities' => ['extract_facts', 'generate_proxy'],
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        self::assertIsString($payload['agent_id'] ?? null);
+        self::assertSame(5, $payload['server_policy']['min_poll_interval_seconds'] ?? null);
+        self::assertSame(false, $payload['server_policy']['features']['ai']['suggest_tags'] ?? null);
+    }
+
     private function createIsolatedClient(string $ipAddress, ?string $acceptLanguage = null): \Symfony\Bundle\FrameworkBundle\KernelBrowser
     {
         $server = ['REMOTE_ADDR' => $ipAddress];
