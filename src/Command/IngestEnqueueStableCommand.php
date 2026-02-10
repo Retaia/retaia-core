@@ -43,6 +43,12 @@ final class IngestEnqueueStableCommand extends Command
 
         foreach ($stableFiles as $file) {
             $sourcePath = ltrim((string) $file['path'], '/');
+            if (!$this->isSafeRelativePath($sourcePath)) {
+                $this->scanStateStore->markMissing($sourcePath, new \DateTimeImmutable());
+                ++$missing;
+                continue;
+            }
+
             $absoluteSource = $root.DIRECTORY_SEPARATOR.$sourcePath;
             if (!is_file($absoluteSource)) {
                 $this->scanStateStore->markMissing($sourcePath, new \DateTimeImmutable());
@@ -101,5 +107,14 @@ final class IngestEnqueueStableCommand extends Command
             'jpg', 'jpeg', 'png' => 'IMAGE',
             default => 'VIDEO',
         };
+    }
+
+    private function isSafeRelativePath(string $path): bool
+    {
+        if ($path === '' || str_contains($path, "\0")) {
+            return false;
+        }
+
+        return !str_starts_with($path, '/') && !str_contains($path, '..'.DIRECTORY_SEPARATOR) && !str_contains($path, '../');
     }
 }

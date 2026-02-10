@@ -57,6 +57,9 @@ final class IngestApplyOutboxCommand extends Command
         if ($sourcePath === '') {
             return 0;
         }
+        if (!$this->isSafeRelativePath($sourcePath)) {
+            return 0;
+        }
 
         $root = $this->watchPathResolver->resolveRoot();
         $fromRelative = ltrim($sourcePath, '/');
@@ -117,5 +120,13 @@ final class IngestApplyOutboxCommand extends Command
 
         $this->audit->record($asset->getUuid(), $fromRelative, $toRelative, 'state_transition', new \DateTimeImmutable());
     }
-}
 
+    private function isSafeRelativePath(string $path): bool
+    {
+        if ($path === '' || str_contains($path, "\0")) {
+            return false;
+        }
+
+        return !str_starts_with($path, '/') && !str_contains($path, '..'.DIRECTORY_SEPARATOR) && !str_contains($path, '../');
+    }
+}
