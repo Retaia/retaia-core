@@ -296,16 +296,17 @@ final class ApiAuthFlowTest extends WebTestCase
     public function testVerifyEmailRequestIsRateLimited(): void
     {
         $client = $this->createIsolatedClient('10.0.0.21');
+        $email = sprintf('rate-limit-%s@retaia.local', bin2hex(random_bytes(6)));
 
         for ($attempt = 1; $attempt <= 3; ++$attempt) {
             $client->jsonRequest('POST', '/api/v1/auth/verify-email/request', [
-                'email' => 'pending@retaia.local',
+                'email' => $email,
             ]);
             self::assertResponseStatusCodeSame(Response::HTTP_ACCEPTED);
         }
 
         $client->jsonRequest('POST', '/api/v1/auth/verify-email/request', [
-            'email' => 'pending@retaia.local',
+            'email' => $email,
         ]);
         self::assertResponseStatusCodeSame(Response::HTTP_TOO_MANY_REQUESTS);
         $payload = json_decode($client->getResponse()->getContent(), true);
