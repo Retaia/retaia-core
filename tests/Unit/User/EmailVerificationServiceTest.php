@@ -99,4 +99,60 @@ final class EmailVerificationServiceTest extends TestCase
         self::assertTrue($users->findByEmail('ops@retaia.local')?->isEmailVerified() ?? false);
         self::assertFalse($service->forceVerifyByEmail('missing@retaia.local', 'admin-actor-1'));
     }
+
+    public function testConfirmRejectsTokenWithTamperedSignature(): void
+    {
+        $users = new InMemoryUserRepository();
+        $users->save(new User(
+            'testpending0000004',
+            'tampered-signature@retaia.local',
+            password_hash('change-me', PASSWORD_DEFAULT),
+            ['ROLE_USER'],
+            false,
+        ));
+
+        $service = new EmailVerificationService(
+            $users,
+            new NullLogger(),
+            'test',
+            'secret-key',
+            3600,
+        );
+
+        $token = $service->requestVerification('tampered-signature@retaia.local');
+        self::assertIsString($token);
+
+        [$payload, $signature] = explode('.', $token, 2);
+        $tamperedSignature = substr($signature, 0, -1).('a' === substr($signature, -1) ? 'b' : 'a');
+
+        self::assertFalse($service->confirmVerification($payload.'.'.$tamperedSignature));
+    }
+
+    public function testConfirmRejectsTokenWithTamperedPayload(): void
+    {
+        $users = new InMemoryUserRepository();
+        $users->save(new User(
+            'testpending0000005',
+            'tampered-payload@retaia.local',
+            password_hash('change-me', PASSWORD_DEFAULT),
+            ['ROLE_USER'],
+            false,
+        ));
+
+        $service = new EmailVerificationService(
+            $users,
+            new NullLogger(),
+            'test',
+            'secret-key',
+            3600,
+        );
+
+        $token = $service->requestVerification('tampered-payload@retaia.local');
+        self::assertIsString($token);
+
+        [$payload, $signature] = explode('.', $token, 2);
+        $tamperedPayload = 'X'.substr($payload, 1);
+
+        self::assertFalse($service->confirmVerification($tamperedPayload.'.'.$signature));
+    }
 }
