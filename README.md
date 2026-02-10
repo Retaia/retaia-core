@@ -50,7 +50,7 @@ symfony server:start
 
 ## Ingest Polling (Bootstrap)
 
-- Config path via env: `APP_INGEST_WATCH_PATH` (default: `./docker/watch` in local env).
+- Config path via env: `APP_INGEST_WATCH_PATH` (default: `./docker/RETAIA/INBOX` in local env).
 - Manual poll command:
 
 ```bash

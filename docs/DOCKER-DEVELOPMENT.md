@@ -11,7 +11,8 @@
 
 Le code du repo est monté dans `/var/www/html`.
 La configuration Docker est centralisée dans `/docker` (ex: `/docker/Caddyfile`, `/docker/db-data`).
-Le dossier watch local de polling est `/docker/watch` (monté dans le conteneur sur `/var/local/ingest`).
+Le dossier de polling local est `/docker/RETAIA/INBOX` (monté dans le conteneur via `/var/local/RETAIA`).
+Les dossiers locaux disponibles sont aussi `/docker/RETAIA/ARCHIVE` et `/docker/RETAIA/REJECTS`.
 
 ## Démarrage
 

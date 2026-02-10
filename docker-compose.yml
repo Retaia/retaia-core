@@ -5,12 +5,12 @@ services:
     working_dir: /var/www/html
     volumes:
       - ./:/var/www/html
-      - ./docker/watch:/var/local/ingest
+      - ./docker/RETAIA:/var/local/RETAIA
     environment:
       APP_ENV: dev
       APP_DEBUG: "1"
       DATABASE_URL: postgresql://app:app@database:5432/app?serverVersion=16&charset=utf8
-      APP_INGEST_WATCH_PATH: /var/local/ingest
+      APP_INGEST_WATCH_PATH: /var/local/RETAIA/INBOX
     depends_on:
       database:
         condition: service_healthy
@@ -34,10 +34,10 @@ services:
     working_dir: /var/www/html
     volumes:
       - ./:/var/www/html
-      - ./docker/watch:/var/local/ingest
+      - ./docker/RETAIA:/var/local/RETAIA
     environment:
       DATABASE_URL: postgresql://app:app@database:5432/app?serverVersion=16&charset=utf8
-      APP_INGEST_WATCH_PATH: /var/local/ingest
+      APP_INGEST_WATCH_PATH: /var/local/RETAIA/INBOX
     depends_on:
       database:
         condition: service_healthy
