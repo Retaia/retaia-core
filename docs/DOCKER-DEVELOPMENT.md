@@ -11,6 +11,8 @@
 
 Le code du repo est monté dans `/var/www/html`.
 La configuration Docker est centralisée dans `/docker` (ex: `/docker/Caddyfile`, `/docker/db-data`).
+Le dossier de polling local est `/docker/RETAIA/INBOX` (monté dans le conteneur via `/var/local/RETAIA`).
+Les dossiers locaux disponibles sont aussi `/docker/RETAIA/ARCHIVE` et `/docker/RETAIA/REJECTS`.
 
 ## Démarrage
 
@@ -60,6 +62,13 @@ Smoke test API (via Caddy) :
 
 ```bash
 curl -H "Host: api.retaia.test" http://localhost:8080/api/v1/health
+```
+
+Lancer un poll manuel des fichiers à ingérer :
+
+```bash
+docker compose exec app php bin/console app:ingest:poll --limit=50
+docker compose exec app php bin/console app:ingest:poll --json
 ```
 
 Arrêter l'environnement :
