@@ -2,6 +2,7 @@
 
 namespace App\Tests\Functional;
 
+use App\Tests\Support\FixtureUsers;
 use Doctrine\DBAL\Connection;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
@@ -16,8 +17,8 @@ final class ApiAuthFlowTest extends WebTestCase
         $client = $this->createIsolatedClient('10.0.0.11');
 
         $client->jsonRequest('POST', '/api/v1/auth/login', [
-            'email' => 'admin@retaia.local',
-            'password' => 'change-me',
+            'email' => FixtureUsers::ADMIN_EMAIL,
+            'password' => FixtureUsers::DEFAULT_PASSWORD,
         ]);
 
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
@@ -25,13 +26,13 @@ final class ApiAuthFlowTest extends WebTestCase
         $loginPayload = json_decode($client->getResponse()->getContent(), true);
         self::assertIsArray($loginPayload);
         self::assertTrue((bool) ($loginPayload['authenticated'] ?? false));
-        self::assertSame('admin@retaia.local', $loginPayload['user']['email'] ?? null);
+        self::assertSame(FixtureUsers::ADMIN_EMAIL, $loginPayload['user']['email'] ?? null);
 
         $client->request('GET', '/api/v1/auth/me');
 
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $mePayload = json_decode($client->getResponse()->getContent(), true);
-        self::assertSame('admin@retaia.local', $mePayload['email'] ?? null);
+        self::assertSame(FixtureUsers::ADMIN_EMAIL, $mePayload['email'] ?? null);
     }
 
     public function testLogoutInvalidatesSession(): void
@@ -39,8 +40,8 @@ final class ApiAuthFlowTest extends WebTestCase
         $client = $this->createIsolatedClient('10.0.0.12');
 
         $client->jsonRequest('POST', '/api/v1/auth/login', [
-            'email' => 'admin@retaia.local',
-            'password' => 'change-me',
+            'email' => FixtureUsers::ADMIN_EMAIL,
+            'password' => FixtureUsers::DEFAULT_PASSWORD,
         ]);
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
 

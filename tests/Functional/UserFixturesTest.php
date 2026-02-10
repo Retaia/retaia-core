@@ -3,6 +3,7 @@
 namespace App\Tests\Functional;
 
 use App\Entity\User;
+use App\Tests\Support\FixtureUsers;
 use Doctrine\ORM\EntityManagerInterface;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
@@ -22,20 +23,20 @@ final class UserFixturesTest extends KernelTestCase
 
         self::assertCount(9, $users);
 
-        $admin = $repository->findOneBy(['email' => 'admin@retaia.local']);
+        $admin = $repository->findOneBy(['email' => FixtureUsers::ADMIN_EMAIL]);
         self::assertInstanceOf(User::class, $admin);
-        self::assertTrue(password_verify('change-me', $admin->getPassword()));
+        self::assertTrue(password_verify(FixtureUsers::DEFAULT_PASSWORD, $admin->getPassword()));
         self::assertTrue($admin->isEmailVerified());
 
-        $unverified = $repository->findOneBy(['email' => 'pending@retaia.local']);
+        $unverified = $repository->findOneBy(['email' => FixtureUsers::UNVERIFIED_EMAIL]);
         self::assertInstanceOf(User::class, $unverified);
         self::assertFalse($unverified->isEmailVerified());
 
-        $agent = $repository->findOneBy(['email' => 'agent@retaia.local']);
+        $agent = $repository->findOneBy(['email' => FixtureUsers::AGENT_EMAIL]);
         self::assertInstanceOf(User::class, $agent);
         self::assertContains('ROLE_AGENT', $agent->getRoles());
 
-        $operator = $repository->findOneBy(['email' => 'operator@retaia.local']);
+        $operator = $repository->findOneBy(['email' => FixtureUsers::OPERATOR_EMAIL]);
         self::assertInstanceOf(User::class, $operator);
         self::assertSame(['ROLE_USER'], $operator->getRoles());
     }

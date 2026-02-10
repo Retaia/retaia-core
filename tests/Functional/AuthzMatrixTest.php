@@ -4,6 +4,7 @@ namespace App\Tests\Functional;
 
 use App\Asset\AssetState;
 use App\Entity\Asset;
+use App\Tests\Support\FixtureUsers;
 use Doctrine\ORM\EntityManagerInterface;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
@@ -52,7 +53,7 @@ final class AuthzMatrixTest extends WebTestCase
         $client = $this->createOperatorClient();
 
         $client->jsonRequest('POST', '/api/v1/auth/verify-email/admin-confirm', [
-            'email' => 'pending@retaia.local',
+            'email' => FixtureUsers::UNVERIFIED_EMAIL,
         ]);
 
         self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
@@ -71,17 +72,17 @@ final class AuthzMatrixTest extends WebTestCase
 
     private function createAdminClient(): KernelBrowser
     {
-        return $this->loginClient('admin@retaia.local', 'change-me');
+        return $this->loginClient(FixtureUsers::ADMIN_EMAIL, FixtureUsers::DEFAULT_PASSWORD);
     }
 
     private function createAgentClient(): KernelBrowser
     {
-        return $this->loginClient('agent@retaia.local', 'change-me');
+        return $this->loginClient(FixtureUsers::AGENT_EMAIL, FixtureUsers::DEFAULT_PASSWORD);
     }
 
     private function createOperatorClient(): KernelBrowser
     {
-        return $this->loginClient('operator@retaia.local', 'change-me');
+        return $this->loginClient(FixtureUsers::OPERATOR_EMAIL, FixtureUsers::DEFAULT_PASSWORD);
     }
 
     private function loginClient(string $email, string $password): KernelBrowser
