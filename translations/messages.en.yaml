@@ -18,3 +18,7 @@ asset:
     state_conflict: "State transition is not allowed"
     decision_action_required: "action is required"
     purged_read_only: "Purged assets are read-only"
+    forbidden_scope: "Insufficient scope"
+agent:
+  error:
+    invalid_registration_payload: "agent_name, agent_version and capabilities are required"
