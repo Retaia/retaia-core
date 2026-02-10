@@ -61,6 +61,7 @@
     },
     "scripts": {
         "check:i18n": "php scripts/check-translation-keys.php",
+        "check:openapi": "php scripts/check-openapi-routes.php",
         "test:unit": "vendor/bin/phpunit",
         "test:behat": "vendor/bin/behat",
         "test": [

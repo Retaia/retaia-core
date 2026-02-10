@@ -26,6 +26,9 @@ Détail :
   - `php bin/console lint:yaml config`
   - `php bin/console lint:container`
   - `php scripts/check-translation-keys.php` (gate bloquant en/fr)
+  - `php scripts/check-openapi-routes.php` (gate bloquant: endpoints implémentés assets/jobs/agents présents dans OpenAPI)
+    - source OpenAPI prioritaire: `docs/openapi/v1.yaml` (versionnée dans ce repo pour éviter une dépendance CI à un submodule privé)
+    - fallback local: `specs/api/openapi/v1.yaml` si présent
   - le gate i18n bloque aussi :
     - clés critiques manquantes (`auth.error.*` critiques)
     - valeurs de traduction vides
