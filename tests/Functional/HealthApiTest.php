@@ -16,5 +16,9 @@ final class HealthApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $payload = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertSame('ok', $payload['status'] ?? null);
+        self::assertSame('nosniff', $client->getResponse()->headers->get('X-Content-Type-Options'));
+        self::assertSame('DENY', $client->getResponse()->headers->get('X-Frame-Options'));
+        self::assertSame('no-referrer', $client->getResponse()->headers->get('Referrer-Policy'));
+        self::assertSame('camera=(), microphone=(), geolocation=()', $client->getResponse()->headers->get('Permissions-Policy'));
     }
 }

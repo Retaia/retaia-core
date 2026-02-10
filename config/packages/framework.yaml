@@ -1,6 +1,8 @@
 # see https://symfony.com/doc/current/reference/configuration/framework.html
 framework:
     secret: '%env(APP_SECRET)%'
+    trusted_proxies: '%env(default::SYMFONY_TRUSTED_PROXIES)%'
+    trusted_headers: ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-forwarded-port', 'x-forwarded-prefix']
 
     # Note that the session will be started ONLY if you read or write from it.
     session:
@@ -10,12 +12,12 @@ framework:
     rate_limiter:
         lost_password_request:
             policy: 'fixed_window'
-            limit: 5
-            interval: '15 minutes'
+            limit: '%env(int:APP_AUTH_LOST_PASSWORD_LIMIT)%'
+            interval: '%env(string:APP_AUTH_LOST_PASSWORD_INTERVAL)%'
         verify_email_request:
             policy: 'fixed_window'
-            limit: 3
-            interval: '1 minute'
+            limit: '%env(int:APP_AUTH_VERIFY_EMAIL_LIMIT)%'
+            interval: '%env(string:APP_AUTH_VERIFY_EMAIL_INTERVAL)%'
 
     #esi: true
     #fragments: true
@@ -25,3 +27,8 @@ when@test:
         test: true
         session:
             storage_factory_id: session.storage.factory.mock_file
+
+when@prod:
+    framework:
+        session:
+            cookie_secure: true
