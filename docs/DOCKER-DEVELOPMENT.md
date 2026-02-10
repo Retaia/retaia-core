@@ -7,8 +7,15 @@
 - `app`: `fullfrontend/php-fpm:latest`
 - `composer`: même image, profil `tools`
 - `database`: `postgres:16-alpine`
+- Traefik (réseau externe `web`) peut router `https://api.retaia.test` vers `app:9000`
 
 Le code du repo est monté dans `/var/www/html`.
+
+Pré-requis Traefik local :
+
+```bash
+docker network create web || true
+```
 
 ## Démarrage
 

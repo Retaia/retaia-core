@@ -14,6 +14,16 @@ services:
         condition: service_healthy
     ports:
       - "9000:9000"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.retaia-core-api.rule=Host(`api.retaia.test`)"
+      - "traefik.http.routers.retaia-core-api.entrypoints=websecure"
+      - "traefik.http.routers.retaia-core-api.tls=true"
+      - "traefik.http.services.retaia-core-api.loadbalancer.server.port=9000"
+    networks:
+      - default
+      - web
     tty: true
     stdin_open: true
 
@@ -50,3 +60,7 @@ services:
 
 volumes:
   database_data:
+
+networks:
+  web:
+    external: true
