@@ -64,6 +64,63 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
         self::assertSame(1, $count);
     }
 
+    public function testMassiveFilenameCollisionsGenerateDeterministicUniqueTargets(): void
+    {
+        $root = sys_get_temp_dir().'/retaia-move-collision-'.bin2hex(random_bytes(4));
+        mkdir($root.'/INBOX/a', 0777, true);
+        mkdir($root.'/INBOX/b', 0777, true);
+        mkdir($root.'/ARCHIVE', 0777, true);
+        mkdir($root.'/REJECTS', 0777, true);
+        file_put_contents($root.'/INBOX/a/rush.mov', 'first');
+        file_put_contents($root.'/INBOX/b/rush.mov', 'second');
+
+        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+
+        static::bootKernel();
+        $container = static::getContainer();
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = $container->get(EntityManagerInterface::class);
+        /** @var Connection $connection */
+        $connection = $container->get(Connection::class);
+        $this->ensureAuditTable($connection);
+
+        $assetOne = new Asset(
+            'aaaaaa11-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+            'VIDEO',
+            'rush.mov',
+            AssetState::ARCHIVED,
+            [],
+            null,
+            ['source_path' => 'INBOX/a/rush.mov']
+        );
+        $assetTwo = new Asset(
+            'aaaaaa22-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+            'VIDEO',
+            'rush.mov',
+            AssetState::ARCHIVED,
+            [],
+            null,
+            ['source_path' => 'INBOX/b/rush.mov']
+        );
+        $entityManager->persist($assetOne);
+        $entityManager->persist($assetTwo);
+        $entityManager->flush();
+
+        $application = new Application(static::$kernel);
+        $command = $application->find('app:ingest:apply-outbox');
+        $tester = new CommandTester($command);
+        $tester->execute(['--limit' => 20]);
+
+        $archiveFiles = glob($root.'/ARCHIVE/rush*.mov');
+        self::assertIsArray($archiveFiles);
+        self::assertCount(2, $archiveFiles);
+
+        $contents = array_map(static fn (string $file): string => (string) file_get_contents($file), $archiveFiles);
+        sort($contents);
+        self::assertSame(['first', 'second'], $contents);
+    }
+
     private function ensureAuditTable(Connection $connection): void
     {
         $connection->executeStatement(
@@ -78,4 +135,3 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
         );
     }
 }
-
