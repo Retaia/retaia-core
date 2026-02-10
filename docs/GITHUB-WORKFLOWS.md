@@ -14,7 +14,6 @@ Il exécute quatre jobs :
 2. `lint`
 3. `test`
 4. `security-audit`
-5. `coverage`
 
 Détail :
 
@@ -36,15 +35,11 @@ Détail :
     - placeholders interdits (`TODO`, `FIXME`, `TRANSLATE_ME`)
 
 - `test` :
-  - `composer test` (PHPUnit + Behat)
+  - `composer test:quality` (PHPUnit avec coverage + Behat + gate coverage 80%)
   - inclut des non-régressions token auth (token expiré/invalide, payload/signature altérés)
 
 - `security-audit` :
   - `composer audit --no-interaction`
-
-- `coverage` :
-  - `composer test:coverage` (génère `var/coverage/clover.xml` via PHPUnit)
-  - `composer check:coverage` (gate bloquant à **80%** minimum)
 
 ## Déclenchement
 
@@ -75,9 +70,7 @@ composer install --no-interaction --prefer-dist --optimize-autoloader
 composer validate --strict --no-check-publish
 php bin/console lint:yaml config
 php bin/console lint:container
-composer test
-composer test:coverage
-composer check:coverage
+composer test:quality
 composer audit --no-interaction
 ```
 

@@ -18,6 +18,14 @@ Core API repository for the Retaia project.
 
 ## Quick Start
 
+0. Coverage driver for dev hooks/tests (`pcov`):
+
+```bash
+pecl install pcov
+echo "extension=pcov.so" >> /opt/homebrew/etc/php/8.5/php.ini
+php -m | grep pcov
+```
+
 1. Install dependencies:
 
 ```bash
@@ -51,8 +59,7 @@ composer test
 Run coverage and enforce threshold (80%):
 
 ```bash
-composer test:coverage
-composer check:coverage
+composer test:quality
 ```
 
 Useful checks:
@@ -75,12 +82,13 @@ make ci-local
 
 This repository supports Husky hooks for local commit quality gates:
 
-- `pre-commit`: runs `composer test`, `composer test:coverage`, then `composer check:coverage` (80% gate)
+- `pre-commit`: runs `composer test:quality` (PHPUnit with coverage + Behat + 80% gate)
 - `commit-msg`: enforces Conventional Commits via `commitlint`
 
 Coverage prerequisite for `pre-commit`:
 
 - install/enable a PHP coverage driver locally (`xdebug` or `pcov`)
+- recommended on this project: `pcov`
 
 Setup once locally:
 
@@ -112,7 +120,6 @@ GitHub Actions workflow:
 - `lint`
 - `test`
 - `security-audit`
-- `coverage` (80% minimum)
 
 See details in:
 
