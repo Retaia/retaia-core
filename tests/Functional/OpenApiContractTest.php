@@ -134,6 +134,7 @@ final class OpenApiContractTest extends WebTestCase
         $errorCodes = $this->errorCodes($this->errorSchema($openApi));
 
         $client = static::createClient();
+        $client->disableReboot();
         $this->ensureAuxiliaryTables();
         $client->request('GET', '/api/v1/auth/me');
 
@@ -149,6 +150,7 @@ final class OpenApiContractTest extends WebTestCase
         $errorCodes = $this->errorCodes($this->errorSchema($openApi));
 
         $client = static::createClient();
+        $client->disableReboot();
         $this->ensureAuxiliaryTables();
         $client->jsonRequest('POST', '/api/v1/auth/lost-password/request', []);
 
@@ -164,6 +166,7 @@ final class OpenApiContractTest extends WebTestCase
         $errorCodes = $this->errorCodes($this->errorSchema($openApi));
 
         $client = static::createClient();
+        $client->disableReboot();
         $this->ensureAuxiliaryTables();
         $status = Response::HTTP_ACCEPTED;
         for ($i = 0; $i < 6; ++$i) {
