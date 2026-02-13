@@ -18,12 +18,14 @@ Il ne définit **aucune** règle produit nouvelle.
 - `specs/workflows/AGENT-PROTOCOL.md`
 - `specs/api/API-CONTRACTS.md`
 - `specs/tests/TEST-PLAN.md`
+- `specs/CONTRIBUTING.md`
 
 Selon le scope :
 
 - jobs/capabilities: `specs/definitions/JOB-TYPES.md`, `specs/definitions/CAPABILITIES.md`, `specs/definitions/PROCESSING-PROFILES.md`
 - sidecars: `specs/definitions/SIDECAR-RULES.md`
 - sécurité et accès: `specs/policies/AUTHZ-MATRIX.md`
+- gouvernance features: `specs/policies/FEATURE-RESOLUTION-ENGINE.md`, `specs/change-management/FEATURE-FLAG-LIFECYCLE.md`, `specs/change-management/FEATURE-FLAG-KILLSWITCH-REGISTRY.md`
 - verrous et concurrence: `specs/policies/LOCK-LIFECYCLE.md`, `specs/policies/LOCKING-MATRIX.md`
 
 ## Principes d’implémentation

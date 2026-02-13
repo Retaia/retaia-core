@@ -5,6 +5,7 @@ Core API repository for the Retaia project.
 ## Source Of Truth
 
 - Product rules and behavior are defined in `/specs` (submodule).
+- Any normative contract/process change must be proposed first in `/specs/CONTRIBUTING.md`.
 - Local docs in `/docs` are implementation guides only.
 
 ## Tech Stack
@@ -172,6 +173,7 @@ Use docker-compose setup documented in:
 - `POST /api/v1/auth/lost-password/reset`
 - `POST /api/v1/auth/verify-email/request`
 - `POST /api/v1/auth/verify-email/confirm`
+- `POST /api/v1/auth/verify-email/admin-confirm`
 
 ## CI
 
