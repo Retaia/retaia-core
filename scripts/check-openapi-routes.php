@@ -7,23 +7,9 @@ use Symfony\Component\Yaml\Yaml;
 
 require dirname(__DIR__).'/vendor/autoload.php';
 
-$openApiPathCandidates = [
-    dirname(__DIR__).'/docs/openapi/v1.yaml',
-    dirname(__DIR__).'/specs/api/openapi/v1.yaml',
-];
-$openApiPath = null;
-foreach ($openApiPathCandidates as $candidate) {
-    if (is_file($candidate)) {
-        $openApiPath = $candidate;
-        break;
-    }
-}
-
-if (!is_string($openApiPath)) {
-    fwrite(STDERR, "OpenAPI file not found in supported locations:\n");
-    foreach ($openApiPathCandidates as $candidate) {
-        fwrite(STDERR, " - {$candidate}\n");
-    }
+$openApiPath = dirname(__DIR__).'/specs/api/openapi/v1.yaml';
+if (!is_file($openApiPath)) {
+    fwrite(STDERR, "OpenAPI file not found: {$openApiPath}\n");
     exit(1);
 }
 
