@@ -49,7 +49,9 @@ Selon le scope :
 ## API et contrats
 
 - Ne jamais dériver le comportement depuis “ce que fait le code aujourd’hui” si la spec dit autre chose.
-- Respecter strictement `openapi/v1.yaml` et `specs/api/API-CONTRACTS.md`.
+- Source OpenAPI unique du repo : `specs/api/openapi/v1.yaml` (aucune copie locale autorisée).
+- Si un apport de contrat est nécessaire, le notifier et mettre à jour la spec dans `retaia-docs` avant implémentation.
+- Respecter strictement `specs/api/openapi/v1.yaml` et `specs/api/API-CONTRACTS.md`.
 - Appliquer `Idempotency-Key` sur les endpoints critiques définis par la spec.
 - Pour les features `v1.1+`, vérifier le feature flag et renvoyer un refus explicite si inactif.
 - Les filtres `suggested_tags` / `suggested_tags_mode` doivent être refusés tant que `features.ai.suggested_tags_filters` est inactif.

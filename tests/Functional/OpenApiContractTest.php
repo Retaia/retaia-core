@@ -301,7 +301,7 @@ final class OpenApiContractTest extends WebTestCase
     private function openApi(): array
     {
         /** @var array<string, mixed> $parsed */
-        $parsed = Yaml::parseFile(dirname(__DIR__, 2).'/docs/openapi/v1.yaml');
+        $parsed = Yaml::parseFile(dirname(__DIR__, 2).'/specs/api/openapi/v1.yaml');
 
         return $parsed;
     }
