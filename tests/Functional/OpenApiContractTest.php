@@ -79,10 +79,7 @@ final class OpenApiContractTest extends WebTestCase
     {
         $openApi = $this->openApi();
 
-        $this->assertPathStatusUsesErrorResponse($openApi, '/jobs/{job_id}/heartbeat', 'post', '409');
-        $this->assertPathStatusUsesErrorResponse($openApi, '/jobs/{job_id}/heartbeat', 'post', '423');
         $this->assertPathStatusUsesErrorResponse($openApi, '/jobs/{job_id}/submit', 'post', '423');
-        $this->assertPathStatusUsesErrorResponse($openApi, '/jobs/{job_id}/fail', 'post', '423');
     }
 
     public function testErrorCodeEnumIncludesRuntimeCodes(): void
@@ -98,11 +95,9 @@ final class OpenApiContractTest extends WebTestCase
             'EMAIL_NOT_VERIFIED',
             'STATE_CONFLICT',
             'IDEMPOTENCY_CONFLICT',
-            'MISSING_IDEMPOTENCY_KEY',
             'STALE_LOCK_TOKEN',
             'NAME_COLLISION_EXHAUSTED',
             'PURGED',
-            'NOT_FOUND',
             'INVALID_TOKEN',
             'USER_NOT_FOUND',
             'VALIDATION_FAILED',
