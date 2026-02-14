@@ -684,6 +684,53 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
     }
 
+    public function testClientAdminEndpointsAreAdminOnly(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.62');
+        $email = sprintf('operator-%s@retaia.local', bin2hex(random_bytes(4)));
+        $this->insertUser($email, 'change-me', ['ROLE_USER'], true);
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => $email,
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/agent-default/revoke-token');
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('FORBIDDEN_ACTOR', $payload['code'] ?? null);
+    }
+
+    public function testAdminCanRevokeAndRotateClientCredentials(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.63');
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/agent-default/revoke-token');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $revoked = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame(true, $revoked['revoked'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/agent-default/rotate-secret');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $rotated = json_decode($client->getResponse()->getContent(), true);
+        $newSecret = (string) ($rotated['secret_key'] ?? '');
+        self::assertNotSame('', $newSecret);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/token', [
+            'client_id' => 'agent-default',
+            'client_kind' => 'AGENT',
+            'secret_key' => $newSecret,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+    }
+
     public function testUnsupportedLocaleFallsBackToEnglishAuthenticationRequiredMessage(): void
     {
         $client = $this->createIsolatedClient('10.0.0.35', 'de');
