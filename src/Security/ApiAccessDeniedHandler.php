@@ -2,6 +2,7 @@
 
 namespace App\Security;
 
+use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -13,6 +14,7 @@ final class ApiAccessDeniedHandler implements AccessDeniedHandlerInterface
 {
     public function __construct(
         private TranslatorInterface $translator,
+        private LoggerInterface $logger,
     ) {
     }
 
@@ -21,6 +23,11 @@ final class ApiAccessDeniedHandler implements AccessDeniedHandlerInterface
         if (!str_starts_with($request->getPathInfo(), '/api/v1/')) {
             return null;
         }
+
+        $this->logger->warning('authz.denied', [
+            'path' => $request->getPathInfo(),
+            'method' => $request->getMethod(),
+        ]);
 
         return new JsonResponse(
             [

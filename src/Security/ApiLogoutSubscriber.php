@@ -32,6 +32,9 @@ final class ApiLogoutSubscriber implements EventSubscriberInterface
         $this->logger->info('auth.logout.completed', [
             'user_identifier' => $token?->getUserIdentifier(),
         ]);
+        $this->logger->info('auth.logout', [
+            'user_identifier' => $token?->getUserIdentifier(),
+        ]);
 
         $event->setResponse(new JsonResponse(['authenticated' => false], Response::HTTP_OK));
     }

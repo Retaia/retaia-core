@@ -98,6 +98,10 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
             'user_identifier' => $user->getUserIdentifier(),
             'roles' => $user->getRoles(),
         ]);
+        $this->logger->info('auth.login.success', [
+            'user_identifier' => $user->getUserIdentifier(),
+            'roles' => $user->getRoles(),
+        ]);
 
         return new JsonResponse(
             [
