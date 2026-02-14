@@ -534,6 +534,98 @@ final class AuthController
         );
     }
 
+    #[Route('/clients/device/start', name: 'api_auth_clients_device_start', methods: ['POST'])]
+    public function startDeviceFlow(Request $request): JsonResponse
+    {
+        $payload = $this->payload($request);
+        $clientKind = trim((string) ($payload['client_kind'] ?? ''));
+
+        if ($clientKind === '') {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.client_kind_required')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        if (!in_array($clientKind, ['AGENT', 'MCP'], true)) {
+            return new JsonResponse(
+                ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
+                Response::HTTP_FORBIDDEN
+            );
+        }
+        if ($clientKind === 'MCP' && $this->authClientService->isMcpDisabledByAppPolicy()) {
+            return new JsonResponse(
+                ['code' => 'FORBIDDEN_SCOPE', 'message' => $this->translator->trans('auth.error.forbidden_scope')],
+                Response::HTTP_FORBIDDEN
+            );
+        }
+
+        return new JsonResponse($this->authClientService->startDeviceFlow($clientKind), Response::HTTP_OK);
+    }
+
+    #[Route('/clients/device/poll', name: 'api_auth_clients_device_poll', methods: ['POST'])]
+    public function pollDeviceFlow(Request $request): JsonResponse
+    {
+        $payload = $this->payload($request);
+        $deviceCode = trim((string) ($payload['device_code'] ?? ''));
+        if ($deviceCode === '') {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.device_code_required')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        $status = $this->authClientService->pollDeviceFlow($deviceCode);
+        if (!is_array($status)) {
+            return new JsonResponse(
+                ['code' => 'INVALID_DEVICE_CODE', 'message' => $this->translator->trans('auth.error.invalid_device_code')],
+                Response::HTTP_BAD_REQUEST
+            );
+        }
+
+        if (array_key_exists('retry_in_seconds', $status)) {
+            return new JsonResponse(
+                [
+                    'code' => 'SLOW_DOWN',
+                    'message' => $this->translator->trans('auth.error.slow_down'),
+                    'retry_in_seconds' => $status['retry_in_seconds'],
+                ],
+                Response::HTTP_TOO_MANY_REQUESTS
+            );
+        }
+
+        return new JsonResponse($status, Response::HTTP_OK);
+    }
+
+    #[Route('/clients/device/cancel', name: 'api_auth_clients_device_cancel', methods: ['POST'])]
+    public function cancelDeviceFlow(Request $request): JsonResponse
+    {
+        $payload = $this->payload($request);
+        $deviceCode = trim((string) ($payload['device_code'] ?? ''));
+        if ($deviceCode === '') {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.device_code_required')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        $status = $this->authClientService->cancelDeviceFlow($deviceCode);
+        if (!is_array($status)) {
+            return new JsonResponse(
+                ['code' => 'INVALID_DEVICE_CODE', 'message' => $this->translator->trans('auth.error.invalid_device_code')],
+                Response::HTTP_BAD_REQUEST
+            );
+        }
+        if (($status['status'] ?? null) === 'EXPIRED') {
+            return new JsonResponse(
+                ['code' => 'EXPIRED_DEVICE_CODE', 'message' => $this->translator->trans('auth.error.expired_device_code')],
+                Response::HTTP_BAD_REQUEST
+            );
+        }
+
+        return new JsonResponse(['canceled' => true], Response::HTTP_OK);
+    }
+
     /**
      * @return array<string, mixed>
      */
