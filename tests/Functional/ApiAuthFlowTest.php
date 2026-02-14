@@ -5,6 +5,7 @@ namespace App\Tests\Functional;
 use App\Tests\Support\FixtureUsers;
 use Doctrine\DBAL\Connection;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -771,6 +772,57 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('INVALID_DEVICE_CODE', $payload['code'] ?? null);
     }
 
+    public function testDeviceFlowPollReturnsDeniedAfterCancel(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.67');
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/start', [
+            'client_kind' => 'AGENT',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $startPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($startPayload);
+        $deviceCode = (string) ($startPayload['device_code'] ?? '');
+        self::assertNotSame('', $deviceCode);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/cancel', [
+            'device_code' => $deviceCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/poll', [
+            'device_code' => $deviceCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $pollPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($pollPayload);
+        self::assertSame('DENIED', $pollPayload['status'] ?? null);
+    }
+
+    public function testDeviceFlowPollReturnsExpiredStatusWhenFlowExpired(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.68');
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/start', [
+            'client_kind' => 'AGENT',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $startPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($startPayload);
+        $deviceCode = (string) ($startPayload['device_code'] ?? '');
+        self::assertNotSame('', $deviceCode);
+
+        $this->forceDeviceFlowExpiration($deviceCode);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/poll', [
+            'device_code' => $deviceCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $pollPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($pollPayload);
+        self::assertSame('EXPIRED', $pollPayload['status'] ?? null);
+    }
+
     public function testUnsupportedLocaleFallsBackToEnglishAuthenticationRequiredMessage(): void
     {
         $client = $this->createIsolatedClient('10.0.0.35', 'de');
@@ -968,5 +1020,22 @@ final class ApiAuthFlowTest extends WebTestCase
             'roles' => json_encode($roles, JSON_THROW_ON_ERROR),
             'email_verified' => $emailVerified ? 1 : 0,
         ]);
+    }
+
+    private function forceDeviceFlowExpiration(string $deviceCode): void
+    {
+        /** @var CacheItemPoolInterface $cache */
+        $cache = static::getContainer()->get('cache.app');
+        $item = $cache->getItem('auth_device_flows');
+        $flows = $item->get();
+        if (!is_array($flows) || !isset($flows[$deviceCode]) || !is_array($flows[$deviceCode])) {
+            self::fail('Device flow not found in cache for expiration fixture.');
+        }
+
+        $flow = $flows[$deviceCode];
+        $flow['expires_at'] = time() - 1;
+        $flows[$deviceCode] = $flow;
+        $item->set($flows);
+        $cache->save($item);
     }
 }
