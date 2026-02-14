@@ -139,6 +139,18 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - création du `client_id` / `secret_key`
   - persistance dans la registry
 
+## Dix-neuvième lot (password reset handlers)
+
+- extraction des use cases `lost-password` en couche Application:
+  - `RequestPasswordResetHandler`
+  - `ResetPasswordHandler`
+- ajout des ports:
+  - `Application/Auth/Port/PasswordResetGateway`
+  - `Application/Auth/Port/PasswordPolicyGateway`
+- adapters infra:
+  - `Infrastructure/User/PasswordResetGateway`
+  - `Infrastructure/User/PasswordPolicyGateway`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants

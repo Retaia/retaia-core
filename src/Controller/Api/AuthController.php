@@ -2,6 +2,9 @@
 
 namespace App\Controller\Api;
 
+use App\Application\Auth\RequestPasswordResetHandler;
+use App\Application\Auth\ResetPasswordHandler;
+use App\Application\Auth\ResetPasswordResult;
 use App\Application\AuthClient\MintClientTokenHandler;
 use App\Application\AuthClient\MintClientTokenResult;
 use App\Application\AuthClient\CancelDeviceFlowHandler;
@@ -18,8 +21,6 @@ use App\Entity\User;
 use App\Feature\FeatureGovernanceService;
 use App\Observability\Repository\MetricEventRepository;
 use App\User\Service\EmailVerificationService;
-use App\User\Service\PasswordPolicy;
-use App\User\Service\PasswordResetService;
 use App\User\Service\TwoFactorService;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -36,11 +37,11 @@ final class AuthController
 {
     public function __construct(
         private Security $security,
-        private PasswordResetService $passwordResetService,
+        private RequestPasswordResetHandler $requestPasswordResetHandler,
+        private ResetPasswordHandler $resetPasswordHandler,
         private EmailVerificationService $emailVerificationService,
         private TwoFactorService $twoFactorService,
         private FeatureGovernanceService $featureGovernanceService,
-        private PasswordPolicy $passwordPolicy,
         private TranslatorInterface $translator,
         #[Autowire(service: 'limiter.lost_password_request')]
         private RateLimiterFactory $lostPasswordRequestLimiter,
@@ -309,10 +310,10 @@ final class AuthController
             );
         }
 
-        $token = $this->passwordResetService->requestReset($email);
+        $result = $this->requestPasswordResetHandler->handle($email);
         $response = ['accepted' => true];
-        if ($token !== null) {
-            $response['reset_token'] = $token;
+        if ($result->token() !== null) {
+            $response['reset_token'] = $result->token();
         }
 
         return new JsonResponse($response, Response::HTTP_ACCEPTED);
@@ -332,18 +333,18 @@ final class AuthController
             );
         }
 
-        $violations = $this->passwordPolicy->violations($newPassword);
-        if ($violations !== []) {
+        $result = $this->resetPasswordHandler->handle($token, $newPassword);
+        if ($result->status() === ResetPasswordResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
                 [
                     'code' => 'VALIDATION_FAILED',
-                    'message' => $violations[0],
+                    'message' => $result->violations()[0] ?? $this->translator->trans('auth.error.token_new_password_required'),
                 ],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
 
-        if (!$this->passwordResetService->resetPassword($token, $newPassword)) {
+        if ($result->status() === ResetPasswordResult::STATUS_INVALID_TOKEN) {
             return new JsonResponse(
                 ['code' => 'INVALID_TOKEN', 'message' => $this->translator->trans('auth.error.invalid_or_expired_token')],
                 Response::HTTP_BAD_REQUEST
