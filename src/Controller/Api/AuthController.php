@@ -10,6 +10,7 @@ use App\User\Service\EmailVerificationService;
 use App\User\Service\PasswordPolicy;
 use App\User\Service\PasswordResetService;
 use App\User\Service\TwoFactorService;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -38,6 +39,7 @@ final class AuthController
         private RateLimiterFactory $clientTokenMintLimiter,
         private AuthClientService $authClientService,
         private MetricEventRepository $metrics,
+        private LoggerInterface $logger,
     ) {
     }
 
@@ -479,6 +481,11 @@ final class AuthController
             );
         }
 
+        $this->logger->info('auth.client.token.minted', [
+            'client_id' => $clientId,
+            'client_kind' => $clientKind,
+        ]);
+
         return new JsonResponse($token, Response::HTTP_OK);
     }
 
@@ -514,6 +521,10 @@ final class AuthController
         }
 
         $this->authClientService->revokeToken($clientId);
+        $this->logger->info('auth.client.token.revoked', [
+            'client_id' => $clientId,
+            'client_kind' => $this->authClientService->clientKind($clientId),
+        ]);
 
         return new JsonResponse(['revoked' => true, 'client_id' => $clientId], Response::HTTP_OK);
     }
@@ -542,6 +553,11 @@ final class AuthController
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
+
+        $this->logger->info('auth.client.secret.rotated', [
+            'client_id' => $clientId,
+            'client_kind' => $this->authClientService->clientKind($clientId),
+        ]);
 
         return new JsonResponse(
             [
@@ -620,6 +636,12 @@ final class AuthController
         $flowStatus = strtoupper((string) ($status['status'] ?? ''));
         if (in_array($flowStatus, ['PENDING', 'APPROVED', 'DENIED', 'EXPIRED'], true)) {
             $this->metrics->record(sprintf('auth.device.poll.status.%s', $flowStatus));
+            if ($flowStatus === 'APPROVED') {
+                $this->logger->info('auth.device.approved');
+            }
+            if ($flowStatus === 'DENIED') {
+                $this->logger->warning('auth.device.denied');
+            }
         }
 
         return new JsonResponse($status, Response::HTTP_OK);

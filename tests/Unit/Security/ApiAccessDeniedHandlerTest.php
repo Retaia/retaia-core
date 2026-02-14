@@ -4,6 +4,7 @@ namespace App\Tests\Unit\Security;
 
 use App\Security\ApiAccessDeniedHandler;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Security\Core\Exception\AccessDeniedException;
@@ -14,7 +15,7 @@ final class ApiAccessDeniedHandlerTest extends TestCase
     public function testHandleReturnsNullOutsideApiRoutes(): void
     {
         $translator = $this->createStub(TranslatorInterface::class);
-        $handler = new ApiAccessDeniedHandler($translator);
+        $handler = new ApiAccessDeniedHandler($translator, new NullLogger());
 
         $response = $handler->handle(Request::create('/health'), new AccessDeniedException());
 
@@ -26,7 +27,7 @@ final class ApiAccessDeniedHandlerTest extends TestCase
         $translator = $this->createStub(TranslatorInterface::class);
         $translator->method('trans')->with('auth.error.forbidden_scope')->willReturn('forbidden');
 
-        $handler = new ApiAccessDeniedHandler($translator);
+        $handler = new ApiAccessDeniedHandler($translator, new NullLogger());
         $response = $handler->handle(Request::create('/api/v1/assets'), new AccessDeniedException());
 
         self::assertNotNull($response);
