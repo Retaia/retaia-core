@@ -6,6 +6,7 @@ final class AuthClientDeviceFlowService
 {
     public function __construct(
         private AuthClientStateStore $stateStore,
+        private AuthClientProvisioningService $provisioningService,
     ) {
     }
 
@@ -166,22 +167,14 @@ final class AuthClientDeviceFlowService
         }
 
         $clientKind = (string) ($matchedFlow['client_kind'] ?? '');
-        if (!in_array($clientKind, ['AGENT', 'MCP'], true)) {
+        $credentials = $this->provisioningService->provisionClient($clientKind);
+        if ($credentials === null) {
             return null;
         }
 
-        $clientId = strtolower($clientKind).'-'.bin2hex(random_bytes(6));
-        $secretKey = bin2hex(random_bytes(24));
-        $registry = $this->stateStore->registry();
-        $registry[$clientId] = [
-            'client_kind' => $clientKind,
-            'secret_key' => $secretKey,
-        ];
-        $this->stateStore->saveRegistry($registry);
-
         $matchedFlow['status'] = 'APPROVED';
-        $matchedFlow['approved_client_id'] = $clientId;
-        $matchedFlow['approved_secret_key'] = $secretKey;
+        $matchedFlow['approved_client_id'] = $credentials['client_id'];
+        $matchedFlow['approved_secret_key'] = $credentials['secret_key'];
         $flows[$matchedKey] = $matchedFlow;
         $this->stateStore->saveDeviceFlows($flows);
 
