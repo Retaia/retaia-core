@@ -101,6 +101,15 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - tokens actifs
   - device flows
 
+## Treizième lot (device flow service)
+
+- extraction de la logique `device flow` dans `Auth/AuthClientDeviceFlowService`
+- `Auth/AuthClientService` devient façade de compatibilité pour:
+  - `startDeviceFlow`
+  - `pollDeviceFlow`
+  - `cancelDeviceFlow`
+  - `approveDeviceFlow`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
