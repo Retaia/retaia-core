@@ -7,11 +7,13 @@ use App\Entity\Asset;
 use App\Tests\Support\InMemoryUserRepository;
 use App\Tests\Support\InMemoryPasswordResetTokenRepository;
 use App\Tests\Support\TestUserPasswordHasher;
+use App\Feature\FeatureGovernanceService;
 use App\User\Service\AuthService;
 use App\User\Service\EmailVerificationService;
 use App\User\Service\PasswordResetService;
 use Behat\Behat\Context\Context;
 use Psr\Log\NullLogger;
+use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use PHPUnit\Framework\Assert;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -34,6 +36,8 @@ final class FeatureContext implements Context
     private ?string $lastVerificationToken = null;
     private ?Asset $asset = null;
     private bool $lastTransitionSucceeded = false;
+    /** @var array<string, array<int, string>>|null */
+    private ?array $lastFeaturePayloadValidation = null;
     /** @var array<string, bool> */
     private array $pendingJobs = [];
     /** @var array<string, string> */
@@ -284,5 +288,47 @@ final class FeatureContext implements Context
     {
         $successfulClaims = array_values(array_filter($this->claimResults, static fn (bool $result): bool => $result));
         Assert::assertCount(1, $successfulClaims);
+    }
+
+    /**
+     * @When I validate app feature payload with unknown key
+     */
+    public function iValidateAppFeaturePayloadWithUnknownKey(): void
+    {
+        $governance = new FeatureGovernanceService(new ArrayAdapter(), false, false, false);
+        $this->lastFeaturePayloadValidation = $governance->validateFeaturePayload(
+            ['features.unknown.flag' => true],
+            $governance->allowedAppFeatureKeys()
+        );
+    }
+
+    /**
+     * @When I validate app feature payload with non-boolean value
+     */
+    public function iValidateAppFeaturePayloadWithNonBooleanValue(): void
+    {
+        $governance = new FeatureGovernanceService(new ArrayAdapter(), false, false, false);
+        $this->lastFeaturePayloadValidation = $governance->validateFeaturePayload(
+            ['features.ai' => 'disabled'],
+            $governance->allowedAppFeatureKeys()
+        );
+    }
+
+    /**
+     * @Then unknown feature keys should contain :key
+     */
+    public function unknownFeatureKeysShouldContain(string $key): void
+    {
+        Assert::assertIsArray($this->lastFeaturePayloadValidation);
+        Assert::assertContains($key, $this->lastFeaturePayloadValidation['unknown_keys'] ?? []);
+    }
+
+    /**
+     * @Then non-boolean feature keys should contain :key
+     */
+    public function nonBooleanFeatureKeysShouldContain(string $key): void
+    {
+        Assert::assertIsArray($this->lastFeaturePayloadValidation);
+        Assert::assertContains($key, $this->lastFeaturePayloadValidation['non_boolean_keys'] ?? []);
     }
 }
