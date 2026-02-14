@@ -2,6 +2,9 @@
 
 namespace App\Controller\Api;
 
+use App\Entity\User;
+use App\Feature\FeatureGovernanceService;
+use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -17,6 +20,8 @@ final class AppController
      * @param array<int, string> $acceptedFeatureFlagsContractVersions
      */
     public function __construct(
+        private Security $security,
+        private FeatureGovernanceService $featureGovernanceService,
         private TranslatorInterface $translator,
         private bool $featureSuggestTagsEnabled,
         private bool $featureSuggestedTagsFiltersEnabled,
@@ -75,6 +80,71 @@ final class AppController
         );
     }
 
+    #[Route('/features', name: 'api_app_features_get', methods: ['GET'])]
+    public function features(): JsonResponse
+    {
+        $user = $this->security->getUser();
+        if (!$user instanceof User) {
+            return new JsonResponse(
+                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
+                Response::HTTP_UNAUTHORIZED
+            );
+        }
+        if (!$this->security->isGranted('ROLE_ADMIN')) {
+            return new JsonResponse(
+                ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
+                Response::HTTP_FORBIDDEN
+            );
+        }
+
+        return new JsonResponse(
+            [
+                'app_feature_enabled' => $this->featureGovernanceService->appFeatureEnabled(),
+                'feature_governance' => $this->featureGovernanceService->featureGovernanceRules(),
+                'core_v1_global_features' => $this->featureGovernanceService->coreV1GlobalFeatures(),
+            ],
+            Response::HTTP_OK
+        );
+    }
+
+    #[Route('/features', name: 'api_app_features_patch', methods: ['PATCH'])]
+    public function patchFeatures(Request $request): JsonResponse
+    {
+        $user = $this->security->getUser();
+        if (!$user instanceof User) {
+            return new JsonResponse(
+                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
+                Response::HTTP_UNAUTHORIZED
+            );
+        }
+        if (!$this->security->isGranted('ROLE_ADMIN')) {
+            return new JsonResponse(
+                ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
+                Response::HTTP_FORBIDDEN
+            );
+        }
+
+        $payload = $this->payload($request);
+        $appFeatureEnabled = $payload['app_feature_enabled'] ?? null;
+        if (!is_array($appFeatureEnabled)) {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.invalid_app_feature_payload')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        $this->featureGovernanceService->setAppFeatureEnabled($appFeatureEnabled);
+
+        return new JsonResponse(
+            [
+                'app_feature_enabled' => $this->featureGovernanceService->appFeatureEnabled(),
+                'feature_governance' => $this->featureGovernanceService->featureGovernanceRules(),
+                'core_v1_global_features' => $this->featureGovernanceService->coreV1GlobalFeatures(),
+            ],
+            Response::HTTP_OK
+        );
+    }
+
     /**
      * @return array<int, string>
      */
@@ -93,5 +163,19 @@ final class AppController
         }
 
         return array_values(array_unique($acceptedVersions));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function payload(Request $request): array
+    {
+        if ($request->getContent() === '') {
+            return [];
+        }
+
+        $decoded = json_decode($request->getContent(), true);
+
+        return is_array($decoded) ? $decoded : [];
     }
 }
