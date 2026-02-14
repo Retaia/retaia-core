@@ -2,6 +2,8 @@
 
 namespace App\Controller\Api;
 
+use App\Application\AuthClient\MintClientTokenHandler;
+use App\Application\AuthClient\MintClientTokenResult;
 use App\Auth\AuthClientService;
 use App\Entity\User;
 use App\Feature\FeatureGovernanceService;
@@ -38,6 +40,7 @@ final class AuthController
         #[Autowire(service: 'limiter.client_token_mint')]
         private RateLimiterFactory $clientTokenMintLimiter,
         private AuthClientService $authClientService,
+        private MintClientTokenHandler $mintClientTokenHandler,
         private MetricEventRepository $metrics,
         private LoggerInterface $logger,
     ) {
@@ -443,21 +446,6 @@ final class AuthController
             );
         }
 
-        if ($clientKind === 'UI_RUST') {
-            $this->metrics->record('auth.client.token.forbidden_actor.ui_rust');
-
-            return new JsonResponse(
-                ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
-                Response::HTTP_FORBIDDEN
-            );
-        }
-        if ($clientKind === 'MCP' && $this->authClientService->isMcpDisabledByAppPolicy()) {
-            return new JsonResponse(
-                ['code' => 'FORBIDDEN_SCOPE', 'message' => $this->translator->trans('auth.error.forbidden_scope')],
-                Response::HTTP_FORBIDDEN
-            );
-        }
-
         $limiterKey = hash('sha256', mb_strtolower($clientId).'|'.$clientKind.'|'.(string) ($request->getClientIp() ?? 'unknown'));
         $limit = $this->clientTokenMintLimiter->create($limiterKey)->consume(1);
         if (!$limit->isAccepted()) {
@@ -473,7 +461,28 @@ final class AuthController
             );
         }
 
-        $token = $this->authClientService->mintToken($clientId, $clientKind, $secretKey);
+        $result = $this->mintClientTokenHandler->handle($clientId, $clientKind, $secretKey);
+        if ($result->status() === MintClientTokenResult::STATUS_FORBIDDEN_ACTOR) {
+            $this->metrics->record('auth.client.token.forbidden_actor.ui_rust');
+
+            return new JsonResponse(
+                ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
+                Response::HTTP_FORBIDDEN
+            );
+        }
+        if ($result->status() === MintClientTokenResult::STATUS_FORBIDDEN_SCOPE) {
+            return new JsonResponse(
+                ['code' => 'FORBIDDEN_SCOPE', 'message' => $this->translator->trans('auth.error.forbidden_scope')],
+                Response::HTTP_FORBIDDEN
+            );
+        }
+        if ($result->status() === MintClientTokenResult::STATUS_UNAUTHORIZED) {
+            return new JsonResponse(
+                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.invalid_client_credentials')],
+                Response::HTTP_UNAUTHORIZED
+            );
+        }
+        $token = $result->token();
         if (!is_array($token)) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.invalid_client_credentials')],

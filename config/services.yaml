@@ -36,6 +36,7 @@ services:
     App\User\Repository\UserRepositoryInterface: '@App\User\Repository\UserRepository'
     App\User\Repository\PasswordResetTokenRepositoryInterface: '@App\User\Repository\PasswordResetTokenRepository'
     App\Asset\Repository\AssetRepositoryInterface: '@App\Asset\Repository\AssetRepository'
+    App\Application\AuthClient\Port\AuthClientGateway: '@App\Infrastructure\Auth\AuthClientGateway'
     App\Ingest\Port\FilePollerInterface: '@App\Ingest\Service\FilesystemFilePoller'
     App\Ingest\Port\ScanStateStoreInterface: '@App\Ingest\Repository\ScanStateStore'
 
