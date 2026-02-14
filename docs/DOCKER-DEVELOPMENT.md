@@ -98,3 +98,33 @@ docker compose down
 rm -rf docker/db-data
 mkdir -p docker/db-data
 ```
+
+## API staging locale (tests clients)
+
+Stack isolée dédiée aux tests clients :
+
+```bash
+docker compose -f docker-compose.staging.yml up -d app-staging caddy-staging database-staging
+docker compose -f docker-compose.staging.yml exec app-staging php bin/console doctrine:migrations:migrate --no-interaction
+```
+
+Smoke test :
+
+```bash
+curl -H "Host: api-staging.retaia.test" http://localhost:18081/api/v1/health
+```
+
+Arrêt :
+
+```bash
+docker compose -f docker-compose.staging.yml down
+```
+
+Raccourcis Makefile équivalents :
+
+```bash
+make staging-up
+make staging-migrate
+make staging-health
+make staging-down
+```
