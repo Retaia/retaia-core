@@ -505,6 +505,16 @@ final class ApiAuthFlowTest extends WebTestCase
         $client->jsonRequest('POST', '/api/v1/auth/login', [
             'email' => 'admin@retaia.local',
             'password' => 'change-me',
+            'otp_code' => $otpCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/logout');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
         ]);
         self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
         $payload = json_decode($client->getResponse()->getContent(), true);
@@ -1134,6 +1144,93 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
         $payload = json_decode($client->getResponse()->getContent(), true);
         self::assertSame('STATE_CONFLICT', $payload['code'] ?? null);
+    }
+
+    public function testDeviceApprovalRequiresOtpWhenTwoFactorIsEnabled(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.723');
+        $email = sprintf('device-2fa-required-%s@retaia.local', bin2hex(random_bytes(4)));
+        $this->insertUser($email, 'change-me', ['ROLE_ADMIN'], true);
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => $email,
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/2fa/setup');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $setupPayload = json_decode($client->getResponse()->getContent(), true);
+        $secret = (string) ($setupPayload['secret'] ?? '');
+        $otpCode = $this->generateOtpCode($secret);
+
+        $client->jsonRequest('POST', '/api/v1/auth/2fa/enable', ['otp_code' => $otpCode]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/logout');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => $email,
+            'password' => 'change-me',
+            'otp_code' => $otpCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/start', [
+            'client_kind' => 'AGENT',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $startPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($startPayload);
+        $userCode = (string) ($startPayload['user_code'] ?? '');
+        self::assertNotSame('', $userCode);
+
+        $client->jsonRequest('POST', '/device', [
+            'user_code' => $userCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
+    }
+
+    public function testDeviceApprovalRejectsInvalidOtpWhenTwoFactorIsEnabled(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.724');
+        $email = sprintf('device-2fa-invalid-%s@retaia.local', bin2hex(random_bytes(4)));
+        $this->insertUser($email, 'change-me', ['ROLE_ADMIN'], true);
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => $email,
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/2fa/setup');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $setupPayload = json_decode($client->getResponse()->getContent(), true);
+        $secret = (string) ($setupPayload['secret'] ?? '');
+        $otpCode = $this->generateOtpCode($secret);
+
+        $client->jsonRequest('POST', '/api/v1/auth/2fa/enable', ['otp_code' => $otpCode]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/start', [
+            'client_kind' => 'AGENT',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $startPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($startPayload);
+        $userCode = (string) ($startPayload['user_code'] ?? '');
+        self::assertNotSame('', $userCode);
+
+        $client->jsonRequest('POST', '/device', [
+            'user_code' => $userCode,
+            'otp_code' => '000000',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('INVALID_2FA_CODE', $payload['code'] ?? null);
     }
 
     public function testDeviceFlowPollReturnsExpiredStatusWhenFlowExpired(): void
