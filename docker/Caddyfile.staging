@@ -1,0 +1,14 @@
+{
+	auto_https off
+}
+
+api-staging.retaia.test {
+	request_body {
+		max_size 10GB
+	}
+
+	root * /var/www/html/public
+	encode zstd gzip
+	php_fastcgi app-staging:9000
+	file_server
+}

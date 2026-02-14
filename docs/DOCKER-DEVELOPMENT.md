@@ -98,3 +98,24 @@ docker compose down
 rm -rf docker/db-data
 mkdir -p docker/db-data
 ```
+
+## API staging locale (tests clients)
+
+Stack isolée dédiée aux tests clients :
+
+```bash
+composer staging:up
+composer staging:migrate
+```
+
+Smoke test :
+
+```bash
+composer staging:health
+```
+
+Arrêt :
+
+```bash
+composer staging:down
+```
