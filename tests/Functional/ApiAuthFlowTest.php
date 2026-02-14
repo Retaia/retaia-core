@@ -791,7 +791,7 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $payload = json_decode($client->getResponse()->getContent(), true);
         self::assertIsArray($payload);
-        self::assertStringStartsWith('ct_', (string) ($payload['access_token'] ?? ''));
+        self::assertMatchesRegularExpression('/^[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+$/', (string) ($payload['access_token'] ?? ''));
         self::assertSame('Bearer', $payload['token_type'] ?? null);
     }
 
@@ -803,6 +803,21 @@ final class ApiAuthFlowTest extends WebTestCase
             'client_id' => 'agent-default',
             'client_kind' => 'UI_RUST',
             'secret_key' => 'agent-secret',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('FORBIDDEN_ACTOR', $payload['code'] ?? null);
+    }
+
+    public function testClientTokenMintRejectsUiRustClientKindWithUnknownClient(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.600');
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/token', [
+            'client_id' => 'unknown-client',
+            'client_kind' => 'UI_RUST',
+            'secret_key' => 'wrong-secret',
         ]);
 
         self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
