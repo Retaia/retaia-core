@@ -44,6 +44,9 @@ security:
         - { path: ^/api/v1/auth/verify-email/request$, roles: PUBLIC_ACCESS }
         - { path: ^/api/v1/auth/verify-email/confirm$, roles: PUBLIC_ACCESS }
         - { path: ^/api/v1/auth/clients/token$, roles: PUBLIC_ACCESS }
+        - { path: ^/api/v1/auth/clients/device/start$, roles: PUBLIC_ACCESS }
+        - { path: ^/api/v1/auth/clients/device/poll$, roles: PUBLIC_ACCESS }
+        - { path: ^/api/v1/auth/clients/device/cancel$, roles: PUBLIC_ACCESS }
         - { path: ^/api/v1/app/policy$, roles: IS_AUTHENTICATED_FULLY }
         - { path: ^/api/v1/app/features$, roles: ROLE_USER }
         - { path: ^/api/v1/auth/verify-email/admin-confirm$, roles: ROLE_USER }
