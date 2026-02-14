@@ -5,6 +5,7 @@ namespace App\Controller\Api;
 use App\Auth\AuthClientService;
 use App\Entity\User;
 use App\Feature\FeatureGovernanceService;
+use App\Observability\Repository\MetricEventRepository;
 use App\User\Service\EmailVerificationService;
 use App\User\Service\PasswordPolicy;
 use App\User\Service\PasswordResetService;
@@ -36,6 +37,7 @@ final class AuthController
         #[Autowire(service: 'limiter.client_token_mint')]
         private RateLimiterFactory $clientTokenMintLimiter,
         private AuthClientService $authClientService,
+        private MetricEventRepository $metrics,
     ) {
     }
 
@@ -440,6 +442,8 @@ final class AuthController
         }
 
         if ($clientKind === 'UI_RUST') {
+            $this->metrics->record('auth.client.token.forbidden_actor.ui_rust');
+
             return new JsonResponse(
                 ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
                 Response::HTTP_FORBIDDEN
@@ -592,6 +596,8 @@ final class AuthController
 
         $status = $this->authClientService->pollDeviceFlow($deviceCode);
         if (!is_array($status)) {
+            $this->metrics->record('auth.device.poll.invalid_device_code');
+
             return new JsonResponse(
                 ['code' => 'INVALID_DEVICE_CODE', 'message' => $this->translator->trans('auth.error.invalid_device_code')],
                 Response::HTTP_BAD_REQUEST
@@ -599,6 +605,8 @@ final class AuthController
         }
 
         if (array_key_exists('retry_in_seconds', $status)) {
+            $this->metrics->record('auth.device.poll.throttled');
+
             return new JsonResponse(
                 [
                     'code' => 'SLOW_DOWN',
@@ -607,6 +615,11 @@ final class AuthController
                 ],
                 Response::HTTP_TOO_MANY_REQUESTS
             );
+        }
+
+        $flowStatus = strtoupper((string) ($status['status'] ?? ''));
+        if (in_array($flowStatus, ['PENDING', 'APPROVED', 'DENIED', 'EXPIRED'], true)) {
+            $this->metrics->record(sprintf('auth.device.poll.status.%s', $flowStatus));
         }
 
         return new JsonResponse($status, Response::HTTP_OK);

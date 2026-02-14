@@ -978,6 +978,56 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('EXPIRED', $pollPayload['status'] ?? null);
     }
 
+    public function testDeviceFlowPollRecordsStatusMetrics(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.69');
+        $this->ensureMetricTable();
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/start', [
+            'client_kind' => 'AGENT',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $startPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($startPayload);
+        $deviceCode = (string) ($startPayload['device_code'] ?? '');
+        self::assertNotSame('', $deviceCode);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/poll', [
+            'device_code' => $deviceCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/cancel', [
+            'device_code' => $deviceCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $this->forceDeviceFlowLastPolledAt($deviceCode, 0);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/poll', [
+            'device_code' => $deviceCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/start', [
+            'client_kind' => 'AGENT',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $secondStartPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($secondStartPayload);
+        $expiringCode = (string) ($secondStartPayload['device_code'] ?? '');
+        self::assertNotSame('', $expiringCode);
+        $this->forceDeviceFlowExpiration($expiringCode);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/poll', [
+            'device_code' => $expiringCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        self::assertSame(1, $this->countMetricEvents('auth.device.poll.status.PENDING'));
+        self::assertSame(1, $this->countMetricEvents('auth.device.poll.status.DENIED'));
+        self::assertSame(1, $this->countMetricEvents('auth.device.poll.status.EXPIRED'));
+    }
+
     public function testDeviceFlowPollReturnsSlowDownWhenPolledTooFast(): void
     {
         $client = $this->createIsolatedClient('10.0.0.66');
@@ -1004,6 +1054,56 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertIsArray($payload);
         self::assertSame('SLOW_DOWN', $payload['code'] ?? null);
         self::assertGreaterThanOrEqual(1, (int) ($payload['retry_in_seconds'] ?? 0));
+    }
+
+    public function testDeviceFlowPollErrorMetricsAreRecorded(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.70');
+        $this->ensureMetricTable();
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/poll', [
+            'device_code' => 'invalid',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/start', [
+            'client_kind' => 'AGENT',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $startPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($startPayload);
+        $deviceCode = (string) ($startPayload['device_code'] ?? '');
+        self::assertNotSame('', $deviceCode);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/poll', [
+            'device_code' => $deviceCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/poll', [
+            'device_code' => $deviceCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_TOO_MANY_REQUESTS);
+
+        self::assertSame(1, $this->countMetricEvents('auth.device.poll.invalid_device_code'));
+        self::assertSame(1, $this->countMetricEvents('auth.device.poll.throttled'));
+    }
+
+    public function testClientTokenUiRustForbiddenMetricIsRecorded(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.71');
+        $this->ensureMetricTable();
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/token', [
+            'client_id' => 'agent-default',
+            'client_kind' => 'UI_RUST',
+            'secret_key' => 'agent-secret',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('FORBIDDEN_ACTOR', $payload['code'] ?? null);
+        self::assertSame(1, $this->countMetricEvents('auth.client.token.forbidden_actor.ui_rust'));
     }
 
     public function testUnsupportedLocaleFallsBackToEnglishAuthenticationRequiredMessage(): void
@@ -1222,6 +1322,23 @@ final class ApiAuthFlowTest extends WebTestCase
         $cache->save($item);
     }
 
+    private function forceDeviceFlowLastPolledAt(string $deviceCode, int $lastPolledAt): void
+    {
+        /** @var CacheItemPoolInterface $cache */
+        $cache = static::getContainer()->get('cache.app');
+        $item = $cache->getItem('auth_device_flows');
+        $flows = $item->get();
+        if (!is_array($flows) || !isset($flows[$deviceCode]) || !is_array($flows[$deviceCode])) {
+            self::fail('Device flow not found in cache for last_polled_at fixture.');
+        }
+
+        $flow = $flows[$deviceCode];
+        $flow['last_polled_at'] = $lastPolledAt;
+        $flows[$deviceCode] = $flow;
+        $item->set($flows);
+        $cache->save($item);
+    }
+
     private function generateOtpCode(string $secret): string
     {
         return TOTP::createFromSecret($secret)->now();
@@ -1230,5 +1347,31 @@ final class ApiAuthFlowTest extends WebTestCase
     private function generateOtpCodeAt(string $secret, int $timestamp): string
     {
         return TOTP::createFromSecret($secret)->at($timestamp);
+    }
+
+    private function countMetricEvents(string $metricKey): int
+    {
+        /** @var Connection $connection */
+        $connection = static::getContainer()->get(Connection::class);
+
+        return (int) $connection->fetchOne(
+            'SELECT COUNT(*) FROM ops_metric_event WHERE metric_key = :metricKey',
+            ['metricKey' => $metricKey]
+        );
+    }
+
+    private function ensureMetricTable(): void
+    {
+        /** @var Connection $connection */
+        $connection = static::getContainer()->get(Connection::class);
+        $connection->executeStatement(
+            'CREATE TABLE IF NOT EXISTS ops_metric_event (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                metric_key VARCHAR(128) NOT NULL,
+                created_at DATETIME NOT NULL
+            )'
+        );
+        $connection->executeStatement('CREATE INDEX IF NOT EXISTS idx_ops_metric_event_key ON ops_metric_event (metric_key)');
+        $connection->executeStatement('CREATE INDEX IF NOT EXISTS idx_ops_metric_event_created_at ON ops_metric_event (created_at)');
     }
 }
