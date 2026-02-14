@@ -6,6 +6,7 @@ use App\Entity\User;
 use App\User\Service\EmailVerificationService;
 use App\User\Service\PasswordPolicy;
 use App\User\Service\PasswordResetService;
+use App\User\Service\TwoFactorService;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -22,6 +23,7 @@ final class AuthController
         private Security $security,
         private PasswordResetService $passwordResetService,
         private EmailVerificationService $emailVerificationService,
+        private TwoFactorService $twoFactorService,
         private PasswordPolicy $passwordPolicy,
         private TranslatorInterface $translator,
         #[Autowire(service: 'limiter.lost_password_request')]
@@ -62,6 +64,29 @@ final class AuthController
             ],
             Response::HTTP_OK
         );
+    }
+
+    #[Route('/2fa/setup', name: 'api_auth_2fa_setup', methods: ['POST'])]
+    public function twoFactorSetup(): JsonResponse
+    {
+        $user = $this->security->getUser();
+        if (!$user instanceof User) {
+            return new JsonResponse(
+                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
+                Response::HTTP_UNAUTHORIZED
+            );
+        }
+
+        try {
+            $setup = $this->twoFactorService->setup($user->getId(), $user->getEmail());
+        } catch (\RuntimeException) {
+            return new JsonResponse(
+                ['code' => 'MFA_ALREADY_ENABLED', 'message' => $this->translator->trans('auth.error.mfa_already_enabled')],
+                Response::HTTP_CONFLICT
+            );
+        }
+
+        return new JsonResponse($setup, Response::HTTP_OK);
     }
 
     #[Route('/lost-password/request', name: 'api_auth_lost_password_request', methods: ['POST'])]

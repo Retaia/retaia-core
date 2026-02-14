@@ -433,6 +433,35 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('Authentification requise', $payload['message'] ?? null);
     }
 
+    public function testTwoFactorSetupRequiresAuthentication(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.50');
+
+        $client->jsonRequest('POST', '/api/v1/auth/2fa/setup');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
+    }
+
+    public function testTwoFactorSetupReturnsProvisioningMaterial(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.51');
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/2fa/setup');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        self::assertMatchesRegularExpression('/^[A-Z0-9]{20}$/', (string) ($payload['secret'] ?? ''));
+        self::assertStringStartsWith('otpauth://totp/', (string) ($payload['otpauth_uri'] ?? ''));
+    }
+
     public function testUnsupportedLocaleFallsBackToEnglishAuthenticationRequiredMessage(): void
     {
         $client = $this->createIsolatedClient('10.0.0.35', 'de');
