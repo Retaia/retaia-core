@@ -5,8 +5,8 @@ namespace App\Tests\Unit\Application\AuthClient;
 use App\Application\AuthClient\ApproveDeviceFlowHandler;
 use App\Application\AuthClient\CompleteDeviceApprovalHandler;
 use App\Application\AuthClient\CompleteDeviceApprovalResult;
-use App\Application\AuthClient\Port\AuthClientGateway;
 use App\Application\AuthClient\Port\DeviceApprovalSecondFactorGateway;
+use App\Application\AuthClient\Port\DeviceFlowGateway;
 use PHPUnit\Framework\TestCase;
 
 final class CompleteDeviceApprovalHandlerTest extends TestCase
@@ -62,7 +62,7 @@ final class CompleteDeviceApprovalHandlerTest extends TestCase
      */
     private function makeApproveHandler(?array $approveStatus): ApproveDeviceFlowHandler
     {
-        $gateway = new class ($approveStatus) implements AuthClientGateway {
+        $gateway = new class ($approveStatus) implements DeviceFlowGateway {
             /**
              * @param array{status: string}|null $approveStatus
              */
@@ -73,31 +73,6 @@ final class CompleteDeviceApprovalHandlerTest extends TestCase
             public function isMcpDisabledByAppPolicy(): bool
             {
                 return false;
-            }
-
-            public function mintToken(string $clientId, string $clientKind, string $secretKey): ?array
-            {
-                return null;
-            }
-
-            public function hasClient(string $clientId): bool
-            {
-                return false;
-            }
-
-            public function clientKind(string $clientId): ?string
-            {
-                return null;
-            }
-
-            public function revokeToken(string $clientId): bool
-            {
-                return false;
-            }
-
-            public function rotateSecret(string $clientId): ?string
-            {
-                return null;
             }
 
             public function startDeviceFlow(string $clientKind): array

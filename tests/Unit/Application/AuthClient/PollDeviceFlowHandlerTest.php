@@ -4,14 +4,14 @@ namespace App\Tests\Unit\Application\AuthClient;
 
 use App\Application\AuthClient\PollDeviceFlowHandler;
 use App\Application\AuthClient\PollDeviceFlowResult;
-use App\Application\AuthClient\Port\AuthClientGateway;
+use App\Application\AuthClient\Port\DeviceFlowGateway;
 use PHPUnit\Framework\TestCase;
 
 final class PollDeviceFlowHandlerTest extends TestCase
 {
     public function testReturnsInvalidDeviceCodeWhenFlowIsUnknown(): void
     {
-        $gateway = $this->createMock(AuthClientGateway::class);
+        $gateway = $this->createMock(DeviceFlowGateway::class);
         $gateway->expects(self::once())->method('pollDeviceFlow')->with('invalid')->willReturn(null);
 
         $handler = new PollDeviceFlowHandler($gateway);
@@ -22,7 +22,7 @@ final class PollDeviceFlowHandlerTest extends TestCase
 
     public function testReturnsThrottledWhenRetryFieldIsPresent(): void
     {
-        $gateway = $this->createMock(AuthClientGateway::class);
+        $gateway = $this->createMock(DeviceFlowGateway::class);
         $gateway->expects(self::once())->method('pollDeviceFlow')->with('dc_1')->willReturn([
             'status' => 'PENDING',
             'interval' => 5,
@@ -38,7 +38,7 @@ final class PollDeviceFlowHandlerTest extends TestCase
 
     public function testReturnsSuccessWithFlowStatusPayload(): void
     {
-        $gateway = $this->createMock(AuthClientGateway::class);
+        $gateway = $this->createMock(DeviceFlowGateway::class);
         $gateway->expects(self::once())->method('pollDeviceFlow')->with('dc_2')->willReturn([
             'status' => 'APPROVED',
             'client_id' => 'agent-default',

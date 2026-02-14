@@ -2,14 +2,14 @@
 
 namespace App\Application\AuthClient;
 
-use App\Application\AuthClient\Port\AuthClientGateway;
+use App\Application\AuthClient\Port\DeviceFlowGateway;
 use App\Domain\AuthClient\TechnicalClientTokenPolicy;
 
 final class StartDeviceFlowHandler
 {
     public function __construct(
         private TechnicalClientTokenPolicy $policy,
-        private AuthClientGateway $authClientGateway,
+        private DeviceFlowGateway $deviceFlowGateway,
     ) {
     }
 
@@ -23,11 +23,11 @@ final class StartDeviceFlowHandler
             return new StartDeviceFlowResult(StartDeviceFlowResult::STATUS_FORBIDDEN_ACTOR);
         }
 
-        if ($this->policy->isForbiddenScope($clientKind, $this->authClientGateway->isMcpDisabledByAppPolicy())) {
+        if ($this->policy->isForbiddenScope($clientKind, $this->deviceFlowGateway->isMcpDisabledByAppPolicy())) {
             return new StartDeviceFlowResult(StartDeviceFlowResult::STATUS_FORBIDDEN_SCOPE);
         }
 
-        $payload = $this->authClientGateway->startDeviceFlow($clientKind);
+        $payload = $this->deviceFlowGateway->startDeviceFlow($clientKind);
 
         return new StartDeviceFlowResult(StartDeviceFlowResult::STATUS_SUCCESS, $payload);
     }

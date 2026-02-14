@@ -2,18 +2,18 @@
 
 namespace App\Application\AuthClient;
 
-use App\Application\AuthClient\Port\AuthClientGateway;
+use App\Application\AuthClient\Port\DeviceFlowGateway;
 
 final class ApproveDeviceFlowHandler
 {
     public function __construct(
-        private AuthClientGateway $authClientGateway,
+        private DeviceFlowGateway $deviceFlowGateway,
     ) {
     }
 
     public function handle(string $userCode): ApproveDeviceFlowResult
     {
-        $status = $this->authClientGateway->approveDeviceFlow($userCode);
+        $status = $this->deviceFlowGateway->approveDeviceFlow($userCode);
         if (!is_array($status)) {
             return new ApproveDeviceFlowResult(ApproveDeviceFlowResult::STATUS_INVALID_DEVICE_CODE);
         }

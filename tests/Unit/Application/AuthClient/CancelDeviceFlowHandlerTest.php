@@ -4,14 +4,14 @@ namespace App\Tests\Unit\Application\AuthClient;
 
 use App\Application\AuthClient\CancelDeviceFlowHandler;
 use App\Application\AuthClient\CancelDeviceFlowResult;
-use App\Application\AuthClient\Port\AuthClientGateway;
+use App\Application\AuthClient\Port\DeviceFlowGateway;
 use PHPUnit\Framework\TestCase;
 
 final class CancelDeviceFlowHandlerTest extends TestCase
 {
     public function testReturnsInvalidDeviceCodeWhenUnknown(): void
     {
-        $gateway = $this->createMock(AuthClientGateway::class);
+        $gateway = $this->createMock(DeviceFlowGateway::class);
         $gateway->expects(self::once())->method('cancelDeviceFlow')->with('invalid')->willReturn(null);
 
         $handler = new CancelDeviceFlowHandler($gateway);
@@ -22,7 +22,7 @@ final class CancelDeviceFlowHandlerTest extends TestCase
 
     public function testReturnsExpiredDeviceCodeWhenFlowExpired(): void
     {
-        $gateway = $this->createMock(AuthClientGateway::class);
+        $gateway = $this->createMock(DeviceFlowGateway::class);
         $gateway->expects(self::once())->method('cancelDeviceFlow')->with('expired')->willReturn([
             'status' => 'EXPIRED',
         ]);
@@ -35,7 +35,7 @@ final class CancelDeviceFlowHandlerTest extends TestCase
 
     public function testReturnsSuccessWhenFlowIsCanceled(): void
     {
-        $gateway = $this->createMock(AuthClientGateway::class);
+        $gateway = $this->createMock(DeviceFlowGateway::class);
         $gateway->expects(self::once())->method('cancelDeviceFlow')->with('dc_1')->willReturn([
             'status' => 'DENIED',
         ]);

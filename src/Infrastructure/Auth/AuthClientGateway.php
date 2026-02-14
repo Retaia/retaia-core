@@ -3,9 +3,10 @@
 namespace App\Infrastructure\Auth;
 
 use App\Application\AuthClient\Port\AuthClientGateway as AuthClientGatewayPort;
+use App\Application\AuthClient\Port\DeviceFlowGateway as DeviceFlowGatewayPort;
 use App\Auth\AuthClientService;
 
-final class AuthClientGateway implements AuthClientGatewayPort
+final class AuthClientGateway implements AuthClientGatewayPort, DeviceFlowGatewayPort
 {
     public function __construct(
         private AuthClientService $authClientService,
