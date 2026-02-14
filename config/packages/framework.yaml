@@ -18,6 +18,10 @@ framework:
             policy: 'fixed_window'
             limit: '%env(int:APP_AUTH_VERIFY_EMAIL_LIMIT)%'
             interval: '%env(string:APP_AUTH_VERIFY_EMAIL_INTERVAL)%'
+        client_token_mint:
+            policy: 'fixed_window'
+            limit: '%env(int:APP_AUTH_CLIENT_TOKEN_LIMIT)%'
+            interval: '%env(string:APP_AUTH_CLIENT_TOKEN_INTERVAL)%'
 
     #esi: true
     #fragments: true
