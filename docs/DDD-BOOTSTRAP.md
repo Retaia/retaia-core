@@ -45,6 +45,13 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - Infrastructure adapter: `Infrastructure/Auth/AuthClientGateway`
   - Controller: `Controller/Api/AuthController` (mapping HTTP conservé)
 
+## Cinquième use case migré
+
+- `POST /api/v1/auth/clients/device/poll`
+  - Application: `Application/AuthClient/PollDeviceFlowHandler`
+  - Infrastructure adapter: `Infrastructure/Auth/AuthClientGateway`
+  - Controller: `Controller/Api/AuthController` (mapping HTTP conservé)
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants

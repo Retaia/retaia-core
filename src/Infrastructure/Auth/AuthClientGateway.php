@@ -49,4 +49,9 @@ final class AuthClientGateway implements AuthClientGatewayPort
     {
         return $this->authClientService->startDeviceFlow($clientKind);
     }
+
+    public function pollDeviceFlow(string $deviceCode): ?array
+    {
+        return $this->authClientService->pollDeviceFlow($deviceCode);
+    }
 }
