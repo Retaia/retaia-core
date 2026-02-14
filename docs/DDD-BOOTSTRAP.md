@@ -131,6 +131,14 @@ Poser un premier découpage DDD sans changer le contrat API v1.
 - extraction de la policy applicative `MCP gate` dans `Auth/AuthClientPolicyService`
 - les gateways `AuthClientAdminGateway` et `DeviceFlowGateway` dépendent de ce service policy dédié
 
+## Dix-septième lot (provisioning service)
+
+- extraction du provisioning de clients techniques dans `Auth/AuthClientProvisioningService`
+- `Auth/AuthClientDeviceFlowService` délègue désormais:
+  - validation des `client_kind` provisionnables
+  - création du `client_id` / `secret_key`
+  - persistance dans la registry
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
