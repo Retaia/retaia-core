@@ -44,4 +44,9 @@ final class AuthClientGateway implements AuthClientGatewayPort
     {
         return $this->authClientService->rotateSecret($clientId);
     }
+
+    public function startDeviceFlow(string $clientKind): array
+    {
+        return $this->authClientService->startDeviceFlow($clientKind);
+    }
 }

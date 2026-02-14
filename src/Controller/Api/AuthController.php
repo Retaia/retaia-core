@@ -8,6 +8,8 @@ use App\Application\AuthClient\RevokeClientTokenHandler;
 use App\Application\AuthClient\RevokeClientTokenResult;
 use App\Application\AuthClient\RotateClientSecretHandler;
 use App\Application\AuthClient\RotateClientSecretResult;
+use App\Application\AuthClient\StartDeviceFlowHandler;
+use App\Application\AuthClient\StartDeviceFlowResult;
 use App\Auth\AuthClientService;
 use App\Entity\User;
 use App\Feature\FeatureGovernanceService;
@@ -47,6 +49,7 @@ final class AuthController
         private MintClientTokenHandler $mintClientTokenHandler,
         private RevokeClientTokenHandler $revokeClientTokenHandler,
         private RotateClientSecretHandler $rotateClientSecretHandler,
+        private StartDeviceFlowHandler $startDeviceFlowHandler,
         private MetricEventRepository $metrics,
         private LoggerInterface $logger,
     ) {
@@ -597,20 +600,21 @@ final class AuthController
             );
         }
 
-        if (!in_array($clientKind, ['AGENT', 'MCP'], true)) {
+        $result = $this->startDeviceFlowHandler->handle($clientKind);
+        if ($result->status() === StartDeviceFlowResult::STATUS_FORBIDDEN_ACTOR) {
             return new JsonResponse(
                 ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
                 Response::HTTP_FORBIDDEN
             );
         }
-        if ($clientKind === 'MCP' && $this->authClientService->isMcpDisabledByAppPolicy()) {
+        if ($result->status() === StartDeviceFlowResult::STATUS_FORBIDDEN_SCOPE) {
             return new JsonResponse(
                 ['code' => 'FORBIDDEN_SCOPE', 'message' => $this->translator->trans('auth.error.forbidden_scope')],
                 Response::HTTP_FORBIDDEN
             );
         }
 
-        return new JsonResponse($this->authClientService->startDeviceFlow($clientKind), Response::HTTP_OK);
+        return new JsonResponse($result->payload(), Response::HTTP_OK);
     }
 
     #[Route('/clients/device/poll', name: 'api_auth_clients_device_poll', methods: ['POST'])]

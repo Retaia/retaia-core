@@ -18,4 +18,9 @@ interface AuthClientGateway
     public function revokeToken(string $clientId): bool;
 
     public function rotateSecret(string $clientId): ?string;
+
+    /**
+     * @return array{device_code: string, user_code: string, verification_uri: string, verification_uri_complete: string, expires_in: int, interval: int}
+     */
+    public function startDeviceFlow(string $clientKind): array;
 }
