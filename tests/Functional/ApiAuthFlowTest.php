@@ -810,6 +810,21 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('FORBIDDEN_ACTOR', $payload['code'] ?? null);
     }
 
+    public function testClientTokenMintRejectsUiRustClientKindWithUnknownClient(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.600');
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/token', [
+            'client_id' => 'unknown-client',
+            'client_kind' => 'UI_RUST',
+            'secret_key' => 'wrong-secret',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('FORBIDDEN_ACTOR', $payload['code'] ?? null);
+    }
+
     public function testClientTokenMintRejectsInvalidCredentials(): void
     {
         $client = $this->createIsolatedClient('10.0.0.61');
