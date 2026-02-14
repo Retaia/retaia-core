@@ -383,8 +383,24 @@ final class ApiAuthFlowTest extends WebTestCase
         $token = $requestPayload['verification_token'] ?? null;
         self::assertIsString($token);
 
-        [$payloadPart, $signaturePart] = explode('.', $token, 2);
-        $tamperedToken = ('X'.substr($payloadPart, 1)).'.'.$signaturePart;
+        $parts = parse_url($token);
+        self::assertIsArray($parts);
+        $query = $parts['query'] ?? '';
+        self::assertIsString($query);
+
+        parse_str($query, $params);
+        self::assertIsArray($params);
+        self::assertIsString($params['signature'] ?? null);
+        $params['signature'] = 'X'.substr((string) $params['signature'], 1);
+
+        $path = (string) ($parts['path'] ?? '/');
+        $base = sprintf(
+            '%s://%s%s',
+            (string) ($parts['scheme'] ?? 'http'),
+            (string) ($parts['host'] ?? 'localhost'),
+            $path
+        );
+        $tamperedToken = $base.'?'.http_build_query($params);
 
         $client->jsonRequest('POST', '/api/v1/auth/verify-email/confirm', [
             'token' => $tamperedToken,

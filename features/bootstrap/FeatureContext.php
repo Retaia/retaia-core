@@ -19,6 +19,9 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Session\Session;
 use Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage;
+use SymfonyCasts\Bundle\VerifyEmail\Exception\InvalidSignatureException;
+use SymfonyCasts\Bundle\VerifyEmail\Model\VerifyEmailSignatureComponents;
+use SymfonyCasts\Bundle\VerifyEmail\VerifyEmailHelperInterface;
 
 final class FeatureContext implements Context
 {
@@ -73,10 +76,62 @@ final class FeatureContext implements Context
         $this->emailVerificationService = new EmailVerificationService(
             $this->users,
             new NullLogger(),
+            $this->buildVerifyEmailHelper(3600),
             'test',
-            'behat-secret',
-            3600,
         );
+    }
+
+    private function buildVerifyEmailHelper(int $lifetimeSeconds): VerifyEmailHelperInterface
+    {
+        return new class($lifetimeSeconds) implements VerifyEmailHelperInterface {
+            public function __construct(private int $lifetimeSeconds)
+            {
+            }
+
+            public function generateSignature(string $routeName, string $userId, string $userEmail, array $extraParams = []): VerifyEmailSignatureComponents
+            {
+                $expires = time() + $this->lifetimeSeconds;
+                $normalizedEmail = mb_strtolower(trim($userEmail));
+                $signature = hash('sha256', $userId.'|'.$normalizedEmail.'|'.$expires);
+                $id = (string) ($extraParams['id'] ?? $userId);
+                $url = sprintf(
+                    'http://localhost/api/v1/auth/verify-email/confirm?id=%s&expires=%d&signature=%s&email=%s',
+                    rawurlencode($id),
+                    $expires,
+                    rawurlencode($signature),
+                    rawurlencode($normalizedEmail)
+                );
+
+                return new VerifyEmailSignatureComponents(
+                    (new \DateTimeImmutable())->setTimestamp($expires),
+                    $url,
+                    time()
+                );
+            }
+
+            public function validateEmailConfirmation(string $signedUrl, string $userId, string $userEmail): void
+            {
+                $parts = parse_url($signedUrl);
+                $query = is_array($parts) ? (string) ($parts['query'] ?? '') : '';
+                parse_str($query, $params);
+
+                $id = (string) ($params['id'] ?? '');
+                $expires = (int) ($params['expires'] ?? 0);
+                $signature = (string) ($params['signature'] ?? '');
+                $email = mb_strtolower((string) ($params['email'] ?? ''));
+                $normalizedEmail = mb_strtolower(trim($userEmail));
+                $expected = hash('sha256', $userId.'|'.$normalizedEmail.'|'.$expires);
+
+                if ($id !== $userId || $email !== $normalizedEmail || $expires < time() || !hash_equals($expected, $signature)) {
+                    throw new InvalidSignatureException();
+                }
+            }
+
+            public function validateEmailConfirmationFromRequest(Request $request, string $userId, string $userEmail): void
+            {
+                $this->validateEmailConfirmation($request->getUri(), $userId, $userEmail);
+            }
+        };
     }
 
     /**
