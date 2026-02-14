@@ -2,6 +2,7 @@
 
 namespace App\User\Service;
 
+use OTPHP\TOTP;
 use Psr\Cache\CacheItemPoolInterface;
 
 final class TwoFactorService
@@ -35,19 +36,18 @@ final class TwoFactorService
             throw new \RuntimeException('MFA_ALREADY_ENABLED');
         }
 
-        $secret = strtoupper(bin2hex(random_bytes(10)));
+        $totp = TOTP::generate();
+        $totp->setLabel($email);
+        $totp->setIssuer('Retaia');
+        $totp->setIssuerIncludedAsParameter(true);
+
+        $secret = $totp->getSecret();
         $state['pending_secret'] = $secret;
         $this->saveState($userId, $state);
 
         return [
             'secret' => $secret,
-            'otpauth_uri' => sprintf(
-                'otpauth://totp/%s:%s?secret=%s&issuer=%s',
-                rawurlencode('Retaia'),
-                rawurlencode($email),
-                $secret,
-                rawurlencode('Retaia')
-            ),
+            'otpauth_uri' => $totp->getProvisioningUri(),
         ];
     }
 
@@ -133,11 +133,14 @@ final class TwoFactorService
 
     private function isValidOtp(string $secret, string $otpCode): bool
     {
-        return hash_equals($this->expectedOtp($secret), trim($otpCode));
-    }
+        $code = trim($otpCode);
+        if ($code === '') {
+            return false;
+        }
 
-    private function expectedOtp(string $secret): string
-    {
-        return substr($secret, -6);
+        $totp = TOTP::createFromSecret($secret);
+
+        // Accept +/- 1 time-step (30s) to tolerate small clock drift between client and server.
+        return $totp->verify($code, null, 29);
     }
 }
