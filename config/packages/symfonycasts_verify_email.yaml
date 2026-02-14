@@ -1,0 +1,2 @@
+symfonycasts_verify_email:
+    lifetime: '%app.email_verification_ttl_seconds%'

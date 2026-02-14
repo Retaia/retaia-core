@@ -5,18 +5,18 @@ namespace App\User\Service;
 use App\User\Repository\UserRepositoryInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\HttpFoundation\Request;
+use SymfonyCasts\Bundle\VerifyEmail\Exception\VerifyEmailExceptionInterface;
+use SymfonyCasts\Bundle\VerifyEmail\VerifyEmailHelperInterface;
 
 final class EmailVerificationService
 {
     public function __construct(
         private UserRepositoryInterface $users,
         private LoggerInterface $logger,
+        private VerifyEmailHelperInterface $verifyEmailHelper,
         #[Autowire('%kernel.environment%')]
         private string $environment,
-        #[Autowire('%app.email_verification.secret%')]
-        private string $secret,
-        #[Autowire('%app.email_verification_ttl_seconds%')]
-        private int $tokenTtlSeconds,
     ) {
     }
 
@@ -42,11 +42,10 @@ final class EmailVerificationService
             return null;
         }
 
-        $token = $this->createToken($user->getId());
+        $token = $this->createToken($user->getId(), $email);
         $this->logger->info('auth.email_verification.request.accepted', [
             'user_id' => $user->getId(),
             'email_hash' => $emailHash,
-            'ttl_seconds' => $this->tokenTtlSeconds,
             'token_exposed' => $this->environment !== 'prod',
         ]);
 
@@ -59,7 +58,7 @@ final class EmailVerificationService
 
     public function confirmVerification(string $token): bool
     {
-        $userId = $this->validateToken($token);
+        $userId = $this->extractUserIdFromToken($token);
         if ($userId === null || $userId === '') {
             $this->logger->info('auth.email_verification.confirm.failed', [
                 'reason' => 'invalid_or_expired_token',
@@ -79,6 +78,15 @@ final class EmailVerificationService
         }
 
         $alreadyVerified = $user->isEmailVerified();
+        if (!$this->isTokenValidForUser($token, $user->getId(), $user->getEmail())) {
+            $this->logger->info('auth.email_verification.confirm.failed', [
+                'reason' => 'invalid_or_expired_token',
+                'user_id' => $userId,
+            ]);
+
+            return false;
+        }
+
         if (!$alreadyVerified) {
             $this->users->save($user->withEmailVerified(true));
         }
@@ -118,69 +126,44 @@ final class EmailVerificationService
         return true;
     }
 
-    private function createToken(string $userId): string
+    private function createToken(string $userId, string $userEmail): string
     {
-        $payload = json_encode([
-            'uid' => $userId,
-            'exp' => (new \DateTimeImmutable(sprintf('+%d seconds', $this->tokenTtlSeconds)))->getTimestamp(),
-        ], JSON_THROW_ON_ERROR);
-        $encodedPayload = $this->base64UrlEncode($payload);
-        $signature = hash_hmac('sha256', $encodedPayload, $this->secret);
+        $signatureComponents = $this->verifyEmailHelper->generateSignature(
+            'api_auth_verify_email_confirm',
+            $userId,
+            mb_strtolower(trim($userEmail)),
+            ['id' => $userId]
+        );
 
-        return $encodedPayload.'.'.$signature;
+        return $signatureComponents->getSignedUrl();
     }
 
-    private function validateToken(string $token): ?string
+    private function extractUserIdFromToken(string $token): ?string
     {
-        $parts = explode('.', $token, 2);
-        if (\count($parts) !== 2) {
+        $query = parse_url($token, PHP_URL_QUERY);
+        if (!is_string($query) || $query === '') {
             return null;
         }
 
-        [$encodedPayload, $signature] = $parts;
-        $expectedSignature = hash_hmac('sha256', $encodedPayload, $this->secret);
-        if (!hash_equals($expectedSignature, $signature)) {
-            return null;
-        }
+        parse_str($query, $params);
+        $userId = $params['id'] ?? null;
 
+        return is_string($userId) && $userId !== '' ? $userId : null;
+    }
+
+    private function isTokenValidForUser(string $token, string $userId, string $userEmail): bool
+    {
         try {
-            $payload = json_decode($this->base64UrlDecode($encodedPayload), true, flags: JSON_THROW_ON_ERROR);
-        } catch (\JsonException) {
-            return null;
+            $request = Request::create($token, 'GET');
+            $this->verifyEmailHelper->validateEmailConfirmationFromRequest(
+                $request,
+                $userId,
+                mb_strtolower(trim($userEmail))
+            );
+        } catch (VerifyEmailExceptionInterface) {
+            return false;
         }
 
-        if (!is_array($payload)) {
-            return null;
-        }
-
-        $userId = $payload['uid'] ?? null;
-        $expiresAt = $payload['exp'] ?? null;
-
-        if (!is_string($userId) || $userId === '' || !is_int($expiresAt)) {
-            return null;
-        }
-
-        if ($expiresAt < (new \DateTimeImmutable())->getTimestamp()) {
-            return null;
-        }
-
-        return $userId;
-    }
-
-    private function base64UrlEncode(string $raw): string
-    {
-        return rtrim(strtr(base64_encode($raw), '+/', '-_'), '=');
-    }
-
-    private function base64UrlDecode(string $encoded): string
-    {
-        $remainder = \strlen($encoded) % 4;
-        if ($remainder > 0) {
-            $encoded .= str_repeat('=', 4 - $remainder);
-        }
-
-        $decoded = base64_decode(strtr($encoded, '-_', '+/'), true);
-
-        return $decoded === false ? '' : $decoded;
+        return true;
     }
 }
