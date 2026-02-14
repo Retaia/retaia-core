@@ -225,12 +225,27 @@ final class AuthController
             if (!is_string($featureKey)) {
                 continue;
             }
-            if (in_array($featureKey, $this->featureGovernanceService->coreV1GlobalFeatures(), true) && (bool) $enabled === false) {
+            if (in_array($featureKey, $this->featureGovernanceService->coreV1GlobalFeatures(), true)) {
                 return new JsonResponse(
                     ['code' => 'FORBIDDEN_SCOPE', 'message' => $this->translator->trans('auth.error.forbidden_scope')],
                     Response::HTTP_FORBIDDEN
                 );
             }
+        }
+
+        $validation = $this->featureGovernanceService->validateFeaturePayload(
+            $rawUserFeatures,
+            $this->featureGovernanceService->allowedUserFeatureKeys()
+        );
+        if ($validation['unknown_keys'] !== [] || $validation['non_boolean_keys'] !== []) {
+            return new JsonResponse(
+                [
+                    'code' => 'VALIDATION_FAILED',
+                    'message' => $this->translator->trans('auth.error.invalid_user_feature_payload'),
+                    'details' => $validation,
+                ],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
         }
 
         $this->featureGovernanceService->setUserFeatureEnabled($user->getId(), $rawUserFeatures);
