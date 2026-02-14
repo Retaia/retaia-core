@@ -16,6 +16,7 @@ auth:
     forbidden_scope: "Insufficient scope"
     forbidden_actor: "Actor not allowed"
     unsupported_feature_flags_contract_version: "Unsupported feature-flags contract version"
+    mfa_already_enabled: "2FA is already enabled"
 asset:
   error:
     not_found: "Asset not found"
