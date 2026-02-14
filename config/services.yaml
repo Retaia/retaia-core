@@ -58,6 +58,12 @@ services:
         bind:
             bool $featureSuggestTagsEnabled: '%app.features.ai.suggest_tags%'
 
+    App\Feature\FeatureGovernanceService:
+        bind:
+            bool $featureSuggestTagsEnabled: '%app.features.ai.suggest_tags%'
+            bool $featureSuggestedTagsFiltersEnabled: '%app.features.ai.suggested_tags_filters%'
+            bool $featureDecisionsBulkEnabled: '%app.features.decisions.bulk%'
+
     App\Controller\Api\AppController:
         bind:
             bool $featureSuggestTagsEnabled: '%app.features.ai.suggest_tags%'
