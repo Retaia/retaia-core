@@ -67,6 +67,9 @@
         "check:i18n": "php scripts/check-translation-keys.php",
         "check:coverage": "php scripts/check-coverage-threshold.php var/coverage/clover.xml 80",
         "check:openapi": "php scripts/check-openapi-routes.php",
+        "check:contracts": "php scripts/contracts-check.php",
+        "check:openapi-docs-coherence": "php scripts/check-openapi-docs-coherence.php",
+        "contracts:refresh": "php scripts/contracts-refresh.php",
         "test:unit": "vendor/bin/phpunit",
         "test:coverage": "bash scripts/run-coverage.sh",
         "test:behat": "vendor/bin/behat",
@@ -82,6 +85,8 @@
         "release:check": [
             "@check:i18n",
             "@check:openapi",
+            "@check:contracts",
+            "@check:openapi-docs-coherence",
             "php bin/console lint:yaml config",
             "php bin/console lint:container",
             "@test:quality",
