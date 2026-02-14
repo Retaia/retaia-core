@@ -94,6 +94,32 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
 - Le move outbox gère les collisions massives de nom sans écrasement (suffixes déterministes par asset).
 - Changer les secrets et mots de passe par défaut avant tout usage réel.
 
+## Changelog runtime v1 (normalisation HTTP)
+
+Contexte:
+
+- source normative: `specs/change-management/HTTP-STATUS-IMPLEMENTATION-TICKETS.md`
+- ticket Core: `TICKET-CORE-HTTP-001`
+
+Changements actés côté Core:
+
+- `POST /api/v1/auth/clients/device/poll`:
+  - les états métier device flow (`PENDING`, `APPROVED`, `DENIED`, `EXPIRED`) sont pilotés via `200` + `status`
+  - les anciens signaux `401 AUTHORIZATION_PENDING` et `403 ACCESS_DENIED` ne sont plus utilisés pour ce pilotage
+- `POST /api/v1/auth/clients/token`:
+  - `client_kind=UI_RUST` est refusé en `403 FORBIDDEN_ACTOR` (et non `422`)
+
+Impact migration client:
+
+- les clients techniques (Agent/MCP/UI Rust) doivent piloter la machine de poll device depuis le payload de `200` (`status`)
+- les clients ne doivent plus brancher la logique de poll sur des `401/403` legacy
+- les erreurs HTTP hors état métier restent inchangées (`400`, `422`, `429`)
+
+Rollback/compatibilité:
+
+- cette normalisation est la cible v1 runtime gelée
+- aucun mode legacy n'est maintenu côté Core avant publication v1
+
 ## Paramètres configurables
 
 - `app.password_reset_ttl_seconds` (défaut: `3600`)
