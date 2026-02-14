@@ -66,6 +66,11 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - Infrastructure adapter: `Infrastructure/Auth/AuthClientGateway`
   - Controller: `Controller/DeviceController` (mapping HTTP conservé)
 
+## Huitième lot (cleanup)
+
+- `Controller/Api/AuthController` n'injecte plus `AuthClientService`
+  - tous les use cases `auth/clients` sont désormais pilotés via handlers applicatifs dédiés
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
