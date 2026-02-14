@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: test test-unit test-behat qa ci-local
+.PHONY: test test-unit test-behat qa ci-local contracts-refresh contracts-check
 
 test:
 	composer test
@@ -16,7 +16,15 @@ qa:
 	composer validate --strict --no-check-publish
 	php bin/console lint:yaml config
 	php bin/console lint:container
+	composer check:contracts
+	composer check:openapi-docs-coherence
 	composer test
 
 ci-local: qa
 	composer audit --no-interaction
+
+contracts-refresh:
+	composer contracts:refresh
+
+contracts-check:
+	composer check:contracts

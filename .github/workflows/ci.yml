@@ -65,6 +65,12 @@ jobs:
       - name: Check OpenAPI routes coverage
         run: php scripts/check-openapi-routes.php
 
+      - name: Check OpenAPI contract snapshot drift
+        run: php scripts/contracts-check.php
+
+      - name: Check OpenAPI/API-CONTRACTS coherence
+        run: php scripts/check-openapi-docs-coherence.php
+
   test:
     runs-on: ubuntu-latest
     needs: lint
