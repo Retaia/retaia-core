@@ -33,4 +33,9 @@ interface AuthClientGateway
      * @return array{status: string}|null
      */
     public function cancelDeviceFlow(string $deviceCode): ?array;
+
+    /**
+     * @return array{status: string}|null
+     */
+    public function approveDeviceFlow(string $userCode): ?array;
 }

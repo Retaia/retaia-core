@@ -1084,6 +1084,58 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('INVALID_DEVICE_CODE', $secondPoll['code'] ?? null);
     }
 
+    public function testDeviceApprovalRejectsInvalidUserCode(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.721');
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/device', [
+            'user_code' => 'INVALID01',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('INVALID_DEVICE_CODE', $payload['code'] ?? null);
+    }
+
+    public function testDeviceApprovalReturnsStateConflictWhenFlowWasDenied(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.722');
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/start', [
+            'client_kind' => 'AGENT',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $startPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($startPayload);
+        $deviceCode = (string) ($startPayload['device_code'] ?? '');
+        $userCode = (string) ($startPayload['user_code'] ?? '');
+        self::assertNotSame('', $deviceCode);
+        self::assertNotSame('', $userCode);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/cancel', [
+            'device_code' => $deviceCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/device', [
+            'user_code' => $userCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('STATE_CONFLICT', $payload['code'] ?? null);
+    }
+
     public function testDeviceFlowPollReturnsExpiredStatusWhenFlowExpired(): void
     {
         $client = $this->createIsolatedClient('10.0.0.68');

@@ -59,4 +59,9 @@ final class AuthClientGateway implements AuthClientGatewayPort
     {
         return $this->authClientService->cancelDeviceFlow($deviceCode);
     }
+
+    public function approveDeviceFlow(string $userCode): ?array
+    {
+        return $this->authClientService->approveDeviceFlow($userCode);
+    }
 }
