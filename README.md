@@ -164,6 +164,14 @@ Use docker-compose setup documented in:
 
 - `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/DOCKER-DEVELOPMENT.md`
 
+Local staging API for client tests:
+
+```bash
+composer staging:up
+composer staging:migrate
+composer staging:health
+```
+
 ## Authentication Endpoints
 
 - `POST /api/v1/auth/login`
