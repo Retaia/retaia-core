@@ -160,6 +160,17 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - `Infrastructure/User/PasswordResetGateway`
   - `Infrastructure/User/PasswordPolicyGateway`
 
+## Vingtième lot (two-factor handlers)
+
+- extraction des use cases `2fa` en couche Application:
+  - `SetupTwoFactorHandler`
+  - `EnableTwoFactorHandler`
+  - `DisableTwoFactorHandler`
+- ajout du port:
+  - `Application/Auth/Port/TwoFactorGateway`
+- adapter infra:
+  - `Infrastructure/User/TwoFactorGateway`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
