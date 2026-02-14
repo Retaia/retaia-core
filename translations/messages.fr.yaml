@@ -24,6 +24,15 @@ auth:
     mfa_setup_required: "Une configuration 2FA est requise avant activation"
     invalid_user_feature_payload: "Le payload user_feature_enabled est requis"
     invalid_app_feature_payload: "Le payload app_feature_enabled est requis"
+    invalid_client_credentials: "Identifiants client invalides"
+    client_credentials_required: "client_id, client_kind et secret_key sont requis"
+    too_many_client_token_requests: "Trop de demandes de token client"
+    invalid_client_id: "client_id invalide"
+    client_kind_required: "client_kind est requis"
+    device_code_required: "device_code est requis"
+    invalid_device_code: "Code device invalide"
+    expired_device_code: "Code device expiré"
+    slow_down: "Ralentissez"
 asset:
   error:
     not_found: "Asset introuvable"

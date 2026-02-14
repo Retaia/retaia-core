@@ -637,6 +637,140 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame(false, $patched['app_feature_enabled']['features.ai.suggest_tags'] ?? null);
     }
 
+    public function testClientTokenMintReturnsTokenForAgentClient(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.59');
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/token', [
+            'client_id' => 'agent-default',
+            'client_kind' => 'AGENT',
+            'secret_key' => 'agent-secret',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        self::assertStringStartsWith('ct_', (string) ($payload['access_token'] ?? ''));
+        self::assertSame('Bearer', $payload['token_type'] ?? null);
+    }
+
+    public function testClientTokenMintRejectsUiRustClientKind(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.60');
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/token', [
+            'client_id' => 'agent-default',
+            'client_kind' => 'UI_RUST',
+            'secret_key' => 'agent-secret',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('FORBIDDEN_ACTOR', $payload['code'] ?? null);
+    }
+
+    public function testClientTokenMintRejectsInvalidCredentials(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.61');
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/token', [
+            'client_id' => 'agent-default',
+            'client_kind' => 'AGENT',
+            'secret_key' => 'wrong-secret',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
+    }
+
+    public function testClientAdminEndpointsAreAdminOnly(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.62');
+        $email = sprintf('operator-%s@retaia.local', bin2hex(random_bytes(4)));
+        $this->insertUser($email, 'change-me', ['ROLE_USER'], true);
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => $email,
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/agent-default/revoke-token');
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('FORBIDDEN_ACTOR', $payload['code'] ?? null);
+    }
+
+    public function testAdminCanRevokeAndRotateClientCredentials(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.63');
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/agent-default/revoke-token');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $revoked = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame(true, $revoked['revoked'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/agent-default/rotate-secret');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $rotated = json_decode($client->getResponse()->getContent(), true);
+        $newSecret = (string) ($rotated['secret_key'] ?? '');
+        self::assertNotSame('', $newSecret);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/token', [
+            'client_id' => 'agent-default',
+            'client_kind' => 'AGENT',
+            'secret_key' => $newSecret,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+    }
+
+    public function testDeviceFlowStartPollAndCancel(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.64');
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/start', [
+            'client_kind' => 'AGENT',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $startPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($startPayload);
+        $deviceCode = (string) ($startPayload['device_code'] ?? '');
+        self::assertNotSame('', $deviceCode);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/poll', [
+            'device_code' => $deviceCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $pollPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('PENDING', $pollPayload['status'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/cancel', [
+            'device_code' => $deviceCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $cancelPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame(true, $cancelPayload['canceled'] ?? null);
+    }
+
+    public function testDeviceFlowPollRejectsInvalidCode(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.65');
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/poll', [
+            'device_code' => 'invalid',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('INVALID_DEVICE_CODE', $payload['code'] ?? null);
+    }
+
     public function testUnsupportedLocaleFallsBackToEnglishAuthenticationRequiredMessage(): void
     {
         $client = $this->createIsolatedClient('10.0.0.35', 'de');

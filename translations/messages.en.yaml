@@ -24,6 +24,15 @@ auth:
     mfa_setup_required: "2FA setup is required before enabling"
     invalid_user_feature_payload: "user_feature_enabled payload is required"
     invalid_app_feature_payload: "app_feature_enabled payload is required"
+    invalid_client_credentials: "Invalid client credentials"
+    client_credentials_required: "client_id, client_kind and secret_key are required"
+    too_many_client_token_requests: "Too many client token requests"
+    invalid_client_id: "Invalid client_id"
+    client_kind_required: "client_kind is required"
+    device_code_required: "device_code is required"
+    invalid_device_code: "Invalid device code"
+    expired_device_code: "Expired device code"
+    slow_down: "Slow down"
 asset:
   error:
     not_found: "Asset not found"

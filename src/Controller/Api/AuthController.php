@@ -2,6 +2,7 @@
 
 namespace App\Controller\Api;
 
+use App\Auth\AuthClientService;
 use App\Entity\User;
 use App\Feature\FeatureGovernanceService;
 use App\User\Service\EmailVerificationService;
@@ -32,6 +33,9 @@ final class AuthController
         private RateLimiterFactory $lostPasswordRequestLimiter,
         #[Autowire(service: 'limiter.verify_email_request')]
         private RateLimiterFactory $verifyEmailRequestLimiter,
+        #[Autowire(service: 'limiter.client_token_mint')]
+        private RateLimiterFactory $clientTokenMintLimiter,
+        private AuthClientService $authClientService,
     ) {
     }
 
@@ -403,6 +407,223 @@ final class AuthController
         }
 
         return new JsonResponse(['email_verified' => true], Response::HTTP_OK);
+    }
+
+    #[Route('/clients/token', name: 'api_auth_clients_token', methods: ['POST'])]
+    public function clientToken(Request $request): JsonResponse
+    {
+        $payload = $this->payload($request);
+        $clientId = trim((string) ($payload['client_id'] ?? ''));
+        $clientKind = trim((string) ($payload['client_kind'] ?? ''));
+        $secretKey = trim((string) ($payload['secret_key'] ?? ''));
+
+        if ($clientId === '' || $clientKind === '' || $secretKey === '') {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.client_credentials_required')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        if ($clientKind === 'UI_RUST') {
+            return new JsonResponse(
+                ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
+                Response::HTTP_FORBIDDEN
+            );
+        }
+        if ($clientKind === 'MCP' && $this->authClientService->isMcpDisabledByAppPolicy()) {
+            return new JsonResponse(
+                ['code' => 'FORBIDDEN_SCOPE', 'message' => $this->translator->trans('auth.error.forbidden_scope')],
+                Response::HTTP_FORBIDDEN
+            );
+        }
+
+        $limiterKey = hash('sha256', mb_strtolower($clientId).'|'.$clientKind.'|'.(string) ($request->getClientIp() ?? 'unknown'));
+        $limit = $this->clientTokenMintLimiter->create($limiterKey)->consume(1);
+        if (!$limit->isAccepted()) {
+            $retryAfter = $limit->getRetryAfter();
+
+            return new JsonResponse(
+                [
+                    'code' => 'TOO_MANY_ATTEMPTS',
+                    'message' => $this->translator->trans('auth.error.too_many_client_token_requests'),
+                    'retry_in_seconds' => $retryAfter !== null ? max(1, $retryAfter->getTimestamp() - time()) : 60,
+                ],
+                Response::HTTP_TOO_MANY_REQUESTS
+            );
+        }
+
+        $token = $this->authClientService->mintToken($clientId, $clientKind, $secretKey);
+        if (!is_array($token)) {
+            return new JsonResponse(
+                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.invalid_client_credentials')],
+                Response::HTTP_UNAUTHORIZED
+            );
+        }
+
+        return new JsonResponse($token, Response::HTTP_OK);
+    }
+
+    #[Route('/clients/{clientId}/revoke-token', name: 'api_auth_clients_revoke_token', methods: ['POST'])]
+    public function revokeClientToken(string $clientId): JsonResponse
+    {
+        $user = $this->security->getUser();
+        if (!$user instanceof User) {
+            return new JsonResponse(
+                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
+                Response::HTTP_UNAUTHORIZED
+            );
+        }
+        if (!$this->security->isGranted('ROLE_ADMIN')) {
+            return new JsonResponse(
+                ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
+                Response::HTTP_FORBIDDEN
+            );
+        }
+
+        if (!$this->authClientService->hasClient($clientId)) {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.invalid_client_id')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        if ($this->authClientService->clientKind($clientId) === 'UI_RUST') {
+            return new JsonResponse(
+                ['code' => 'FORBIDDEN_SCOPE', 'message' => $this->translator->trans('auth.error.forbidden_scope')],
+                Response::HTTP_FORBIDDEN
+            );
+        }
+
+        $this->authClientService->revokeToken($clientId);
+
+        return new JsonResponse(['revoked' => true, 'client_id' => $clientId], Response::HTTP_OK);
+    }
+
+    #[Route('/clients/{clientId}/rotate-secret', name: 'api_auth_clients_rotate_secret', methods: ['POST'])]
+    public function rotateClientSecret(string $clientId): JsonResponse
+    {
+        $user = $this->security->getUser();
+        if (!$user instanceof User) {
+            return new JsonResponse(
+                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
+                Response::HTTP_UNAUTHORIZED
+            );
+        }
+        if (!$this->security->isGranted('ROLE_ADMIN')) {
+            return new JsonResponse(
+                ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
+                Response::HTTP_FORBIDDEN
+            );
+        }
+
+        $secretKey = $this->authClientService->rotateSecret($clientId);
+        if (!is_string($secretKey)) {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.invalid_client_id')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        return new JsonResponse(
+            [
+                'client_id' => $clientId,
+                'secret_key' => $secretKey,
+                'rotated' => true,
+            ],
+            Response::HTTP_OK
+        );
+    }
+
+    #[Route('/clients/device/start', name: 'api_auth_clients_device_start', methods: ['POST'])]
+    public function startDeviceFlow(Request $request): JsonResponse
+    {
+        $payload = $this->payload($request);
+        $clientKind = trim((string) ($payload['client_kind'] ?? ''));
+
+        if ($clientKind === '') {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.client_kind_required')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        if (!in_array($clientKind, ['AGENT', 'MCP'], true)) {
+            return new JsonResponse(
+                ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
+                Response::HTTP_FORBIDDEN
+            );
+        }
+        if ($clientKind === 'MCP' && $this->authClientService->isMcpDisabledByAppPolicy()) {
+            return new JsonResponse(
+                ['code' => 'FORBIDDEN_SCOPE', 'message' => $this->translator->trans('auth.error.forbidden_scope')],
+                Response::HTTP_FORBIDDEN
+            );
+        }
+
+        return new JsonResponse($this->authClientService->startDeviceFlow($clientKind), Response::HTTP_OK);
+    }
+
+    #[Route('/clients/device/poll', name: 'api_auth_clients_device_poll', methods: ['POST'])]
+    public function pollDeviceFlow(Request $request): JsonResponse
+    {
+        $payload = $this->payload($request);
+        $deviceCode = trim((string) ($payload['device_code'] ?? ''));
+        if ($deviceCode === '') {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.device_code_required')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        $status = $this->authClientService->pollDeviceFlow($deviceCode);
+        if (!is_array($status)) {
+            return new JsonResponse(
+                ['code' => 'INVALID_DEVICE_CODE', 'message' => $this->translator->trans('auth.error.invalid_device_code')],
+                Response::HTTP_BAD_REQUEST
+            );
+        }
+
+        if (array_key_exists('retry_in_seconds', $status)) {
+            return new JsonResponse(
+                [
+                    'code' => 'SLOW_DOWN',
+                    'message' => $this->translator->trans('auth.error.slow_down'),
+                    'retry_in_seconds' => $status['retry_in_seconds'],
+                ],
+                Response::HTTP_TOO_MANY_REQUESTS
+            );
+        }
+
+        return new JsonResponse($status, Response::HTTP_OK);
+    }
+
+    #[Route('/clients/device/cancel', name: 'api_auth_clients_device_cancel', methods: ['POST'])]
+    public function cancelDeviceFlow(Request $request): JsonResponse
+    {
+        $payload = $this->payload($request);
+        $deviceCode = trim((string) ($payload['device_code'] ?? ''));
+        if ($deviceCode === '') {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.device_code_required')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        $status = $this->authClientService->cancelDeviceFlow($deviceCode);
+        if (!is_array($status)) {
+            return new JsonResponse(
+                ['code' => 'INVALID_DEVICE_CODE', 'message' => $this->translator->trans('auth.error.invalid_device_code')],
+                Response::HTTP_BAD_REQUEST
+            );
+        }
+        if (($status['status'] ?? null) === 'EXPIRED') {
+            return new JsonResponse(
+                ['code' => 'EXPIRED_DEVICE_CODE', 'message' => $this->translator->trans('auth.error.expired_device_code')],
+                Response::HTTP_BAD_REQUEST
+            );
+        }
+
+        return new JsonResponse(['canceled' => true], Response::HTTP_OK);
     }
 
     /**
