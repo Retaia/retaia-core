@@ -57,6 +57,54 @@ final class AuthClientService
         return ($appFeatures['features.ai'] ?? true) === false;
     }
 
+    public function hasClient(string $clientId): bool
+    {
+        return array_key_exists($clientId, $this->registry());
+    }
+
+    public function clientKind(string $clientId): ?string
+    {
+        $registry = $this->registry();
+        $client = $registry[$clientId] ?? null;
+        if (!is_array($client)) {
+            return null;
+        }
+
+        $clientKind = $client['client_kind'] ?? null;
+
+        return is_string($clientKind) ? $clientKind : null;
+    }
+
+    public function revokeToken(string $clientId): bool
+    {
+        if (!$this->hasClient($clientId)) {
+            return false;
+        }
+
+        $tokens = $this->activeTokens();
+        unset($tokens[$clientId]);
+        $this->saveActiveTokens($tokens);
+
+        return true;
+    }
+
+    public function rotateSecret(string $clientId): ?string
+    {
+        $registry = $this->registry();
+        $client = $registry[$clientId] ?? null;
+        if (!is_array($client)) {
+            return null;
+        }
+
+        $newSecret = bin2hex(random_bytes(24));
+        $client['secret_key'] = $newSecret;
+        $registry[$clientId] = $client;
+        $this->saveRegistry($registry);
+        $this->revokeToken($clientId);
+
+        return $newSecret;
+    }
+
     /**
      * @return array<string, array<string, mixed>>
      */
@@ -82,6 +130,16 @@ final class AuthClientService
         $this->cache->save($item);
 
         return $registry;
+    }
+
+    /**
+     * @param array<string, array<string, mixed>> $registry
+     */
+    private function saveRegistry(array $registry): void
+    {
+        $item = $this->cache->getItem('auth_client_registry');
+        $item->set($registry);
+        $this->cache->save($item);
     }
 
     /**

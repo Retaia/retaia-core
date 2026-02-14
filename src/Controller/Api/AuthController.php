@@ -463,6 +463,77 @@ final class AuthController
         return new JsonResponse($token, Response::HTTP_OK);
     }
 
+    #[Route('/clients/{clientId}/revoke-token', name: 'api_auth_clients_revoke_token', methods: ['POST'])]
+    public function revokeClientToken(string $clientId): JsonResponse
+    {
+        $user = $this->security->getUser();
+        if (!$user instanceof User) {
+            return new JsonResponse(
+                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
+                Response::HTTP_UNAUTHORIZED
+            );
+        }
+        if (!$this->security->isGranted('ROLE_ADMIN')) {
+            return new JsonResponse(
+                ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
+                Response::HTTP_FORBIDDEN
+            );
+        }
+
+        if (!$this->authClientService->hasClient($clientId)) {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.invalid_client_id')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        if ($this->authClientService->clientKind($clientId) === 'UI_RUST') {
+            return new JsonResponse(
+                ['code' => 'FORBIDDEN_SCOPE', 'message' => $this->translator->trans('auth.error.forbidden_scope')],
+                Response::HTTP_FORBIDDEN
+            );
+        }
+
+        $this->authClientService->revokeToken($clientId);
+
+        return new JsonResponse(['revoked' => true, 'client_id' => $clientId], Response::HTTP_OK);
+    }
+
+    #[Route('/clients/{clientId}/rotate-secret', name: 'api_auth_clients_rotate_secret', methods: ['POST'])]
+    public function rotateClientSecret(string $clientId): JsonResponse
+    {
+        $user = $this->security->getUser();
+        if (!$user instanceof User) {
+            return new JsonResponse(
+                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
+                Response::HTTP_UNAUTHORIZED
+            );
+        }
+        if (!$this->security->isGranted('ROLE_ADMIN')) {
+            return new JsonResponse(
+                ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
+                Response::HTTP_FORBIDDEN
+            );
+        }
+
+        $secretKey = $this->authClientService->rotateSecret($clientId);
+        if (!is_string($secretKey)) {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.invalid_client_id')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        return new JsonResponse(
+            [
+                'client_id' => $clientId,
+                'secret_key' => $secretKey,
+                'rotated' => true,
+            ],
+            Response::HTTP_OK
+        );
+    }
+
     /**
      * @return array<string, mixed>
      */
