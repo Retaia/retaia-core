@@ -391,7 +391,10 @@ final class ApiAuthFlowTest extends WebTestCase
         parse_str($query, $params);
         self::assertIsArray($params);
         self::assertIsString($params['signature'] ?? null);
-        $params['signature'] = 'X'.substr((string) $params['signature'], 1);
+        $originalSignature = (string) $params['signature'];
+        self::assertNotSame('', $originalSignature);
+        $lastChar = substr($originalSignature, -1);
+        $params['signature'] = substr($originalSignature, 0, -1).($lastChar === 'x' ? 'y' : 'x');
 
         $path = (string) ($parts['path'] ?? '/');
         $base = sprintf(
