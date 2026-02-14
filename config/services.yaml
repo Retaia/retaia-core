@@ -43,6 +43,8 @@ services:
             bool $featureSuggestTagsEnabled: '%app.features.ai.suggest_tags%'
             bool $featureSuggestedTagsFiltersEnabled: '%app.features.ai.suggested_tags_filters%'
             bool $featureDecisionsBulkEnabled: '%app.features.decisions.bulk%'
+            string $featureFlagsContractVersion: '%app.feature_flags.contract.latest_version%'
+            array $acceptedFeatureFlagsContractVersions: '%app.feature_flags.contract.accepted_versions%'
 
     App\Controller\Api\WorkflowController:
         bind:
