@@ -5,6 +5,7 @@ namespace App\Tests\Functional;
 use App\Tests\Support\FixtureUsers;
 use Doctrine\DBAL\Connection;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
+use OTPHP\TOTP;
 use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\HttpFoundation\Response;
@@ -459,7 +460,7 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $payload = json_decode($client->getResponse()->getContent(), true);
         self::assertIsArray($payload);
-        self::assertMatchesRegularExpression('/^[A-Z0-9]{20}$/', (string) ($payload['secret'] ?? ''));
+        self::assertMatchesRegularExpression('/^[A-Z2-7]+=*$/', (string) ($payload['secret'] ?? ''));
         self::assertStringStartsWith('otpauth://totp/', (string) ($payload['otpauth_uri'] ?? ''));
     }
 
@@ -477,7 +478,7 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $setupPayload = json_decode($client->getResponse()->getContent(), true);
         $secret = (string) ($setupPayload['secret'] ?? '');
-        $otpCode = substr($secret, -6);
+        $otpCode = $this->generateOtpCode($secret);
 
         $client->jsonRequest('POST', '/api/v1/auth/2fa/enable', ['otp_code' => $otpCode]);
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
@@ -1065,5 +1066,10 @@ final class ApiAuthFlowTest extends WebTestCase
         $flows[$deviceCode] = $flow;
         $item->set($flows);
         $cache->save($item);
+    }
+
+    private function generateOtpCode(string $secret): string
+    {
+        return TOTP::createFromSecret($secret)->now();
     }
 }
