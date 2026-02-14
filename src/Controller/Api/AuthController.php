@@ -15,6 +15,9 @@ use App\Application\Auth\AdminConfirmEmailVerificationHandler;
 use App\Application\Auth\AdminConfirmEmailVerificationResult;
 use App\Application\Auth\ConfirmEmailVerificationHandler;
 use App\Application\Auth\ConfirmEmailVerificationResult;
+use App\Application\Auth\GetMyFeaturesHandler;
+use App\Application\Auth\PatchMyFeaturesHandler;
+use App\Application\Auth\PatchMyFeaturesResult;
 use App\Application\Auth\RequestEmailVerificationHandler;
 use App\Application\AuthClient\MintClientTokenHandler;
 use App\Application\AuthClient\MintClientTokenResult;
@@ -29,7 +32,6 @@ use App\Application\AuthClient\RotateClientSecretResult;
 use App\Application\AuthClient\StartDeviceFlowHandler;
 use App\Application\AuthClient\StartDeviceFlowResult;
 use App\Entity\User;
-use App\Feature\FeatureGovernanceService;
 use App\Observability\Repository\MetricEventRepository;
 use App\User\Service\EmailVerificationService;
 use Psr\Log\LoggerInterface;
@@ -56,7 +58,8 @@ final class AuthController
         private SetupTwoFactorHandler $setupTwoFactorHandler,
         private EnableTwoFactorHandler $enableTwoFactorHandler,
         private DisableTwoFactorHandler $disableTwoFactorHandler,
-        private FeatureGovernanceService $featureGovernanceService,
+        private GetMyFeaturesHandler $getMyFeaturesHandler,
+        private PatchMyFeaturesHandler $patchMyFeaturesHandler,
         private TranslatorInterface $translator,
         #[Autowire(service: 'limiter.lost_password_request')]
         private RateLimiterFactory $lostPasswordRequestLimiter,
@@ -219,15 +222,14 @@ final class AuthController
             );
         }
 
-        return new JsonResponse(
-            [
-                'user_feature_enabled' => $this->featureGovernanceService->userFeatureEnabled($user->getId()),
-                'effective_feature_enabled' => $this->featureGovernanceService->effectiveFeatureEnabledForUser($user->getId()),
-                'feature_governance' => $this->featureGovernanceService->featureGovernanceRules(),
-                'core_v1_global_features' => $this->featureGovernanceService->coreV1GlobalFeatures(),
-            ],
-            Response::HTTP_OK
-        );
+        $result = $this->getMyFeaturesHandler->handle($user->getId());
+
+        return new JsonResponse([
+            'user_feature_enabled' => $result->userFeatureEnabled(),
+            'effective_feature_enabled' => $result->effectiveFeatureEnabled(),
+            'feature_governance' => $result->featureGovernance(),
+            'core_v1_global_features' => $result->coreV1GlobalFeatures(),
+        ], Response::HTTP_OK);
     }
 
     #[Route('/me/features', name: 'api_auth_me_features_patch', methods: ['PATCH'])]
@@ -250,44 +252,32 @@ final class AuthController
             );
         }
 
-        foreach ($rawUserFeatures as $featureKey => $enabled) {
-            if (!is_string($featureKey)) {
-                continue;
-            }
-            if (in_array($featureKey, $this->featureGovernanceService->coreV1GlobalFeatures(), true)) {
-                return new JsonResponse(
-                    ['code' => 'FORBIDDEN_SCOPE', 'message' => $this->translator->trans('auth.error.forbidden_scope')],
-                    Response::HTTP_FORBIDDEN
-                );
-            }
+        $result = $this->patchMyFeaturesHandler->handle($user->getId(), $rawUserFeatures);
+        if ($result->status() === PatchMyFeaturesResult::STATUS_FORBIDDEN_SCOPE) {
+            return new JsonResponse(
+                ['code' => 'FORBIDDEN_SCOPE', 'message' => $this->translator->trans('auth.error.forbidden_scope')],
+                Response::HTTP_FORBIDDEN
+            );
         }
-
-        $validation = $this->featureGovernanceService->validateFeaturePayload(
-            $rawUserFeatures,
-            $this->featureGovernanceService->allowedUserFeatureKeys()
-        );
-        if ($validation['unknown_keys'] !== [] || $validation['non_boolean_keys'] !== []) {
+        if ($result->status() === PatchMyFeaturesResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
                 [
                     'code' => 'VALIDATION_FAILED',
                     'message' => $this->translator->trans('auth.error.invalid_user_feature_payload'),
-                    'details' => $validation,
+                    'details' => $result->validationDetails(),
                 ],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
 
-        $this->featureGovernanceService->setUserFeatureEnabled($user->getId(), $rawUserFeatures);
+        $features = $result->features();
 
-        return new JsonResponse(
-            [
-                'user_feature_enabled' => $this->featureGovernanceService->userFeatureEnabled($user->getId()),
-                'effective_feature_enabled' => $this->featureGovernanceService->effectiveFeatureEnabledForUser($user->getId()),
-                'feature_governance' => $this->featureGovernanceService->featureGovernanceRules(),
-                'core_v1_global_features' => $this->featureGovernanceService->coreV1GlobalFeatures(),
-            ],
-            Response::HTTP_OK
-        );
+        return new JsonResponse([
+            'user_feature_enabled' => $features?->userFeatureEnabled() ?? [],
+            'effective_feature_enabled' => $features?->effectiveFeatureEnabled() ?? [],
+            'feature_governance' => $features?->featureGovernance() ?? [],
+            'core_v1_global_features' => $features?->coreV1GlobalFeatures() ?? [],
+        ], Response::HTTP_OK);
     }
 
     #[Route('/lost-password/request', name: 'api_auth_lost_password_request', methods: ['POST'])]

@@ -171,6 +171,16 @@ Poser un premier découpage DDD sans changer le contrat API v1.
 - adapter infra:
   - `Infrastructure/User/TwoFactorGateway`
 
+## Vingt-et-unième lot (my features handlers)
+
+- extraction des use cases `/auth/me/features` en couche Application:
+  - `GetMyFeaturesHandler`
+  - `PatchMyFeaturesHandler`
+- ajout du port:
+  - `Application/Auth/Port/FeatureGovernanceGateway`
+- adapter infra:
+  - `Infrastructure/Feature/FeatureGovernanceGateway`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
