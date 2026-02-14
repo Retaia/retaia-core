@@ -7,6 +7,21 @@ on:
   pull_request:
 
 jobs:
+  branch-up-to-date:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check branch is rebased on base and linear
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: bash scripts/check-branch-up-to-date.sh
+
   no-black-magic:
     runs-on: ubuntu-latest
     steps:
