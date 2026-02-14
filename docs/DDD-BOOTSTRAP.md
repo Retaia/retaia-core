@@ -93,6 +93,14 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - `Infrastructure/Auth/DeviceFlowGateway` pour `DeviceFlowGateway`
 - objectif: aligner 1 adapter infra par port applicatif principal
 
+## Douzième lot (state store)
+
+- extraction de la persistance cache `auth-client` dans `Auth/AuthClientStateStore`
+- `Auth/AuthClientService` conserve l'orchestration métier et délègue les accès état:
+  - registry clients techniques
+  - tokens actifs
+  - device flows
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants

@@ -3,12 +3,11 @@
 namespace App\Auth;
 
 use App\Feature\FeatureGovernanceService;
-use Psr\Cache\CacheItemPoolInterface;
 
 final class AuthClientService
 {
     public function __construct(
-        private CacheItemPoolInterface $cache,
+        private AuthClientStateStore $stateStore,
         private FeatureGovernanceService $featureGovernanceService,
         private ClientAccessTokenFactory $clientAccessTokenFactory,
     ) {
@@ -19,7 +18,7 @@ final class AuthClientService
      */
     public function mintToken(string $clientId, string $clientKind, string $secretKey): ?array
     {
-        $registry = $this->registry();
+        $registry = $this->stateStore->registry();
         $client = $registry[$clientId] ?? null;
         if (!is_array($client)) {
             return null;
@@ -34,14 +33,14 @@ final class AuthClientService
         }
 
         $token = $this->clientAccessTokenFactory->issue($clientId, $clientKind);
-        $tokens = $this->activeTokens();
+        $tokens = $this->stateStore->activeTokens();
         $tokens[$clientId] = [
             'access_token' => $token,
             'client_id' => $clientId,
             'client_kind' => $clientKind,
             'issued_at' => time(),
         ];
-        $this->saveActiveTokens($tokens);
+        $this->stateStore->saveActiveTokens($tokens);
 
         return [
             'access_token' => $token,
@@ -60,12 +59,12 @@ final class AuthClientService
 
     public function hasClient(string $clientId): bool
     {
-        return array_key_exists($clientId, $this->registry());
+        return array_key_exists($clientId, $this->stateStore->registry());
     }
 
     public function clientKind(string $clientId): ?string
     {
-        $registry = $this->registry();
+        $registry = $this->stateStore->registry();
         $client = $registry[$clientId] ?? null;
         if (!is_array($client)) {
             return null;
@@ -82,16 +81,16 @@ final class AuthClientService
             return false;
         }
 
-        $tokens = $this->activeTokens();
+        $tokens = $this->stateStore->activeTokens();
         unset($tokens[$clientId]);
-        $this->saveActiveTokens($tokens);
+        $this->stateStore->saveActiveTokens($tokens);
 
         return true;
     }
 
     public function rotateSecret(string $clientId): ?string
     {
-        $registry = $this->registry();
+        $registry = $this->stateStore->registry();
         $client = $registry[$clientId] ?? null;
         if (!is_array($client)) {
             return null;
@@ -100,7 +99,7 @@ final class AuthClientService
         $newSecret = bin2hex(random_bytes(24));
         $client['secret_key'] = $newSecret;
         $registry[$clientId] = $client;
-        $this->saveRegistry($registry);
+        $this->stateStore->saveRegistry($registry);
         $this->revokeToken($clientId);
 
         return $newSecret;
@@ -125,9 +124,9 @@ final class AuthClientService
             'last_polled_at' => 0,
         ];
 
-        $flows = $this->deviceFlows();
+        $flows = $this->stateStore->deviceFlows();
         $flows[$deviceCode] = $flow;
-        $this->saveDeviceFlows($flows);
+        $this->stateStore->saveDeviceFlows($flows);
 
         return [
             'device_code' => $deviceCode,
@@ -144,7 +143,7 @@ final class AuthClientService
      */
     public function pollDeviceFlow(string $deviceCode): ?array
     {
-        $flows = $this->deviceFlows();
+        $flows = $this->stateStore->deviceFlows();
         $flow = $flows[$deviceCode] ?? null;
         if (!is_array($flow)) {
             return null;
@@ -154,7 +153,7 @@ final class AuthClientService
         if (($flow['expires_at'] ?? 0) < $now) {
             $flow['status'] = 'EXPIRED';
             $flows[$deviceCode] = $flow;
-            $this->saveDeviceFlows($flows);
+            $this->stateStore->saveDeviceFlows($flows);
 
             return ['status' => 'EXPIRED'];
         }
@@ -176,7 +175,7 @@ final class AuthClientService
             $secretKey = (string) ($flow['approved_secret_key'] ?? '');
             if ($clientId !== '' && $clientKind !== '' && $secretKey !== '') {
                 unset($flows[$deviceCode]);
-                $this->saveDeviceFlows($flows);
+                $this->stateStore->saveDeviceFlows($flows);
 
                 return [
                     'status' => 'APPROVED',
@@ -189,7 +188,7 @@ final class AuthClientService
 
         $flow['last_polled_at'] = $now;
         $flows[$deviceCode] = $flow;
-        $this->saveDeviceFlows($flows);
+        $this->stateStore->saveDeviceFlows($flows);
 
         return ['status' => $status];
     }
@@ -199,7 +198,7 @@ final class AuthClientService
      */
     public function cancelDeviceFlow(string $deviceCode): ?array
     {
-        $flows = $this->deviceFlows();
+        $flows = $this->stateStore->deviceFlows();
         $flow = $flows[$deviceCode] ?? null;
         if (!is_array($flow)) {
             return null;
@@ -212,7 +211,7 @@ final class AuthClientService
 
         $flow['status'] = 'DENIED';
         $flows[$deviceCode] = $flow;
-        $this->saveDeviceFlows($flows);
+        $this->stateStore->saveDeviceFlows($flows);
 
         return ['status' => 'DENIED'];
     }
@@ -227,7 +226,7 @@ final class AuthClientService
             return null;
         }
 
-        $flows = $this->deviceFlows();
+        $flows = $this->stateStore->deviceFlows();
         $matchedKey = null;
         $matchedFlow = null;
         foreach ($flows as $deviceCode => $flow) {
@@ -250,7 +249,7 @@ final class AuthClientService
         if (($matchedFlow['expires_at'] ?? 0) < $now) {
             $matchedFlow['status'] = 'EXPIRED';
             $flows[$matchedKey] = $matchedFlow;
-            $this->saveDeviceFlows($flows);
+            $this->stateStore->saveDeviceFlows($flows);
 
             return ['status' => 'EXPIRED'];
         }
@@ -269,98 +268,20 @@ final class AuthClientService
 
         $clientId = strtolower($clientKind).'-'.bin2hex(random_bytes(6));
         $secretKey = bin2hex(random_bytes(24));
-        $registry = $this->registry();
+        $registry = $this->stateStore->registry();
         $registry[$clientId] = [
             'client_kind' => $clientKind,
             'secret_key' => $secretKey,
         ];
-        $this->saveRegistry($registry);
+        $this->stateStore->saveRegistry($registry);
 
         $matchedFlow['status'] = 'APPROVED';
         $matchedFlow['approved_client_id'] = $clientId;
         $matchedFlow['approved_secret_key'] = $secretKey;
         $flows[$matchedKey] = $matchedFlow;
-        $this->saveDeviceFlows($flows);
+        $this->stateStore->saveDeviceFlows($flows);
 
         return ['status' => 'APPROVED'];
     }
 
-    /**
-     * @return array<string, array<string, mixed>>
-     */
-    private function registry(): array
-    {
-        $item = $this->cache->getItem('auth_client_registry');
-        $value = $item->get();
-        if (is_array($value)) {
-            return $value;
-        }
-
-        $registry = [
-            'agent-default' => [
-                'client_kind' => 'AGENT',
-                'secret_key' => 'agent-secret',
-            ],
-            'mcp-default' => [
-                'client_kind' => 'MCP',
-                'secret_key' => 'mcp-secret',
-            ],
-        ];
-        $item->set($registry);
-        $this->cache->save($item);
-
-        return $registry;
-    }
-
-    /**
-     * @param array<string, array<string, mixed>> $registry
-     */
-    private function saveRegistry(array $registry): void
-    {
-        $item = $this->cache->getItem('auth_client_registry');
-        $item->set($registry);
-        $this->cache->save($item);
-    }
-
-    /**
-     * @return array<string, array<string, mixed>>
-     */
-    private function activeTokens(): array
-    {
-        $item = $this->cache->getItem('auth_client_active_tokens');
-        $value = $item->get();
-
-        return is_array($value) ? $value : [];
-    }
-
-    /**
-     * @param array<string, array<string, mixed>> $tokens
-     */
-    private function saveActiveTokens(array $tokens): void
-    {
-        $item = $this->cache->getItem('auth_client_active_tokens');
-        $item->set($tokens);
-        $this->cache->save($item);
-    }
-
-    /**
-     * @return array<string, array<string, mixed>>
-     */
-    private function deviceFlows(): array
-    {
-        $item = $this->cache->getItem('auth_device_flows');
-        $value = $item->get();
-
-        return is_array($value) ? $value : [];
-    }
-
-    /**
-     * @param array<string, array<string, mixed>> $flows
-     */
-    private function saveDeviceFlows(array $flows): void
-    {
-        $item = $this->cache->getItem('auth_device_flows');
-        $item->set($flows);
-        $this->cache->save($item);
-    }
 }
