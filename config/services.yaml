@@ -18,6 +18,8 @@ parameters:
     app.features.ai.suggest_tags: '%env(bool:APP_FEATURE_AI_SUGGEST_TAGS)%'
     app.features.ai.suggested_tags_filters: '%env(bool:APP_FEATURE_AI_SUGGESTED_TAGS_FILTERS)%'
     app.features.decisions.bulk: '%env(bool:APP_FEATURE_DECISIONS_BULK)%'
+    app.feature_flags.contract.latest_version: '1.0.0'
+    app.feature_flags.contract.accepted_versions: ['1.0.0', '0.9.0']
 
 services:
     # default configuration for services in *this* file
@@ -41,6 +43,8 @@ services:
             bool $featureSuggestTagsEnabled: '%app.features.ai.suggest_tags%'
             bool $featureSuggestedTagsFiltersEnabled: '%app.features.ai.suggested_tags_filters%'
             bool $featureDecisionsBulkEnabled: '%app.features.decisions.bulk%'
+            string $featureFlagsContractVersion: '%app.feature_flags.contract.latest_version%'
+            array $acceptedFeatureFlagsContractVersions: '%app.feature_flags.contract.accepted_versions%'
 
     App\Controller\Api\WorkflowController:
         bind:
