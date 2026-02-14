@@ -71,6 +71,14 @@ Poser un premier découpage DDD sans changer le contrat API v1.
 - `Controller/Api/AuthController` n'injecte plus `AuthClientService`
   - tous les use cases `auth/clients` sont désormais pilotés via handlers applicatifs dédiés
 
+## Neuvième use case migré
+
+- `POST /device` (orchestration complète approval + 2FA)
+  - Application: `Application/AuthClient/CompleteDeviceApprovalHandler`
+  - Ports: `Application/AuthClient/Port/DeviceApprovalSecondFactorGateway`
+  - Infrastructure adapters: `Infrastructure/Auth/DeviceApprovalSecondFactorGateway` + `Infrastructure/Auth/AuthClientGateway`
+  - Controller: `Controller/DeviceController` (mapping HTTP conservé)
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
