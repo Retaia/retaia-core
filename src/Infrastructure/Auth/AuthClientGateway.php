@@ -24,4 +24,24 @@ final class AuthClientGateway implements AuthClientGatewayPort
     {
         return $this->authClientService->mintToken($clientId, $clientKind, $secretKey);
     }
+
+    public function hasClient(string $clientId): bool
+    {
+        return $this->authClientService->hasClient($clientId);
+    }
+
+    public function clientKind(string $clientId): ?string
+    {
+        return $this->authClientService->clientKind($clientId);
+    }
+
+    public function revokeToken(string $clientId): bool
+    {
+        return $this->authClientService->revokeToken($clientId);
+    }
+
+    public function rotateSecret(string $clientId): ?string
+    {
+        return $this->authClientService->rotateSecret($clientId);
+    }
 }
