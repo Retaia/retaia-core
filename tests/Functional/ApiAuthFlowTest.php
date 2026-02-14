@@ -915,6 +915,44 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame(true, $cancelPayload['canceled'] ?? null);
     }
 
+    public function testDeviceFlowStartRejectsUiRustClientKind(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.641');
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/start', [
+            'client_kind' => 'UI_RUST',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('FORBIDDEN_ACTOR', $payload['code'] ?? null);
+    }
+
+    public function testDeviceFlowStartRejectsMcpWhenAiFeatureIsDisabled(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.642');
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('PATCH', '/api/v1/app/features', [
+            'app_feature_enabled' => [
+                'features.ai' => false,
+            ],
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/start', [
+            'client_kind' => 'MCP',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('FORBIDDEN_SCOPE', $payload['code'] ?? null);
+    }
+
     public function testDeviceFlowPollRejectsInvalidCode(): void
     {
         $client = $this->createIsolatedClient('10.0.0.65');
