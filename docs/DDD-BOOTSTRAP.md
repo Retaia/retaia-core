@@ -139,6 +139,15 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - création du `client_id` / `secret_key`
   - persistance dans la registry
 
+## Dix-huitième lot (email verification handlers)
+
+- extraction des use cases `verify-email` en couche Application:
+  - `RequestEmailVerificationHandler`
+  - `ConfirmEmailVerificationHandler`
+  - `AdminConfirmEmailVerificationHandler`
+- ajout du port `Application/Auth/Port/EmailVerificationGateway`
+- adapter infra `Infrastructure/User/EmailVerificationGateway` branché sur `User/Service/EmailVerificationService`
+
 ## Dix-neuvième lot (password reset handlers)
 
 - extraction des use cases `lost-password` en couche Application:
