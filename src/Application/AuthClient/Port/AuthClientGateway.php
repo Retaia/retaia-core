@@ -28,4 +28,9 @@ interface AuthClientGateway
      * @return array{status: string, client_id?: string, client_kind?: string, secret_key?: string, interval?: int, retry_in_seconds?: int}|null
      */
     public function pollDeviceFlow(string $deviceCode): ?array;
+
+    /**
+     * @return array{status: string}|null
+     */
+    public function cancelDeviceFlow(string $deviceCode): ?array;
 }

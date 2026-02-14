@@ -965,6 +965,41 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('INVALID_DEVICE_CODE', $payload['code'] ?? null);
     }
 
+    public function testDeviceFlowCancelRejectsInvalidCode(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.651');
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/cancel', [
+            'device_code' => 'invalid',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('INVALID_DEVICE_CODE', $payload['code'] ?? null);
+    }
+
+    public function testDeviceFlowCancelRejectsExpiredCode(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.652');
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/start', [
+            'client_kind' => 'AGENT',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $startPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($startPayload);
+        $deviceCode = (string) ($startPayload['device_code'] ?? '');
+        self::assertNotSame('', $deviceCode);
+
+        $this->forceDeviceFlowExpiration($deviceCode);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/cancel', [
+            'device_code' => $deviceCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('EXPIRED_DEVICE_CODE', $payload['code'] ?? null);
+    }
+
     public function testDeviceFlowPollReturnsDeniedAfterCancel(): void
     {
         $client = $this->createIsolatedClient('10.0.0.67');
