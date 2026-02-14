@@ -530,6 +530,65 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('INVALID_2FA_CODE', $payload['code'] ?? null);
     }
 
+    public function testMeFeaturesRequiresAuthentication(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.54');
+
+        $client->request('GET', '/api/v1/auth/me/features');
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+    }
+
+    public function testMeFeaturesReturnsAndUpdatesFeaturePreferences(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.55');
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->request('GET', '/api/v1/auth/me/features');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        self::assertIsArray($payload['feature_governance'] ?? null);
+        self::assertIsArray($payload['core_v1_global_features'] ?? null);
+        self::assertIsArray($payload['effective_feature_enabled'] ?? null);
+
+        $client->jsonRequest('PATCH', '/api/v1/auth/me/features', [
+            'user_feature_enabled' => [
+                'features.ai.suggest_tags' => false,
+            ],
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $patched = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame(false, $patched['user_feature_enabled']['features.ai.suggest_tags'] ?? null);
+        self::assertSame(false, $patched['effective_feature_enabled']['features.ai.suggest_tags'] ?? null);
+        self::assertSame(false, $patched['effective_feature_enabled']['features.ai.suggested_tags_filters'] ?? null);
+    }
+
+    public function testMeFeaturesRejectsDisablingCoreV1GlobalFeature(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.56');
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('PATCH', '/api/v1/auth/me/features', [
+            'user_feature_enabled' => [
+                'features.core.auth' => false,
+            ],
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('FORBIDDEN_SCOPE', $payload['code'] ?? null);
+    }
+
     public function testUnsupportedLocaleFallsBackToEnglishAuthenticationRequiredMessage(): void
     {
         $client = $this->createIsolatedClient('10.0.0.35', 'de');
