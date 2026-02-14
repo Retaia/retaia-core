@@ -954,6 +954,63 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('DENIED', $pollPayload['status'] ?? null);
     }
 
+    public function testDeviceFlowCanBeApprovedAndReturnsOneShotCredential(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.72');
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/start', [
+            'client_kind' => 'AGENT',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $startPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($startPayload);
+        $deviceCode = (string) ($startPayload['device_code'] ?? '');
+        $userCode = (string) ($startPayload['user_code'] ?? '');
+        self::assertNotSame('', $deviceCode);
+        self::assertNotSame('', $userCode);
+
+        $client->jsonRequest('POST', '/device', [
+            'user_code' => $userCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $approvalPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($approvalPayload);
+        self::assertSame(true, $approvalPayload['approved'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/poll', [
+            'device_code' => $deviceCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $pollPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($pollPayload);
+        self::assertSame('APPROVED', $pollPayload['status'] ?? null);
+        self::assertSame('AGENT', $pollPayload['client_kind'] ?? null);
+        $approvedClientId = (string) ($pollPayload['client_id'] ?? '');
+        $approvedSecret = (string) ($pollPayload['secret_key'] ?? '');
+        self::assertNotSame('', $approvedClientId);
+        self::assertNotSame('', $approvedSecret);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/token', [
+            'client_id' => $approvedClientId,
+            'client_kind' => 'AGENT',
+            'secret_key' => $approvedSecret,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/poll', [
+            'device_code' => $deviceCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $secondPoll = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('INVALID_DEVICE_CODE', $secondPoll['code'] ?? null);
+    }
+
     public function testDeviceFlowPollReturnsExpiredStatusWhenFlowExpired(): void
     {
         $client = $this->createIsolatedClient('10.0.0.68');

@@ -140,7 +140,7 @@ final class AuthClientService
     }
 
     /**
-     * @return array{status: string, secret_key?: string, interval?: int, retry_in_seconds?: int}|null
+     * @return array{status: string, client_id?: string, client_kind?: string, secret_key?: string, interval?: int, retry_in_seconds?: int}|null
      */
     public function pollDeviceFlow(string $deviceCode): ?array
     {
@@ -169,11 +169,29 @@ final class AuthClientService
             ];
         }
 
+        $status = (string) ($flow['status'] ?? 'PENDING');
+        if ($status === 'APPROVED') {
+            $clientId = (string) ($flow['approved_client_id'] ?? '');
+            $clientKind = (string) ($flow['client_kind'] ?? '');
+            $secretKey = (string) ($flow['approved_secret_key'] ?? '');
+            if ($clientId !== '' && $clientKind !== '' && $secretKey !== '') {
+                unset($flows[$deviceCode]);
+                $this->saveDeviceFlows($flows);
+
+                return [
+                    'status' => 'APPROVED',
+                    'client_id' => $clientId,
+                    'client_kind' => $clientKind,
+                    'secret_key' => $secretKey,
+                ];
+            }
+        }
+
         $flow['last_polled_at'] = $now;
         $flows[$deviceCode] = $flow;
         $this->saveDeviceFlows($flows);
 
-        return ['status' => (string) ($flow['status'] ?? 'PENDING')];
+        return ['status' => $status];
     }
 
     /**
@@ -197,6 +215,74 @@ final class AuthClientService
         $this->saveDeviceFlows($flows);
 
         return ['status' => 'DENIED'];
+    }
+
+    /**
+     * @return array{status: string}|null
+     */
+    public function approveDeviceFlow(string $userCode): ?array
+    {
+        $normalizedUserCode = strtoupper(trim($userCode));
+        if ($normalizedUserCode === '') {
+            return null;
+        }
+
+        $flows = $this->deviceFlows();
+        $matchedKey = null;
+        $matchedFlow = null;
+        foreach ($flows as $deviceCode => $flow) {
+            if (!is_array($flow)) {
+                continue;
+            }
+            if (strtoupper((string) ($flow['user_code'] ?? '')) !== $normalizedUserCode) {
+                continue;
+            }
+            $matchedKey = is_string($deviceCode) ? $deviceCode : null;
+            $matchedFlow = $flow;
+            break;
+        }
+
+        if ($matchedKey === null || !is_array($matchedFlow)) {
+            return null;
+        }
+
+        $now = time();
+        if (($matchedFlow['expires_at'] ?? 0) < $now) {
+            $matchedFlow['status'] = 'EXPIRED';
+            $flows[$matchedKey] = $matchedFlow;
+            $this->saveDeviceFlows($flows);
+
+            return ['status' => 'EXPIRED'];
+        }
+
+        if (($matchedFlow['status'] ?? '') === 'DENIED') {
+            return ['status' => 'DENIED'];
+        }
+        if (($matchedFlow['status'] ?? '') === 'APPROVED') {
+            return ['status' => 'APPROVED'];
+        }
+
+        $clientKind = (string) ($matchedFlow['client_kind'] ?? '');
+        if (!in_array($clientKind, ['AGENT', 'MCP'], true)) {
+            return null;
+        }
+
+        $clientId = strtolower($clientKind).'-'.bin2hex(random_bytes(6));
+        $secretKey = bin2hex(random_bytes(24));
+        $registry = $this->registry();
+        $registry[$clientId] = [
+            'client_kind' => $clientKind,
+            'secret_key' => $secretKey,
+        ];
+        $this->saveRegistry($registry);
+
+        $matchedFlow['status'] = 'APPROVED';
+        $matchedFlow['approved_client_id'] = $clientId;
+        $matchedFlow['approved_secret_key'] = $secretKey;
+        $flows[$matchedKey] = $matchedFlow;
+        $this->saveDeviceFlows($flows);
+
+        return ['status' => 'APPROVED'];
     }
 
     /**

@@ -29,9 +29,11 @@ auth:
     too_many_client_token_requests: "Too many client token requests"
     invalid_client_id: "Invalid client_id"
     client_kind_required: "client_kind is required"
+    user_code_required: "user_code is required"
     device_code_required: "device_code is required"
     invalid_device_code: "Invalid device code"
     expired_device_code: "Expired device code"
+    device_flow_not_approvable: "Device flow is not approvable"
     slow_down: "Slow down"
 asset:
   error:
