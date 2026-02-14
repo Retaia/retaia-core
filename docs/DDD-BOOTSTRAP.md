@@ -126,6 +126,11 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - `AuthClientAdminService`
   - `AuthClientDeviceFlowService`
 
+## Seizième lot (policy service)
+
+- extraction de la policy applicative `MCP gate` dans `Auth/AuthClientPolicyService`
+- les gateways `AuthClientAdminGateway` et `DeviceFlowGateway` dépendent de ce service policy dédié
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants

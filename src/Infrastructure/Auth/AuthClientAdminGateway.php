@@ -4,17 +4,19 @@ namespace App\Infrastructure\Auth;
 
 use App\Application\AuthClient\Port\AuthClientGateway as AuthClientGatewayPort;
 use App\Auth\AuthClientAdminService;
+use App\Auth\AuthClientPolicyService;
 
 final class AuthClientAdminGateway implements AuthClientGatewayPort
 {
     public function __construct(
         private AuthClientAdminService $adminService,
+        private AuthClientPolicyService $policyService,
     ) {
     }
 
     public function isMcpDisabledByAppPolicy(): bool
     {
-        return $this->adminService->isMcpDisabledByAppPolicy();
+        return $this->policyService->isMcpDisabledByAppPolicy();
     }
 
     /**

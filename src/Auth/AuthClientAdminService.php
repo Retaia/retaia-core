@@ -2,14 +2,12 @@
 
 namespace App\Auth;
 
-use App\Feature\FeatureGovernanceService;
-
 final class AuthClientAdminService
 {
     public function __construct(
         private AuthClientStateStore $stateStore,
-        private FeatureGovernanceService $featureGovernanceService,
         private ClientAccessTokenFactory $clientAccessTokenFactory,
+        private AuthClientPolicyService $policyService,
     ) {
     }
 
@@ -52,9 +50,7 @@ final class AuthClientAdminService
 
     public function isMcpDisabledByAppPolicy(): bool
     {
-        $appFeatures = $this->featureGovernanceService->appFeatureEnabled();
-
-        return ($appFeatures['features.ai'] ?? true) === false;
+        return $this->policyService->isMcpDisabledByAppPolicy();
     }
 
     public function hasClient(string $clientId): bool
