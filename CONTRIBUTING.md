@@ -20,3 +20,5 @@ Avant tout changement contractuel: modifier/valider `retaia-docs` puis implémen
 - `feature_flags`, `app_feature_enabled`, `user_feature_enabled` suivent les règles normatives.
 - Les features `CORE_V1_GLOBAL` ne sont jamais désactivables par l'utilisateur.
 - Aucun secret/token en clair dans logs, traces, dumps.
+- Approche préférée : DDD (Domain-Driven Design).
+- Validation recommandée par défaut : TDD (tests unitaires/intégration) et BDD (scénarios métier).
