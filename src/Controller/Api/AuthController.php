@@ -2,6 +2,11 @@
 
 namespace App\Controller\Api;
 
+use App\Application\Auth\AdminConfirmEmailVerificationHandler;
+use App\Application\Auth\AdminConfirmEmailVerificationResult;
+use App\Application\Auth\ConfirmEmailVerificationHandler;
+use App\Application\Auth\ConfirmEmailVerificationResult;
+use App\Application\Auth\RequestEmailVerificationHandler;
 use App\Application\AuthClient\MintClientTokenHandler;
 use App\Application\AuthClient\MintClientTokenResult;
 use App\Application\AuthClient\CancelDeviceFlowHandler;
@@ -17,7 +22,6 @@ use App\Application\AuthClient\StartDeviceFlowResult;
 use App\Entity\User;
 use App\Feature\FeatureGovernanceService;
 use App\Observability\Repository\MetricEventRepository;
-use App\User\Service\EmailVerificationService;
 use App\User\Service\PasswordPolicy;
 use App\User\Service\PasswordResetService;
 use App\User\Service\TwoFactorService;
@@ -37,7 +41,9 @@ final class AuthController
     public function __construct(
         private Security $security,
         private PasswordResetService $passwordResetService,
-        private EmailVerificationService $emailVerificationService,
+        private RequestEmailVerificationHandler $requestEmailVerificationHandler,
+        private ConfirmEmailVerificationHandler $confirmEmailVerificationHandler,
+        private AdminConfirmEmailVerificationHandler $adminConfirmEmailVerificationHandler,
         private TwoFactorService $twoFactorService,
         private FeatureGovernanceService $featureGovernanceService,
         private PasswordPolicy $passwordPolicy,
@@ -381,10 +387,10 @@ final class AuthController
             );
         }
 
-        $token = $this->emailVerificationService->requestVerification($email);
+        $result = $this->requestEmailVerificationHandler->handle($email);
         $response = ['accepted' => true];
-        if ($token !== null) {
-            $response['verification_token'] = $token;
+        if ($result->token() !== null) {
+            $response['verification_token'] = $result->token();
         }
 
         return new JsonResponse($response, Response::HTTP_ACCEPTED);
@@ -402,7 +408,8 @@ final class AuthController
             );
         }
 
-        if (!$this->emailVerificationService->confirmVerification($token)) {
+        $result = $this->confirmEmailVerificationHandler->handle($token);
+        if ($result->status() === ConfirmEmailVerificationResult::STATUS_INVALID_TOKEN) {
             return new JsonResponse(
                 ['code' => 'INVALID_TOKEN', 'message' => $this->translator->trans('auth.error.invalid_or_expired_token')],
                 Response::HTTP_BAD_REQUEST
@@ -434,7 +441,8 @@ final class AuthController
         $actor = $this->security->getUser();
         $actorId = $actor instanceof User ? $actor->getId() : null;
 
-        if (!$this->emailVerificationService->forceVerifyByEmail($email, $actorId)) {
+        $result = $this->adminConfirmEmailVerificationHandler->handle($email, $actorId);
+        if ($result->status() === AdminConfirmEmailVerificationResult::STATUS_USER_NOT_FOUND) {
             return new JsonResponse(
                 ['code' => 'USER_NOT_FOUND', 'message' => $this->translator->trans('auth.error.unknown_user')],
                 Response::HTTP_NOT_FOUND
