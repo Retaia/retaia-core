@@ -86,6 +86,13 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - `Application/AuthClient/Port/DeviceFlowGateway` (device flow)
 - objectif: réduire le couplage des handlers applicatifs à un sous-ensemble de capacités
 
+## Onzième lot (adapters infra)
+
+- séparation de l'adapter infra `auth-client` en deux classes:
+  - `Infrastructure/Auth/AuthClientAdminGateway` pour `AuthClientGateway`
+  - `Infrastructure/Auth/DeviceFlowGateway` pour `DeviceFlowGateway`
+- objectif: aligner 1 adapter infra par port applicatif principal
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants

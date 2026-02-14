@@ -3,10 +3,9 @@
 namespace App\Infrastructure\Auth;
 
 use App\Application\AuthClient\Port\AuthClientGateway as AuthClientGatewayPort;
-use App\Application\AuthClient\Port\DeviceFlowGateway as DeviceFlowGatewayPort;
 use App\Auth\AuthClientService;
 
-final class AuthClientGateway implements AuthClientGatewayPort, DeviceFlowGatewayPort
+final class AuthClientAdminGateway implements AuthClientGatewayPort
 {
     public function __construct(
         private AuthClientService $authClientService,
@@ -44,25 +43,5 @@ final class AuthClientGateway implements AuthClientGatewayPort, DeviceFlowGatewa
     public function rotateSecret(string $clientId): ?string
     {
         return $this->authClientService->rotateSecret($clientId);
-    }
-
-    public function startDeviceFlow(string $clientKind): array
-    {
-        return $this->authClientService->startDeviceFlow($clientKind);
-    }
-
-    public function pollDeviceFlow(string $deviceCode): ?array
-    {
-        return $this->authClientService->pollDeviceFlow($deviceCode);
-    }
-
-    public function cancelDeviceFlow(string $deviceCode): ?array
-    {
-        return $this->authClientService->cancelDeviceFlow($deviceCode);
-    }
-
-    public function approveDeviceFlow(string $userCode): ?array
-    {
-        return $this->authClientService->approveDeviceFlow($userCode);
     }
 }
