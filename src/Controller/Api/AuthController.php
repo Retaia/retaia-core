@@ -4,6 +4,8 @@ namespace App\Controller\Api;
 
 use App\Application\AuthClient\MintClientTokenHandler;
 use App\Application\AuthClient\MintClientTokenResult;
+use App\Application\AuthClient\CancelDeviceFlowHandler;
+use App\Application\AuthClient\CancelDeviceFlowResult;
 use App\Application\AuthClient\PollDeviceFlowHandler;
 use App\Application\AuthClient\PollDeviceFlowResult;
 use App\Application\AuthClient\RevokeClientTokenHandler;
@@ -53,6 +55,7 @@ final class AuthController
         private RotateClientSecretHandler $rotateClientSecretHandler,
         private StartDeviceFlowHandler $startDeviceFlowHandler,
         private PollDeviceFlowHandler $pollDeviceFlowHandler,
+        private CancelDeviceFlowHandler $cancelDeviceFlowHandler,
         private MetricEventRepository $metrics,
         private LoggerInterface $logger,
     ) {
@@ -689,14 +692,14 @@ final class AuthController
             );
         }
 
-        $status = $this->authClientService->cancelDeviceFlow($deviceCode);
-        if (!is_array($status)) {
+        $result = $this->cancelDeviceFlowHandler->handle($deviceCode);
+        if ($result->status() === CancelDeviceFlowResult::STATUS_INVALID_DEVICE_CODE) {
             return new JsonResponse(
                 ['code' => 'INVALID_DEVICE_CODE', 'message' => $this->translator->trans('auth.error.invalid_device_code')],
                 Response::HTTP_BAD_REQUEST
             );
         }
-        if (($status['status'] ?? null) === 'EXPIRED') {
+        if ($result->status() === CancelDeviceFlowResult::STATUS_EXPIRED_DEVICE_CODE) {
             return new JsonResponse(
                 ['code' => 'EXPIRED_DEVICE_CODE', 'message' => $this->translator->trans('auth.error.expired_device_code')],
                 Response::HTTP_BAD_REQUEST
