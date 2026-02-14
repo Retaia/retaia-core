@@ -731,6 +731,46 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
     }
 
+    public function testDeviceFlowStartPollAndCancel(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.64');
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/start', [
+            'client_kind' => 'AGENT',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $startPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($startPayload);
+        $deviceCode = (string) ($startPayload['device_code'] ?? '');
+        self::assertNotSame('', $deviceCode);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/poll', [
+            'device_code' => $deviceCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $pollPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('PENDING', $pollPayload['status'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/cancel', [
+            'device_code' => $deviceCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $cancelPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame(true, $cancelPayload['canceled'] ?? null);
+    }
+
+    public function testDeviceFlowPollRejectsInvalidCode(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.65');
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/poll', [
+            'device_code' => 'invalid',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('INVALID_DEVICE_CODE', $payload['code'] ?? null);
+    }
+
     public function testUnsupportedLocaleFallsBackToEnglishAuthenticationRequiredMessage(): void
     {
         $client = $this->createIsolatedClient('10.0.0.35', 'de');
