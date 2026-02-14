@@ -17,6 +17,11 @@ auth:
     forbidden_actor: "Acteur non autorisé"
     unsupported_feature_flags_contract_version: "Version de contrat feature-flags non supportée"
     mfa_already_enabled: "La 2FA est déjà activée"
+    mfa_not_enabled: "La 2FA n'est pas activée"
+    mfa_required: "Le code 2FA est requis"
+    invalid_2fa_code: "Code 2FA invalide"
+    otp_code_required: "otp_code est requis"
+    mfa_setup_required: "Une configuration 2FA est requise avant activation"
 asset:
   error:
     not_found: "Asset introuvable"

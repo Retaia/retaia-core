@@ -4,8 +4,10 @@ namespace App\Tests\Unit\Security;
 
 use App\Entity\User;
 use App\Security\ApiLoginAuthenticator;
+use App\User\Service\TwoFactorService;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
+use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
@@ -21,7 +23,7 @@ final class ApiLoginAuthenticatorTest extends TestCase
 {
     public function testSupportsOnlyPostLoginRoute(): void
     {
-        $authenticator = new ApiLoginAuthenticator(new NullLogger(), $this->translator());
+        $authenticator = $this->authenticator();
 
         $loginPost = Request::create('/api/v1/auth/login', Request::METHOD_POST);
         $loginPost->attributes->set('_route', 'api_auth_login');
@@ -39,7 +41,7 @@ final class ApiLoginAuthenticatorTest extends TestCase
 
     public function testAuthenticateBuildsPassportForValidCredentials(): void
     {
-        $authenticator = new ApiLoginAuthenticator(new NullLogger(), $this->translator());
+        $authenticator = $this->authenticator();
         $request = Request::create('/api/v1/auth/login', Request::METHOD_POST, server: ['CONTENT_TYPE' => 'application/json'], content: '{"email":"admin@retaia.local","password":"change-me"}');
 
         $passport = $authenticator->authenticate($request);
@@ -54,7 +56,7 @@ final class ApiLoginAuthenticatorTest extends TestCase
 
     public function testAuthenticateRejectsMissingCredentials(): void
     {
-        $authenticator = new ApiLoginAuthenticator(new NullLogger(), $this->translator());
+        $authenticator = $this->authenticator();
         $request = Request::create('/api/v1/auth/login', Request::METHOD_POST, server: ['CONTENT_TYPE' => 'application/json'], content: '{"email":"","password":""}');
 
         $this->expectException(CustomUserMessageAuthenticationException::class);
@@ -64,7 +66,7 @@ final class ApiLoginAuthenticatorTest extends TestCase
 
     public function testOnAuthenticationSuccessReturnsNormalizedUserPayload(): void
     {
-        $authenticator = new ApiLoginAuthenticator(new NullLogger(), $this->translator());
+        $authenticator = $this->authenticator();
         $token = $this->createStub(TokenInterface::class);
         $token->method('getUser')->willReturn(new User('u-1', 'user@example.test', 'hash', ['ROLE_ADMIN'], true));
 
@@ -80,7 +82,7 @@ final class ApiLoginAuthenticatorTest extends TestCase
 
     public function testOnAuthenticationSuccessRejectsInvalidUserType(): void
     {
-        $authenticator = new ApiLoginAuthenticator(new NullLogger(), $this->translator());
+        $authenticator = $this->authenticator();
         $token = $this->createStub(TokenInterface::class);
         $token->method('getUser')->willReturn(null);
 
@@ -93,7 +95,7 @@ final class ApiLoginAuthenticatorTest extends TestCase
 
     public function testOnAuthenticationFailureMapsValidationError(): void
     {
-        $authenticator = new ApiLoginAuthenticator(new NullLogger(), $this->translator());
+        $authenticator = $this->authenticator();
 
         $response = $authenticator->onAuthenticationFailure(
             Request::create('/api/v1/auth/login', Request::METHOD_POST, server: ['CONTENT_TYPE' => 'application/json'], content: '{"email":"x@y.test"}'),
@@ -107,7 +109,7 @@ final class ApiLoginAuthenticatorTest extends TestCase
 
     public function testOnAuthenticationFailureMapsEmailVerificationError(): void
     {
-        $authenticator = new ApiLoginAuthenticator(new NullLogger(), $this->translator());
+        $authenticator = $this->authenticator();
 
         $response = $authenticator->onAuthenticationFailure(
             Request::create('/api/v1/auth/login', Request::METHOD_POST, server: ['CONTENT_TYPE' => 'application/json'], content: '{"email":"x@y.test"}'),
@@ -121,7 +123,7 @@ final class ApiLoginAuthenticatorTest extends TestCase
 
     public function testOnAuthenticationFailureMapsThrottleError(): void
     {
-        $authenticator = new ApiLoginAuthenticator(new NullLogger(), $this->translator());
+        $authenticator = $this->authenticator();
 
         $response = $authenticator->onAuthenticationFailure(
             Request::create('/api/v1/auth/login', Request::METHOD_POST, server: ['CONTENT_TYPE' => 'application/json'], content: '{"email":"x@y.test"}'),
@@ -137,7 +139,7 @@ final class ApiLoginAuthenticatorTest extends TestCase
 
     public function testOnAuthenticationFailureMapsUnauthorizedError(): void
     {
-        $authenticator = new ApiLoginAuthenticator(new NullLogger(), $this->translator());
+        $authenticator = $this->authenticator();
 
         $response = $authenticator->onAuthenticationFailure(
             Request::create('/api/v1/auth/login', Request::METHOD_POST, server: ['CONTENT_TYPE' => 'application/json'], content: '{"email":"x@y.test"}'),
@@ -151,7 +153,7 @@ final class ApiLoginAuthenticatorTest extends TestCase
 
     public function testStartReturnsAuthenticationRequiredResponse(): void
     {
-        $authenticator = new ApiLoginAuthenticator(new NullLogger(), $this->translator());
+        $authenticator = $this->authenticator();
         $response = $authenticator->start(Request::create('/api/v1/jobs'));
 
         self::assertSame(Response::HTTP_UNAUTHORIZED, $response->getStatusCode());
@@ -164,5 +166,12 @@ final class ApiLoginAuthenticatorTest extends TestCase
         $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
 
         return $translator;
+    }
+
+    private function authenticator(): ApiLoginAuthenticator
+    {
+        $twoFactor = new TwoFactorService(new ArrayAdapter());
+
+        return new ApiLoginAuthenticator(new NullLogger(), $this->translator(), $twoFactor);
     }
 }

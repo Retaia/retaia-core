@@ -3,6 +3,7 @@
 namespace App\Security;
 
 use App\Entity\User;
+use App\User\Service\TwoFactorService;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -26,6 +27,7 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
     public function __construct(
         private LoggerInterface $logger,
         private TranslatorInterface $translator,
+        private TwoFactorService $twoFactorService,
     ) {
     }
 
@@ -70,6 +72,26 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.invalid_credentials')],
                 Response::HTTP_UNAUTHORIZED
             );
+        }
+
+        if ($user instanceof User && $this->twoFactorService->isEnabled($user->getId())) {
+            $payload = json_decode($request->getContent(), true);
+            if (!is_array($payload)) {
+                $payload = [];
+            }
+            $otpCode = trim((string) ($payload['otp_code'] ?? ''));
+            if ($otpCode === '') {
+                return new JsonResponse(
+                    ['code' => 'MFA_REQUIRED', 'message' => $this->translator->trans('auth.error.mfa_required')],
+                    Response::HTTP_UNAUTHORIZED
+                );
+            }
+            if (!$this->twoFactorService->verifyLoginOtp($user->getId(), $otpCode)) {
+                return new JsonResponse(
+                    ['code' => 'INVALID_2FA_CODE', 'message' => $this->translator->trans('auth.error.invalid_2fa_code')],
+                    Response::HTTP_UNAUTHORIZED
+                );
+            }
         }
 
         $this->logger->info('auth.login.succeeded', [
