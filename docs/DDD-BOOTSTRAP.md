@@ -110,6 +110,15 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - `cancelDeviceFlow`
   - `approveDeviceFlow`
 
+## Quatorzième lot (admin/token service)
+
+- extraction de la logique admin/token dans `Auth/AuthClientAdminService`:
+  - `mintToken`, `hasClient`, `clientKind`, `revokeToken`, `rotateSecret`
+  - `isMcpDisabledByAppPolicy`
+- `Auth/AuthClientService` reste façade de compatibilité et délègue à:
+  - `AuthClientAdminService`
+  - `AuthClientDeviceFlowService`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
