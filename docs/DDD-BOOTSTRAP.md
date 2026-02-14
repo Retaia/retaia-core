@@ -148,6 +148,18 @@ Poser un premier découpage DDD sans changer le contrat API v1.
 - ajout du port `Application/Auth/Port/EmailVerificationGateway`
 - adapter infra `Infrastructure/User/EmailVerificationGateway` branché sur `User/Service/EmailVerificationService`
 
+## Dix-neuvième lot (password reset handlers)
+
+- extraction des use cases `lost-password` en couche Application:
+  - `RequestPasswordResetHandler`
+  - `ResetPasswordHandler`
+- ajout des ports:
+  - `Application/Auth/Port/PasswordResetGateway`
+  - `Application/Auth/Port/PasswordPolicyGateway`
+- adapters infra:
+  - `Infrastructure/User/PasswordResetGateway`
+  - `Infrastructure/User/PasswordPolicyGateway`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
