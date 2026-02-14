@@ -133,6 +133,21 @@ final class AppController
             );
         }
 
+        $validation = $this->featureGovernanceService->validateFeaturePayload(
+            $appFeatureEnabled,
+            $this->featureGovernanceService->allowedAppFeatureKeys()
+        );
+        if ($validation['unknown_keys'] !== [] || $validation['non_boolean_keys'] !== []) {
+            return new JsonResponse(
+                [
+                    'code' => 'VALIDATION_FAILED',
+                    'message' => $this->translator->trans('auth.error.invalid_app_feature_payload'),
+                    'details' => $validation,
+                ],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
         $this->featureGovernanceService->setAppFeatureEnabled($appFeatureEnabled);
 
         return new JsonResponse(

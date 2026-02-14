@@ -591,6 +591,50 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('FORBIDDEN_SCOPE', $payload['code'] ?? null);
     }
 
+    public function testMeFeaturesRejectsUnknownFeatureKey(): void
+    {
+        $client = $this->createIsolatedClient('10.0.1.56');
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('PATCH', '/api/v1/auth/me/features', [
+            'user_feature_enabled' => [
+                'features.unknown.flag' => true,
+            ],
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
+        self::assertSame(['features.unknown.flag'], $payload['details']['unknown_keys'] ?? null);
+    }
+
+    public function testMeFeaturesRejectsNonBooleanFeatureValue(): void
+    {
+        $client = $this->createIsolatedClient('10.0.2.56');
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('PATCH', '/api/v1/auth/me/features', [
+            'user_feature_enabled' => [
+                'features.ai.suggest_tags' => 'off',
+            ],
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
+        self::assertSame(['features.ai.suggest_tags'], $payload['details']['non_boolean_keys'] ?? null);
+    }
+
     public function testAppFeaturesAreAdminOnly(): void
     {
         $client = $this->createIsolatedClient('10.0.0.57');
@@ -637,6 +681,50 @@ final class ApiAuthFlowTest extends WebTestCase
         $patched = json_decode($client->getResponse()->getContent(), true);
         self::assertSame(false, $patched['app_feature_enabled']['features.ai'] ?? null);
         self::assertSame(false, $patched['app_feature_enabled']['features.ai.suggest_tags'] ?? null);
+    }
+
+    public function testAdminPatchAppFeaturesRejectsUnknownFeatureKey(): void
+    {
+        $client = $this->createIsolatedClient('10.0.1.58');
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('PATCH', '/api/v1/app/features', [
+            'app_feature_enabled' => [
+                'features.unknown.flag' => true,
+            ],
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
+        self::assertSame(['features.unknown.flag'], $payload['details']['unknown_keys'] ?? null);
+    }
+
+    public function testAdminPatchAppFeaturesRejectsNonBooleanFeatureValue(): void
+    {
+        $client = $this->createIsolatedClient('10.0.2.58');
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('PATCH', '/api/v1/app/features', [
+            'app_feature_enabled' => [
+                'features.ai' => 'disabled',
+            ],
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
+        self::assertSame(['features.ai'], $payload['details']['non_boolean_keys'] ?? null);
     }
 
     public function testClientTokenMintReturnsTokenForAgentClient(): void
