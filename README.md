@@ -218,6 +218,7 @@ php bin/console app:sentry:probe
 - `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/AGENT.md`
 - `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/DEVELOPMENT-BEST-PRACTICES.md`
 - `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/BOOTSTRAP-TECHNIQUE.md`
+- `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/DDD-BOOTSTRAP.md`
 - `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/AUTH-OPS-RUNBOOK.md`
 - `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/OBSERVABILITY-RUNBOOK.md`
 - `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/OPS-READINESS-CHECKLIST.md`
