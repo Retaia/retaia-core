@@ -10,10 +10,18 @@ Le pipeline CI est défini dans :
 
 Il exécute quatre jobs :
 
+0. `branch-up-to-date` (PR uniquement)
 1. `no-black-magic`
 2. `lint`
 3. `test`
 4. `security-audit`
+
+Détail supplémentaire :
+
+- `branch-up-to-date` (sur `pull_request`) :
+  - `scripts/check-branch-up-to-date.sh`
+  - échoue si la branche PR n’est pas rebased sur la base (`master`)
+  - échoue si des merge commits de synchronisation sont présents dans l’historique PR
 
 Détail :
 
