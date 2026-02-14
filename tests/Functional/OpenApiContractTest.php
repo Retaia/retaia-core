@@ -113,6 +113,24 @@ final class OpenApiContractTest extends WebTestCase
         }
     }
 
+    public function testAssetDerivedWaveformUrlIsOptionalAndNullableInOpenApi(): void
+    {
+        $openApi = $this->openApi();
+
+        $assetDerived = $openApi['components']['schemas']['AssetDerived'] ?? null;
+        self::assertIsArray($assetDerived);
+        self::assertSame('object', $assetDerived['type'] ?? null);
+
+        $waveform = $assetDerived['properties']['waveform_url'] ?? null;
+        self::assertIsArray($waveform);
+        self::assertSame('string', $waveform['type'] ?? null);
+        self::assertTrue((bool) ($waveform['nullable'] ?? false));
+
+        $required = $assetDerived['required'] ?? [];
+        self::assertIsArray($required);
+        self::assertNotContains('waveform_url', $required);
+    }
+
     public function testDecisionRequestWithoutIdempotencyKeyIsRejected(): void
     {
         $openApi = $this->openApi();
