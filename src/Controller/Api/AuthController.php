@@ -4,6 +4,10 @@ namespace App\Controller\Api;
 
 use App\Application\AuthClient\MintClientTokenHandler;
 use App\Application\AuthClient\MintClientTokenResult;
+use App\Application\AuthClient\RevokeClientTokenHandler;
+use App\Application\AuthClient\RevokeClientTokenResult;
+use App\Application\AuthClient\RotateClientSecretHandler;
+use App\Application\AuthClient\RotateClientSecretResult;
 use App\Auth\AuthClientService;
 use App\Entity\User;
 use App\Feature\FeatureGovernanceService;
@@ -41,6 +45,8 @@ final class AuthController
         private RateLimiterFactory $clientTokenMintLimiter,
         private AuthClientService $authClientService,
         private MintClientTokenHandler $mintClientTokenHandler,
+        private RevokeClientTokenHandler $revokeClientTokenHandler,
+        private RotateClientSecretHandler $rotateClientSecretHandler,
         private MetricEventRepository $metrics,
         private LoggerInterface $logger,
     ) {
@@ -515,24 +521,24 @@ final class AuthController
             );
         }
 
-        if (!$this->authClientService->hasClient($clientId)) {
+        $result = $this->revokeClientTokenHandler->handle($clientId);
+        if ($result->status() === RevokeClientTokenResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.invalid_client_id')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
 
-        if ($this->authClientService->clientKind($clientId) === 'UI_RUST') {
+        if ($result->status() === RevokeClientTokenResult::STATUS_FORBIDDEN_SCOPE) {
             return new JsonResponse(
                 ['code' => 'FORBIDDEN_SCOPE', 'message' => $this->translator->trans('auth.error.forbidden_scope')],
                 Response::HTTP_FORBIDDEN
             );
         }
 
-        $this->authClientService->revokeToken($clientId);
         $this->logger->info('auth.client.token.revoked', [
             'client_id' => $clientId,
-            'client_kind' => $this->authClientService->clientKind($clientId),
+            'client_kind' => $result->clientKind(),
         ]);
 
         return new JsonResponse(['revoked' => true, 'client_id' => $clientId], Response::HTTP_OK);
@@ -555,8 +561,8 @@ final class AuthController
             );
         }
 
-        $secretKey = $this->authClientService->rotateSecret($clientId);
-        if (!is_string($secretKey)) {
+        $result = $this->rotateClientSecretHandler->handle($clientId);
+        if ($result->status() === RotateClientSecretResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.invalid_client_id')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
@@ -565,13 +571,13 @@ final class AuthController
 
         $this->logger->info('auth.client.secret.rotated', [
             'client_id' => $clientId,
-            'client_kind' => $this->authClientService->clientKind($clientId),
+            'client_kind' => $result->clientKind(),
         ]);
 
         return new JsonResponse(
             [
                 'client_id' => $clientId,
-                'secret_key' => $secretKey,
+                'secret_key' => $result->secretKey(),
                 'rotated' => true,
             ],
             Response::HTTP_OK

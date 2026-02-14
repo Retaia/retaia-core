@@ -25,6 +25,18 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - Infrastructure adapter: `Infrastructure/Auth/AuthClientGateway`
   - Controller: `Controller/Api/AuthController` (mapping HTTP conservé)
 
+## Troisième use case migré
+
+- `POST /api/v1/auth/clients/{client_id}/revoke-token`
+  - Domain: `Domain/AuthClient/TechnicalClientAdminPolicy`
+  - Application: `Application/AuthClient/RevokeClientTokenHandler`
+  - Infrastructure adapter: `Infrastructure/Auth/AuthClientGateway`
+  - Controller: `Controller/Api/AuthController` (mapping HTTP conservé)
+- `POST /api/v1/auth/clients/{client_id}/rotate-secret`
+  - Application: `Application/AuthClient/RotateClientSecretHandler`
+  - Infrastructure adapter: `Infrastructure/Auth/AuthClientGateway`
+  - Controller: `Controller/Api/AuthController` (mapping HTTP conservé)
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
