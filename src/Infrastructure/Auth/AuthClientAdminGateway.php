@@ -3,18 +3,18 @@
 namespace App\Infrastructure\Auth;
 
 use App\Application\AuthClient\Port\AuthClientGateway as AuthClientGatewayPort;
-use App\Auth\AuthClientService;
+use App\Auth\AuthClientAdminService;
 
 final class AuthClientAdminGateway implements AuthClientGatewayPort
 {
     public function __construct(
-        private AuthClientService $authClientService,
+        private AuthClientAdminService $adminService,
     ) {
     }
 
     public function isMcpDisabledByAppPolicy(): bool
     {
-        return $this->authClientService->isMcpDisabledByAppPolicy();
+        return $this->adminService->isMcpDisabledByAppPolicy();
     }
 
     /**
@@ -22,26 +22,26 @@ final class AuthClientAdminGateway implements AuthClientGatewayPort
      */
     public function mintToken(string $clientId, string $clientKind, string $secretKey): ?array
     {
-        return $this->authClientService->mintToken($clientId, $clientKind, $secretKey);
+        return $this->adminService->mintToken($clientId, $clientKind, $secretKey);
     }
 
     public function hasClient(string $clientId): bool
     {
-        return $this->authClientService->hasClient($clientId);
+        return $this->adminService->hasClient($clientId);
     }
 
     public function clientKind(string $clientId): ?string
     {
-        return $this->authClientService->clientKind($clientId);
+        return $this->adminService->clientKind($clientId);
     }
 
     public function revokeToken(string $clientId): bool
     {
-        return $this->authClientService->revokeToken($clientId);
+        return $this->adminService->revokeToken($clientId);
     }
 
     public function rotateSecret(string $clientId): ?string
     {
-        return $this->authClientService->rotateSecret($clientId);
+        return $this->adminService->rotateSecret($clientId);
     }
 }
