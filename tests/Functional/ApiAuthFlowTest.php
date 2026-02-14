@@ -532,6 +532,41 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('INVALID_2FA_CODE', $payload['code'] ?? null);
     }
 
+    public function testTwoFactorLoginAcceptsSlightClockDriftOtpCode(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.531');
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/2fa/setup');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $setupPayload = json_decode($client->getResponse()->getContent(), true);
+        $secret = (string) ($setupPayload['secret'] ?? '');
+        $currentOtpCode = $this->generateOtpCode($secret);
+
+        $client->jsonRequest('POST', '/api/v1/auth/2fa/enable', ['otp_code' => $currentOtpCode]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/logout');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $driftedCode = $this->generateOtpCodeAt($secret, time() - 20);
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+            'otp_code' => $driftedCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/2fa/disable', [
+            'otp_code' => $this->generateOtpCode($secret),
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+    }
+
     public function testMeFeaturesRequiresAuthentication(): void
     {
         $client = $this->createIsolatedClient('10.0.0.54');
@@ -1159,5 +1194,10 @@ final class ApiAuthFlowTest extends WebTestCase
     private function generateOtpCode(string $secret): string
     {
         return TOTP::createFromSecret($secret)->now();
+    }
+
+    private function generateOtpCodeAt(string $secret, int $timestamp): string
+    {
+        return TOTP::createFromSecret($secret)->at($timestamp);
     }
 }
