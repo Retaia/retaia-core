@@ -2,6 +2,7 @@
 
 namespace App\Controller\Api;
 
+use App\Auth\AuthClientService;
 use App\Entity\User;
 use App\Feature\FeatureGovernanceService;
 use App\User\Service\EmailVerificationService;
@@ -32,6 +33,9 @@ final class AuthController
         private RateLimiterFactory $lostPasswordRequestLimiter,
         #[Autowire(service: 'limiter.verify_email_request')]
         private RateLimiterFactory $verifyEmailRequestLimiter,
+        #[Autowire(service: 'limiter.client_token_mint')]
+        private RateLimiterFactory $clientTokenMintLimiter,
+        private AuthClientService $authClientService,
     ) {
     }
 
@@ -403,6 +407,60 @@ final class AuthController
         }
 
         return new JsonResponse(['email_verified' => true], Response::HTTP_OK);
+    }
+
+    #[Route('/clients/token', name: 'api_auth_clients_token', methods: ['POST'])]
+    public function clientToken(Request $request): JsonResponse
+    {
+        $payload = $this->payload($request);
+        $clientId = trim((string) ($payload['client_id'] ?? ''));
+        $clientKind = trim((string) ($payload['client_kind'] ?? ''));
+        $secretKey = trim((string) ($payload['secret_key'] ?? ''));
+
+        if ($clientId === '' || $clientKind === '' || $secretKey === '') {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.client_credentials_required')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        if ($clientKind === 'UI_RUST') {
+            return new JsonResponse(
+                ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
+                Response::HTTP_FORBIDDEN
+            );
+        }
+        if ($clientKind === 'MCP' && $this->authClientService->isMcpDisabledByAppPolicy()) {
+            return new JsonResponse(
+                ['code' => 'FORBIDDEN_SCOPE', 'message' => $this->translator->trans('auth.error.forbidden_scope')],
+                Response::HTTP_FORBIDDEN
+            );
+        }
+
+        $limiterKey = hash('sha256', mb_strtolower($clientId).'|'.$clientKind.'|'.(string) ($request->getClientIp() ?? 'unknown'));
+        $limit = $this->clientTokenMintLimiter->create($limiterKey)->consume(1);
+        if (!$limit->isAccepted()) {
+            $retryAfter = $limit->getRetryAfter();
+
+            return new JsonResponse(
+                [
+                    'code' => 'TOO_MANY_ATTEMPTS',
+                    'message' => $this->translator->trans('auth.error.too_many_client_token_requests'),
+                    'retry_in_seconds' => $retryAfter !== null ? max(1, $retryAfter->getTimestamp() - time()) : 60,
+                ],
+                Response::HTTP_TOO_MANY_REQUESTS
+            );
+        }
+
+        $token = $this->authClientService->mintToken($clientId, $clientKind, $secretKey);
+        if (!is_array($token)) {
+            return new JsonResponse(
+                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.invalid_client_credentials')],
+                Response::HTTP_UNAUTHORIZED
+            );
+        }
+
+        return new JsonResponse($token, Response::HTTP_OK);
     }
 
     /**

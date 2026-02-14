@@ -637,6 +637,53 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame(false, $patched['app_feature_enabled']['features.ai.suggest_tags'] ?? null);
     }
 
+    public function testClientTokenMintReturnsTokenForAgentClient(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.59');
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/token', [
+            'client_id' => 'agent-default',
+            'client_kind' => 'AGENT',
+            'secret_key' => 'agent-secret',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        self::assertStringStartsWith('ct_', (string) ($payload['access_token'] ?? ''));
+        self::assertSame('Bearer', $payload['token_type'] ?? null);
+    }
+
+    public function testClientTokenMintRejectsUiRustClientKind(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.60');
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/token', [
+            'client_id' => 'agent-default',
+            'client_kind' => 'UI_RUST',
+            'secret_key' => 'agent-secret',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('FORBIDDEN_ACTOR', $payload['code'] ?? null);
+    }
+
+    public function testClientTokenMintRejectsInvalidCredentials(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.61');
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/token', [
+            'client_id' => 'agent-default',
+            'client_kind' => 'AGENT',
+            'secret_key' => 'wrong-secret',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
+    }
+
     public function testUnsupportedLocaleFallsBackToEnglishAuthenticationRequiredMessage(): void
     {
         $client = $this->createIsolatedClient('10.0.0.35', 'de');
