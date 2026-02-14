@@ -2,7 +2,8 @@
 
 namespace App\Controller;
 
-use App\Auth\AuthClientService;
+use App\Application\AuthClient\ApproveDeviceFlowHandler;
+use App\Application\AuthClient\ApproveDeviceFlowResult;
 use App\Entity\User;
 use App\User\Service\TwoFactorService;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -18,7 +19,7 @@ final class DeviceController
     public function __construct(
         private Security $security,
         private TwoFactorService $twoFactorService,
-        private AuthClientService $authClientService,
+        private ApproveDeviceFlowHandler $approveDeviceFlowHandler,
         private TranslatorInterface $translator,
     ) {
     }
@@ -71,20 +72,20 @@ final class DeviceController
             }
         }
 
-        $status = $this->authClientService->approveDeviceFlow($userCode);
-        if (!is_array($status)) {
+        $result = $this->approveDeviceFlowHandler->handle($userCode);
+        if ($result->status() === ApproveDeviceFlowResult::STATUS_INVALID_DEVICE_CODE) {
             return new JsonResponse(
                 ['code' => 'INVALID_DEVICE_CODE', 'message' => $this->translator->trans('auth.error.invalid_device_code')],
                 Response::HTTP_BAD_REQUEST
             );
         }
-        if (($status['status'] ?? null) === 'EXPIRED') {
+        if ($result->status() === ApproveDeviceFlowResult::STATUS_EXPIRED_DEVICE_CODE) {
             return new JsonResponse(
                 ['code' => 'EXPIRED_DEVICE_CODE', 'message' => $this->translator->trans('auth.error.expired_device_code')],
                 Response::HTTP_BAD_REQUEST
             );
         }
-        if (($status['status'] ?? null) !== 'APPROVED') {
+        if ($result->status() === ApproveDeviceFlowResult::STATUS_STATE_CONFLICT) {
             return new JsonResponse(
                 ['code' => 'STATE_CONFLICT', 'message' => $this->translator->trans('auth.error.device_flow_not_approvable')],
                 Response::HTTP_CONFLICT
