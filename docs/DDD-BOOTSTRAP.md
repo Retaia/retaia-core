@@ -79,6 +79,13 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - Infrastructure adapters: `Infrastructure/Auth/DeviceApprovalSecondFactorGateway` + `Infrastructure/Auth/AuthClientGateway`
   - Controller: `Controller/DeviceController` (mapping HTTP conservé)
 
+## Dixième lot (ports)
+
+- séparation des ports applicatifs `auth-client`:
+  - `Application/AuthClient/Port/AuthClientGateway` (token/admin)
+  - `Application/AuthClient/Port/DeviceFlowGateway` (device flow)
+- objectif: réduire le couplage des handlers applicatifs à un sous-ensemble de capacités
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants

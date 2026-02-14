@@ -4,14 +4,14 @@ namespace App\Tests\Unit\Application\AuthClient;
 
 use App\Application\AuthClient\ApproveDeviceFlowHandler;
 use App\Application\AuthClient\ApproveDeviceFlowResult;
-use App\Application\AuthClient\Port\AuthClientGateway;
+use App\Application\AuthClient\Port\DeviceFlowGateway;
 use PHPUnit\Framework\TestCase;
 
 final class ApproveDeviceFlowHandlerTest extends TestCase
 {
     public function testReturnsInvalidDeviceCodeWhenUnknownUserCode(): void
     {
-        $gateway = $this->createMock(AuthClientGateway::class);
+        $gateway = $this->createMock(DeviceFlowGateway::class);
         $gateway->expects(self::once())->method('approveDeviceFlow')->with('UNKNOWN')->willReturn(null);
 
         $handler = new ApproveDeviceFlowHandler($gateway);
@@ -22,7 +22,7 @@ final class ApproveDeviceFlowHandlerTest extends TestCase
 
     public function testReturnsExpiredDeviceCodeWhenFlowExpired(): void
     {
-        $gateway = $this->createMock(AuthClientGateway::class);
+        $gateway = $this->createMock(DeviceFlowGateway::class);
         $gateway->expects(self::once())->method('approveDeviceFlow')->with('EXPIRED01')->willReturn([
             'status' => 'EXPIRED',
         ]);
@@ -35,7 +35,7 @@ final class ApproveDeviceFlowHandlerTest extends TestCase
 
     public function testReturnsStateConflictWhenFlowIsNotApprovable(): void
     {
-        $gateway = $this->createMock(AuthClientGateway::class);
+        $gateway = $this->createMock(DeviceFlowGateway::class);
         $gateway->expects(self::once())->method('approveDeviceFlow')->with('DENIED01')->willReturn([
             'status' => 'DENIED',
         ]);
@@ -48,7 +48,7 @@ final class ApproveDeviceFlowHandlerTest extends TestCase
 
     public function testReturnsSuccessWhenFlowIsApproved(): void
     {
-        $gateway = $this->createMock(AuthClientGateway::class);
+        $gateway = $this->createMock(DeviceFlowGateway::class);
         $gateway->expects(self::once())->method('approveDeviceFlow')->with('APPROVED1')->willReturn([
             'status' => 'APPROVED',
         ]);

@@ -2,7 +2,7 @@
 
 namespace App\Tests\Unit\Application\AuthClient;
 
-use App\Application\AuthClient\Port\AuthClientGateway;
+use App\Application\AuthClient\Port\DeviceFlowGateway;
 use App\Application\AuthClient\StartDeviceFlowHandler;
 use App\Application\AuthClient\StartDeviceFlowResult;
 use App\Domain\AuthClient\TechnicalClientTokenPolicy;
@@ -12,7 +12,7 @@ final class StartDeviceFlowHandlerTest extends TestCase
 {
     public function testReturnsForbiddenActorForUnsupportedClientKind(): void
     {
-        $gateway = $this->createStub(AuthClientGateway::class);
+        $gateway = $this->createStub(DeviceFlowGateway::class);
         $handler = new StartDeviceFlowHandler(new TechnicalClientTokenPolicy(), $gateway);
 
         $result = $handler->handle('BACKOFFICE');
@@ -22,7 +22,7 @@ final class StartDeviceFlowHandlerTest extends TestCase
 
     public function testReturnsForbiddenScopeForMcpWhenAppDisabled(): void
     {
-        $gateway = $this->createMock(AuthClientGateway::class);
+        $gateway = $this->createMock(DeviceFlowGateway::class);
         $gateway->expects(self::once())->method('isMcpDisabledByAppPolicy')->willReturn(true);
 
         $handler = new StartDeviceFlowHandler(new TechnicalClientTokenPolicy(), $gateway);
@@ -33,7 +33,7 @@ final class StartDeviceFlowHandlerTest extends TestCase
 
     public function testReturnsSuccessWithFlowPayload(): void
     {
-        $gateway = $this->createMock(AuthClientGateway::class);
+        $gateway = $this->createMock(DeviceFlowGateway::class);
         $gateway->method('isMcpDisabledByAppPolicy')->willReturn(false);
         $gateway->expects(self::once())->method('startDeviceFlow')->with('AGENT')->willReturn([
             'device_code' => 'dc_123',

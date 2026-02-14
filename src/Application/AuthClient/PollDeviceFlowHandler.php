@@ -2,18 +2,18 @@
 
 namespace App\Application\AuthClient;
 
-use App\Application\AuthClient\Port\AuthClientGateway;
+use App\Application\AuthClient\Port\DeviceFlowGateway;
 
 final class PollDeviceFlowHandler
 {
     public function __construct(
-        private AuthClientGateway $authClientGateway,
+        private DeviceFlowGateway $deviceFlowGateway,
     ) {
     }
 
     public function handle(string $deviceCode): PollDeviceFlowResult
     {
-        $status = $this->authClientGateway->pollDeviceFlow($deviceCode);
+        $status = $this->deviceFlowGateway->pollDeviceFlow($deviceCode);
         if (!is_array($status)) {
             return new PollDeviceFlowResult(PollDeviceFlowResult::STATUS_INVALID_DEVICE_CODE);
         }
