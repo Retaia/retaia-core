@@ -791,7 +791,7 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $payload = json_decode($client->getResponse()->getContent(), true);
         self::assertIsArray($payload);
-        self::assertStringStartsWith('ct_', (string) ($payload['access_token'] ?? ''));
+        self::assertMatchesRegularExpression('/^[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+$/', (string) ($payload['access_token'] ?? ''));
         self::assertSame('Bearer', $payload['token_type'] ?? null);
     }
 

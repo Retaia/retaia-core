@@ -10,6 +10,7 @@ final class AuthClientService
     public function __construct(
         private CacheItemPoolInterface $cache,
         private FeatureGovernanceService $featureGovernanceService,
+        private ClientAccessTokenFactory $clientAccessTokenFactory,
     ) {
     }
 
@@ -32,7 +33,7 @@ final class AuthClientService
             return null;
         }
 
-        $token = 'ct_'.bin2hex(random_bytes(24));
+        $token = $this->clientAccessTokenFactory->issue($clientId, $clientKind);
         $tokens = $this->activeTokens();
         $tokens[$clientId] = [
             'access_token' => $token,
