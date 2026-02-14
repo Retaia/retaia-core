@@ -27,6 +27,7 @@ auth:
     invalid_client_credentials: "Invalid client credentials"
     client_credentials_required: "client_id, client_kind and secret_key are required"
     too_many_client_token_requests: "Too many client token requests"
+    invalid_client_id: "Invalid client_id"
 asset:
   error:
     not_found: "Asset not found"
