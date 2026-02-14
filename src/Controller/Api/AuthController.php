@@ -4,6 +4,8 @@ namespace App\Controller\Api;
 
 use App\Application\AuthClient\MintClientTokenHandler;
 use App\Application\AuthClient\MintClientTokenResult;
+use App\Application\AuthClient\PollDeviceFlowHandler;
+use App\Application\AuthClient\PollDeviceFlowResult;
 use App\Application\AuthClient\RevokeClientTokenHandler;
 use App\Application\AuthClient\RevokeClientTokenResult;
 use App\Application\AuthClient\RotateClientSecretHandler;
@@ -50,6 +52,7 @@ final class AuthController
         private RevokeClientTokenHandler $revokeClientTokenHandler,
         private RotateClientSecretHandler $rotateClientSecretHandler,
         private StartDeviceFlowHandler $startDeviceFlowHandler,
+        private PollDeviceFlowHandler $pollDeviceFlowHandler,
         private MetricEventRepository $metrics,
         private LoggerInterface $logger,
     ) {
@@ -629,8 +632,8 @@ final class AuthController
             );
         }
 
-        $status = $this->authClientService->pollDeviceFlow($deviceCode);
-        if (!is_array($status)) {
+        $result = $this->pollDeviceFlowHandler->handle($deviceCode);
+        if ($result->status() === PollDeviceFlowResult::STATUS_INVALID_DEVICE_CODE) {
             $this->metrics->record('auth.device.poll.invalid_device_code');
 
             return new JsonResponse(
@@ -639,7 +642,8 @@ final class AuthController
             );
         }
 
-        if (array_key_exists('retry_in_seconds', $status)) {
+        $status = $result->payload();
+        if ($result->status() === PollDeviceFlowResult::STATUS_THROTTLED && is_array($status)) {
             $this->metrics->record('auth.device.poll.throttled');
 
             return new JsonResponse(
@@ -649,6 +653,13 @@ final class AuthController
                     'retry_in_seconds' => $status['retry_in_seconds'],
                 ],
                 Response::HTTP_TOO_MANY_REQUESTS
+            );
+        }
+
+        if (!is_array($status)) {
+            return new JsonResponse(
+                ['code' => 'INVALID_DEVICE_CODE', 'message' => $this->translator->trans('auth.error.invalid_device_code')],
+                Response::HTTP_BAD_REQUEST
             );
         }
 
