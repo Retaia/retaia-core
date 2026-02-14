@@ -65,7 +65,7 @@ services:
             bool $featureSuggestedTagsFiltersEnabled: '%app.features.ai.suggested_tags_filters%'
             bool $featureDecisionsBulkEnabled: '%app.features.decisions.bulk%'
 
-    App\Controller\Api\AppController:
+    App\Application\AppPolicy\GetAppPolicyHandler:
         bind:
             bool $featureSuggestTagsEnabled: '%app.features.ai.suggest_tags%'
             bool $featureSuggestedTagsFiltersEnabled: '%app.features.ai.suggested_tags_filters%'
