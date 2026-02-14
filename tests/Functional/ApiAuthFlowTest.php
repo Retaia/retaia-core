@@ -462,6 +462,74 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertStringStartsWith('otpauth://totp/', (string) ($payload['otpauth_uri'] ?? ''));
     }
 
+    public function testTwoFactorEnableAndDisableFlow(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.52');
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/2fa/setup');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $setupPayload = json_decode($client->getResponse()->getContent(), true);
+        $secret = (string) ($setupPayload['secret'] ?? '');
+        $otpCode = substr($secret, -6);
+
+        $client->jsonRequest('POST', '/api/v1/auth/2fa/enable', ['otp_code' => $otpCode]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/logout');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('MFA_REQUIRED', $payload['code'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+            'otp_code' => '000000',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('INVALID_2FA_CODE', $payload['code'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+            'otp_code' => $otpCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/2fa/disable', ['otp_code' => $otpCode]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+    }
+
+    public function testTwoFactorEnableRejectsInvalidOtpCode(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.53');
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/2fa/setup');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/2fa/enable', ['otp_code' => '000000']);
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('INVALID_2FA_CODE', $payload['code'] ?? null);
+    }
+
     public function testUnsupportedLocaleFallsBackToEnglishAuthenticationRequiredMessage(): void
     {
         $client = $this->createIsolatedClient('10.0.0.35', 'de');

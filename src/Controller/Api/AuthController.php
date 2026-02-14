@@ -89,6 +89,90 @@ final class AuthController
         return new JsonResponse($setup, Response::HTTP_OK);
     }
 
+    #[Route('/2fa/enable', name: 'api_auth_2fa_enable', methods: ['POST'])]
+    public function twoFactorEnable(Request $request): JsonResponse
+    {
+        $user = $this->security->getUser();
+        if (!$user instanceof User) {
+            return new JsonResponse(
+                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
+                Response::HTTP_UNAUTHORIZED
+            );
+        }
+
+        $otpCode = trim((string) ($this->payload($request)['otp_code'] ?? ''));
+        if ($otpCode === '') {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.otp_code_required')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        try {
+            $enabled = $this->twoFactorService->enable($user->getId(), $otpCode);
+        } catch (\RuntimeException $exception) {
+            $code = $exception->getMessage();
+            if ($code === 'MFA_ALREADY_ENABLED') {
+                return new JsonResponse(
+                    ['code' => 'MFA_ALREADY_ENABLED', 'message' => $this->translator->trans('auth.error.mfa_already_enabled')],
+                    Response::HTTP_CONFLICT
+                );
+            }
+
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.mfa_setup_required')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        if (!$enabled) {
+            return new JsonResponse(
+                ['code' => 'INVALID_2FA_CODE', 'message' => $this->translator->trans('auth.error.invalid_2fa_code')],
+                Response::HTTP_BAD_REQUEST
+            );
+        }
+
+        return new JsonResponse(['mfa_enabled' => true], Response::HTTP_OK);
+    }
+
+    #[Route('/2fa/disable', name: 'api_auth_2fa_disable', methods: ['POST'])]
+    public function twoFactorDisable(Request $request): JsonResponse
+    {
+        $user = $this->security->getUser();
+        if (!$user instanceof User) {
+            return new JsonResponse(
+                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
+                Response::HTTP_UNAUTHORIZED
+            );
+        }
+
+        $otpCode = trim((string) ($this->payload($request)['otp_code'] ?? ''));
+        if ($otpCode === '') {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.otp_code_required')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        try {
+            $disabled = $this->twoFactorService->disable($user->getId(), $otpCode);
+        } catch (\RuntimeException) {
+            return new JsonResponse(
+                ['code' => 'MFA_NOT_ENABLED', 'message' => $this->translator->trans('auth.error.mfa_not_enabled')],
+                Response::HTTP_CONFLICT
+            );
+        }
+
+        if (!$disabled) {
+            return new JsonResponse(
+                ['code' => 'INVALID_2FA_CODE', 'message' => $this->translator->trans('auth.error.invalid_2fa_code')],
+                Response::HTTP_BAD_REQUEST
+            );
+        }
+
+        return new JsonResponse(['mfa_enabled' => false], Response::HTTP_OK);
+    }
+
     #[Route('/lost-password/request', name: 'api_auth_lost_password_request', methods: ['POST'])]
     public function requestReset(Request $request): JsonResponse
     {
