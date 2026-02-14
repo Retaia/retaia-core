@@ -3,20 +3,20 @@
 namespace App\Infrastructure\Auth;
 
 use App\Application\AuthClient\Port\DeviceFlowGateway as DeviceFlowGatewayPort;
+use App\Auth\AuthClientAdminService;
 use App\Auth\AuthClientDeviceFlowService;
-use App\Auth\AuthClientService;
 
 final class DeviceFlowGateway implements DeviceFlowGatewayPort
 {
     public function __construct(
-        private AuthClientService $authClientService,
+        private AuthClientAdminService $adminService,
         private AuthClientDeviceFlowService $deviceFlowService,
     ) {
     }
 
     public function isMcpDisabledByAppPolicy(): bool
     {
-        return $this->authClientService->isMcpDisabledByAppPolicy();
+        return $this->adminService->isMcpDisabledByAppPolicy();
     }
 
     public function startDeviceFlow(string $clientKind): array

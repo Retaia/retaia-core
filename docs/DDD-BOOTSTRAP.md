@@ -119,6 +119,13 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - `AuthClientAdminService`
   - `AuthClientDeviceFlowService`
 
+## Quinzième lot (facade retirée)
+
+- suppression de `Auth/AuthClientService` (façade devenue redondante)
+- les adapters infra ciblent désormais directement:
+  - `AuthClientAdminService`
+  - `AuthClientDeviceFlowService`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
