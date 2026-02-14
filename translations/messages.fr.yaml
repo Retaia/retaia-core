@@ -15,6 +15,7 @@ auth:
     unknown_user: "Utilisateur inconnu"
     forbidden_scope: "Scope insuffisant"
     forbidden_actor: "Acteur non autorisé"
+    unsupported_feature_flags_contract_version: "Version de contrat feature-flags non supportée"
 asset:
   error:
     not_found: "Asset introuvable"

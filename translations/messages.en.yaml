@@ -15,6 +15,7 @@ auth:
     unknown_user: "Unknown user"
     forbidden_scope: "Insufficient scope"
     forbidden_actor: "Actor not allowed"
+    unsupported_feature_flags_contract_version: "Unsupported feature-flags contract version"
 asset:
   error:
     not_found: "Asset not found"

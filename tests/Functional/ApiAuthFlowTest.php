@@ -489,6 +489,71 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame(false, $payload['server_policy']['features']['ai']['suggest_tags'] ?? null);
     }
 
+    public function testAppPolicyRequiresAuthentication(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.40');
+
+        $client->request('GET', '/api/v1/app/policy');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
+    }
+
+    public function testAppPolicyReturnsServerPolicy(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.41');
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->request('GET', '/api/v1/app/policy');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        self::assertSame('1.0.0', $payload['server_policy']['feature_flags_contract_version'] ?? null);
+        self::assertSame('1.0.0', $payload['server_policy']['effective_feature_flags_contract_version'] ?? null);
+        self::assertSame('STRICT', $payload['server_policy']['feature_flags_compatibility_mode'] ?? null);
+        self::assertSame(false, $payload['server_policy']['feature_flags']['features.ai.suggest_tags'] ?? null);
+        self::assertSame(false, $payload['server_policy']['feature_flags']['features.decisions.bulk'] ?? null);
+    }
+
+    public function testAppPolicyCanServeCompatContractVersion(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.42');
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->request('GET', '/api/v1/app/policy?client_feature_flags_contract_version=0.9.0');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('0.9.0', $payload['server_policy']['effective_feature_flags_contract_version'] ?? null);
+        self::assertSame('COMPAT', $payload['server_policy']['feature_flags_compatibility_mode'] ?? null);
+    }
+
+    public function testAppPolicyRejectsUnsupportedContractVersion(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.43');
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->request('GET', '/api/v1/app/policy?client_feature_flags_contract_version=2.0.0');
+        self::assertResponseStatusCodeSame(Response::HTTP_UPGRADE_REQUIRED);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('UNSUPPORTED_FEATURE_FLAGS_CONTRACT_VERSION', $payload['code'] ?? null);
+    }
+
     private function createIsolatedClient(string $ipAddress, ?string $acceptLanguage = null): \Symfony\Bundle\FrameworkBundle\KernelBrowser
     {
         $server = ['REMOTE_ADDR' => $ipAddress];
