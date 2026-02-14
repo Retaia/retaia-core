@@ -771,6 +771,34 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('INVALID_DEVICE_CODE', $payload['code'] ?? null);
     }
 
+    public function testDeviceFlowPollReturnsSlowDownWhenPolledTooFast(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.66');
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/start', [
+            'client_kind' => 'AGENT',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $startPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($startPayload);
+        $deviceCode = (string) ($startPayload['device_code'] ?? '');
+        self::assertNotSame('', $deviceCode);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/poll', [
+            'device_code' => $deviceCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/clients/device/poll', [
+            'device_code' => $deviceCode,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_TOO_MANY_REQUESTS);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        self::assertSame('SLOW_DOWN', $payload['code'] ?? null);
+        self::assertGreaterThanOrEqual(1, (int) ($payload['retry_in_seconds'] ?? 0));
+    }
+
     public function testUnsupportedLocaleFallsBackToEnglishAuthenticationRequiredMessage(): void
     {
         $client = $this->createIsolatedClient('10.0.0.35', 'de');
