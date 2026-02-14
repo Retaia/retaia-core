@@ -28,6 +28,11 @@ auth:
     client_credentials_required: "client_id, client_kind et secret_key sont requis"
     too_many_client_token_requests: "Trop de demandes de token client"
     invalid_client_id: "client_id invalide"
+    client_kind_required: "client_kind est requis"
+    device_code_required: "device_code est requis"
+    invalid_device_code: "Code device invalide"
+    expired_device_code: "Code device expiré"
+    slow_down: "Ralentissez"
 asset:
   error:
     not_found: "Asset introuvable"
