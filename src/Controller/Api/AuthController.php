@@ -14,7 +14,6 @@ use App\Application\AuthClient\RotateClientSecretHandler;
 use App\Application\AuthClient\RotateClientSecretResult;
 use App\Application\AuthClient\StartDeviceFlowHandler;
 use App\Application\AuthClient\StartDeviceFlowResult;
-use App\Auth\AuthClientService;
 use App\Entity\User;
 use App\Feature\FeatureGovernanceService;
 use App\Observability\Repository\MetricEventRepository;
@@ -49,7 +48,6 @@ final class AuthController
         private RateLimiterFactory $verifyEmailRequestLimiter,
         #[Autowire(service: 'limiter.client_token_mint')]
         private RateLimiterFactory $clientTokenMintLimiter,
-        private AuthClientService $authClientService,
         private MintClientTokenHandler $mintClientTokenHandler,
         private RevokeClientTokenHandler $revokeClientTokenHandler,
         private RotateClientSecretHandler $rotateClientSecretHandler,
