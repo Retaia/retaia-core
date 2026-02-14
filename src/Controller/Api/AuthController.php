@@ -5,6 +5,12 @@ namespace App\Controller\Api;
 use App\Application\Auth\RequestPasswordResetHandler;
 use App\Application\Auth\ResetPasswordHandler;
 use App\Application\Auth\ResetPasswordResult;
+use App\Application\Auth\SetupTwoFactorHandler;
+use App\Application\Auth\SetupTwoFactorResult;
+use App\Application\Auth\EnableTwoFactorHandler;
+use App\Application\Auth\EnableTwoFactorResult;
+use App\Application\Auth\DisableTwoFactorHandler;
+use App\Application\Auth\DisableTwoFactorResult;
 use App\Application\Auth\AdminConfirmEmailVerificationHandler;
 use App\Application\Auth\AdminConfirmEmailVerificationResult;
 use App\Application\Auth\ConfirmEmailVerificationHandler;
@@ -26,7 +32,6 @@ use App\Entity\User;
 use App\Feature\FeatureGovernanceService;
 use App\Observability\Repository\MetricEventRepository;
 use App\User\Service\EmailVerificationService;
-use App\User\Service\TwoFactorService;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -48,7 +53,9 @@ final class AuthController
         private RequestEmailVerificationHandler $requestEmailVerificationHandler,
         private ConfirmEmailVerificationHandler $confirmEmailVerificationHandler,
         private AdminConfirmEmailVerificationHandler $adminConfirmEmailVerificationHandler,
-        private TwoFactorService $twoFactorService,
+        private SetupTwoFactorHandler $setupTwoFactorHandler,
+        private EnableTwoFactorHandler $enableTwoFactorHandler,
+        private DisableTwoFactorHandler $disableTwoFactorHandler,
         private FeatureGovernanceService $featureGovernanceService,
         private TranslatorInterface $translator,
         #[Autowire(service: 'limiter.lost_password_request')]
@@ -112,16 +119,15 @@ final class AuthController
             );
         }
 
-        try {
-            $setup = $this->twoFactorService->setup($user->getId(), $user->getEmail());
-        } catch (\RuntimeException) {
+        $result = $this->setupTwoFactorHandler->handle($user->getId(), $user->getEmail());
+        if ($result->status() === SetupTwoFactorResult::STATUS_ALREADY_ENABLED) {
             return new JsonResponse(
                 ['code' => 'MFA_ALREADY_ENABLED', 'message' => $this->translator->trans('auth.error.mfa_already_enabled')],
                 Response::HTTP_CONFLICT
             );
         }
 
-        return new JsonResponse($setup, Response::HTTP_OK);
+        return new JsonResponse($result->setup(), Response::HTTP_OK);
     }
 
     #[Route('/2fa/enable', name: 'api_auth_2fa_enable', methods: ['POST'])]
@@ -143,24 +149,20 @@ final class AuthController
             );
         }
 
-        try {
-            $enabled = $this->twoFactorService->enable($user->getId(), $otpCode);
-        } catch (\RuntimeException $exception) {
-            $code = $exception->getMessage();
-            if ($code === 'MFA_ALREADY_ENABLED') {
-                return new JsonResponse(
-                    ['code' => 'MFA_ALREADY_ENABLED', 'message' => $this->translator->trans('auth.error.mfa_already_enabled')],
-                    Response::HTTP_CONFLICT
-                );
-            }
-
+        $result = $this->enableTwoFactorHandler->handle($user->getId(), $otpCode);
+        if ($result->status() === EnableTwoFactorResult::STATUS_ALREADY_ENABLED) {
+            return new JsonResponse(
+                ['code' => 'MFA_ALREADY_ENABLED', 'message' => $this->translator->trans('auth.error.mfa_already_enabled')],
+                Response::HTTP_CONFLICT
+            );
+        }
+        if ($result->status() === EnableTwoFactorResult::STATUS_SETUP_REQUIRED) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.mfa_setup_required')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
-
-        if (!$enabled) {
+        if ($result->status() === EnableTwoFactorResult::STATUS_INVALID_CODE) {
             return new JsonResponse(
                 ['code' => 'INVALID_2FA_CODE', 'message' => $this->translator->trans('auth.error.invalid_2fa_code')],
                 Response::HTTP_BAD_REQUEST
@@ -189,16 +191,14 @@ final class AuthController
             );
         }
 
-        try {
-            $disabled = $this->twoFactorService->disable($user->getId(), $otpCode);
-        } catch (\RuntimeException) {
+        $result = $this->disableTwoFactorHandler->handle($user->getId(), $otpCode);
+        if ($result->status() === DisableTwoFactorResult::STATUS_NOT_ENABLED) {
             return new JsonResponse(
                 ['code' => 'MFA_NOT_ENABLED', 'message' => $this->translator->trans('auth.error.mfa_not_enabled')],
                 Response::HTTP_CONFLICT
             );
         }
-
-        if (!$disabled) {
+        if ($result->status() === DisableTwoFactorResult::STATUS_INVALID_CODE) {
             return new JsonResponse(
                 ['code' => 'INVALID_2FA_CODE', 'message' => $this->translator->trans('auth.error.invalid_2fa_code')],
                 Response::HTTP_BAD_REQUEST
