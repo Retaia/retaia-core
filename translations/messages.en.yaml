@@ -22,6 +22,8 @@ auth:
     invalid_2fa_code: "Invalid 2FA code"
     otp_code_required: "otp_code is required"
     mfa_setup_required: "2FA setup is required before enabling"
+    invalid_user_feature_payload: "user_feature_enabled payload is required"
+    invalid_app_feature_payload: "app_feature_enabled payload is required"
 asset:
   error:
     not_found: "Asset not found"

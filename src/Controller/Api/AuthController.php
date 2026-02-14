@@ -3,6 +3,7 @@
 namespace App\Controller\Api;
 
 use App\Entity\User;
+use App\Feature\FeatureGovernanceService;
 use App\User\Service\EmailVerificationService;
 use App\User\Service\PasswordPolicy;
 use App\User\Service\PasswordResetService;
@@ -24,6 +25,7 @@ final class AuthController
         private PasswordResetService $passwordResetService,
         private EmailVerificationService $emailVerificationService,
         private TwoFactorService $twoFactorService,
+        private FeatureGovernanceService $featureGovernanceService,
         private PasswordPolicy $passwordPolicy,
         private TranslatorInterface $translator,
         #[Autowire(service: 'limiter.lost_password_request')]
@@ -171,6 +173,73 @@ final class AuthController
         }
 
         return new JsonResponse(['mfa_enabled' => false], Response::HTTP_OK);
+    }
+
+    #[Route('/me/features', name: 'api_auth_me_features_get', methods: ['GET'])]
+    public function meFeatures(): JsonResponse
+    {
+        $user = $this->security->getUser();
+        if (!$user instanceof User) {
+            return new JsonResponse(
+                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
+                Response::HTTP_UNAUTHORIZED
+            );
+        }
+
+        return new JsonResponse(
+            [
+                'user_feature_enabled' => $this->featureGovernanceService->userFeatureEnabled($user->getId()),
+                'effective_feature_enabled' => $this->featureGovernanceService->effectiveFeatureEnabledForUser($user->getId()),
+                'feature_governance' => $this->featureGovernanceService->featureGovernanceRules(),
+                'core_v1_global_features' => $this->featureGovernanceService->coreV1GlobalFeatures(),
+            ],
+            Response::HTTP_OK
+        );
+    }
+
+    #[Route('/me/features', name: 'api_auth_me_features_patch', methods: ['PATCH'])]
+    public function patchMeFeatures(Request $request): JsonResponse
+    {
+        $user = $this->security->getUser();
+        if (!$user instanceof User) {
+            return new JsonResponse(
+                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
+                Response::HTTP_UNAUTHORIZED
+            );
+        }
+
+        $payload = $this->payload($request);
+        $rawUserFeatures = $payload['user_feature_enabled'] ?? null;
+        if (!is_array($rawUserFeatures)) {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.invalid_user_feature_payload')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        foreach ($rawUserFeatures as $featureKey => $enabled) {
+            if (!is_string($featureKey)) {
+                continue;
+            }
+            if (in_array($featureKey, $this->featureGovernanceService->coreV1GlobalFeatures(), true) && (bool) $enabled === false) {
+                return new JsonResponse(
+                    ['code' => 'FORBIDDEN_SCOPE', 'message' => $this->translator->trans('auth.error.forbidden_scope')],
+                    Response::HTTP_FORBIDDEN
+                );
+            }
+        }
+
+        $this->featureGovernanceService->setUserFeatureEnabled($user->getId(), $rawUserFeatures);
+
+        return new JsonResponse(
+            [
+                'user_feature_enabled' => $this->featureGovernanceService->userFeatureEnabled($user->getId()),
+                'effective_feature_enabled' => $this->featureGovernanceService->effectiveFeatureEnabledForUser($user->getId()),
+                'feature_governance' => $this->featureGovernanceService->featureGovernanceRules(),
+                'core_v1_global_features' => $this->featureGovernanceService->coreV1GlobalFeatures(),
+            ],
+            Response::HTTP_OK
+        );
     }
 
     #[Route('/lost-password/request', name: 'api_auth_lost_password_request', methods: ['POST'])]
