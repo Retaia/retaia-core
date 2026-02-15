@@ -218,6 +218,19 @@ Poser un premier découpage DDD sans changer le contrat API v1.
 - suppression de la dépendance directe résiduelle à `User/Service/EmailVerificationService` dans `AuthController`
 - `AuthController` passe entièrement par handlers applicatifs pour les use cases `verify-email`
 
+## Vingt-septième lot (app features handlers)
+
+- extraction des use cases `/app/features` en couche Application:
+  - `GetAppFeaturesHandler`
+  - `PatchAppFeaturesHandler`
+- ajout du port:
+  - `Application/AppPolicy/Port/AppFeatureGovernanceGateway`
+- adapter infra:
+  - `Infrastructure/AppPolicy/AppFeatureGovernanceGateway`
+- `AppController` réutilise aussi:
+  - `ResolveAuthenticatedUserHandler`
+  - `ResolveAdminActorHandler`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
