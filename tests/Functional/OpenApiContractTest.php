@@ -405,6 +405,11 @@ final class OpenApiContractTest extends WebTestCase
             'password' => 'change-me',
         ]);
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        $token = $payload['access_token'] ?? null;
+        self::assertIsString($token);
+        $client->setServerParameter('HTTP_AUTHORIZATION', 'Bearer '.$token);
 
         return $client;
     }

@@ -17,6 +17,7 @@ security:
             security: false
         main:
             lazy: true
+            stateless: true
             provider: app_user_provider
             user_checker: App\Security\UserChecker
             access_denied_handler: App\Security\ApiAccessDeniedHandler
@@ -24,8 +25,6 @@ security:
                 - App\Security\ApiBearerAuthenticator
                 - App\Security\ApiLoginAuthenticator
             entry_point: App\Security\ApiLoginAuthenticator
-            logout:
-                path: api_auth_logout
             login_throttling:
                 max_attempts: 5
                 interval: '15 minutes'

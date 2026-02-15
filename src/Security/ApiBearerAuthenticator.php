@@ -26,7 +26,23 @@ final class ApiBearerAuthenticator extends AbstractAuthenticator
 
     public function supports(Request $request): ?bool
     {
-        if (!str_starts_with($request->getPathInfo(), '/api/v1/')) {
+        $path = $request->getPathInfo();
+        if (!str_starts_with($path, '/api/v1/') && !str_starts_with($path, '/device')) {
+            return false;
+        }
+
+        if (\in_array($path, [
+            '/api/v1/health',
+            '/api/v1/auth/login',
+            '/api/v1/auth/lost-password/request',
+            '/api/v1/auth/lost-password/reset',
+            '/api/v1/auth/verify-email/request',
+            '/api/v1/auth/verify-email/confirm',
+            '/api/v1/auth/clients/token',
+            '/api/v1/auth/clients/device/start',
+            '/api/v1/auth/clients/device/poll',
+            '/api/v1/auth/clients/device/cancel',
+        ], true)) {
             return false;
         }
 

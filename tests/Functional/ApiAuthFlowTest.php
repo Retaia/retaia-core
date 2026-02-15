@@ -18,12 +18,10 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.0.11');
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => FixtureUsers::ADMIN_EMAIL,
             'password' => FixtureUsers::DEFAULT_PASSWORD,
         ]);
-
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
         self::assertResponseHeaderSame('content-type', 'application/json');
         $loginPayload = json_decode($client->getResponse()->getContent(), true);
         self::assertIsArray($loginPayload);
@@ -41,11 +39,10 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.0.12');
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => FixtureUsers::ADMIN_EMAIL,
             'password' => FixtureUsers::DEFAULT_PASSWORD,
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('POST', '/api/v1/auth/logout');
 
@@ -81,12 +78,10 @@ final class ApiAuthFlowTest extends WebTestCase
 
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'admin@retaia.local',
             'password' => 'New-password1!',
         ]);
-
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
     }
 
     public function testLostPasswordRejectsWeakPassword(): void
@@ -138,7 +133,7 @@ final class ApiAuthFlowTest extends WebTestCase
         $client = $this->createIsolatedClient(sprintf('10.0.%d.%d', random_int(1, 200), random_int(1, 200)));
 
         for ($attempt = 1; $attempt <= 5; ++$attempt) {
-            $client->jsonRequest('POST', '/api/v1/auth/login', [
+            $this->loginAndAttachBearer($client, [
                 'email' => 'admin@retaia.local',
                 'password' => 'invalid-password',
             ]);
@@ -199,7 +194,6 @@ final class ApiAuthFlowTest extends WebTestCase
             'token' => $token,
             'new_password' => 'New-password1!',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('POST', '/api/v1/auth/lost-password/reset', [
             'token' => $token,
@@ -240,7 +234,7 @@ final class ApiAuthFlowTest extends WebTestCase
         $email = sprintf('pending-%s@retaia.local', bin2hex(random_bytes(4)));
         $this->insertUser($email, 'change-me', ['ROLE_USER'], false);
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => $email,
             'password' => 'change-me',
         ]);
@@ -298,15 +292,13 @@ final class ApiAuthFlowTest extends WebTestCase
         $client->jsonRequest('POST', '/api/v1/auth/verify-email/confirm', [
             'token' => $token,
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $confirmPayload = json_decode($client->getResponse()->getContent(), true);
         self::assertSame(true, $confirmPayload['email_verified'] ?? null);
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => $email,
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
     }
 
     public function testEmailVerificationConfirmRejectsInvalidToken(): void
@@ -326,11 +318,10 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.0.20');
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'admin@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('POST', '/api/v1/auth/verify-email/admin-confirm', [
             'email' => 'pending@retaia.local',
@@ -342,11 +333,10 @@ final class ApiAuthFlowTest extends WebTestCase
         $client->jsonRequest('POST', '/api/v1/auth/logout');
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'pending@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
     }
 
     public function testVerifyEmailRequestIsRateLimited(): void
@@ -469,11 +459,10 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.0.51');
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'admin@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('POST', '/api/v1/auth/2fa/setup');
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
@@ -487,11 +476,10 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.0.52');
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'admin@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('POST', '/api/v1/auth/2fa/setup');
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
@@ -500,16 +488,6 @@ final class ApiAuthFlowTest extends WebTestCase
         $otpCode = $this->generateOtpCode($secret);
 
         $client->jsonRequest('POST', '/api/v1/auth/2fa/enable', ['otp_code' => $otpCode]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
-
-        $client->jsonRequest('POST', '/api/v1/auth/logout');
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
-
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
-            'email' => 'admin@retaia.local',
-            'password' => 'change-me',
-            'otp_code' => $otpCode,
-        ]);
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('POST', '/api/v1/auth/logout');
@@ -532,13 +510,15 @@ final class ApiAuthFlowTest extends WebTestCase
         $payload = json_decode($client->getResponse()->getContent(), true);
         self::assertSame('INVALID_2FA_CODE', $payload['code'] ?? null);
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $otpCode = $this->generateOtpCode($secret);
+        $this->loginAndAttachBearer($client, [
             'email' => 'admin@retaia.local',
             'password' => 'change-me',
             'otp_code' => $otpCode,
         ]);
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
+        $otpCode = $this->generateOtpCode($secret);
         $client->jsonRequest('POST', '/api/v1/auth/2fa/disable', ['otp_code' => $otpCode]);
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
     }
@@ -546,11 +526,10 @@ final class ApiAuthFlowTest extends WebTestCase
     public function testTwoFactorEnableRejectsInvalidOtpCode(): void
     {
         $client = $this->createIsolatedClient('10.0.0.53');
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'admin@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('POST', '/api/v1/auth/2fa/setup');
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
@@ -564,11 +543,10 @@ final class ApiAuthFlowTest extends WebTestCase
     public function testTwoFactorLoginAcceptsSlightClockDriftOtpCode(): void
     {
         $client = $this->createIsolatedClient('10.0.0.531');
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'admin@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('POST', '/api/v1/auth/2fa/setup');
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
@@ -583,12 +561,11 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $driftedCode = $this->generateOtpCodeAt($secret, time() - 20);
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'admin@retaia.local',
             'password' => 'change-me',
             'otp_code' => $driftedCode,
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('POST', '/api/v1/auth/2fa/disable', [
             'otp_code' => $this->generateOtpCode($secret),
@@ -608,11 +585,10 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.0.55');
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'admin@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->request('GET', '/api/v1/auth/me/features');
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
@@ -638,11 +614,10 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.0.56');
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'admin@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('PATCH', '/api/v1/auth/me/features', [
             'user_feature_enabled' => [
@@ -659,11 +634,10 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.1.56');
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'admin@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('PATCH', '/api/v1/auth/me/features', [
             'user_feature_enabled' => [
@@ -681,11 +655,10 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.2.56');
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'admin@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('PATCH', '/api/v1/auth/me/features', [
             'user_feature_enabled' => [
@@ -705,11 +678,10 @@ final class ApiAuthFlowTest extends WebTestCase
         $email = sprintf('operator-%s@retaia.local', bin2hex(random_bytes(4)));
         $this->insertUser($email, 'change-me', ['ROLE_USER'], true);
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => $email,
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->request('GET', '/api/v1/app/features');
         self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
@@ -721,11 +693,10 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.0.58');
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'admin@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->request('GET', '/api/v1/app/features');
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
@@ -751,11 +722,10 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.1.58');
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'admin@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('PATCH', '/api/v1/app/features', [
             'app_feature_enabled' => [
@@ -773,11 +743,10 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.2.58');
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'admin@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('PATCH', '/api/v1/app/features', [
             'app_feature_enabled' => [
@@ -859,11 +828,10 @@ final class ApiAuthFlowTest extends WebTestCase
         $email = sprintf('operator-%s@retaia.local', bin2hex(random_bytes(4)));
         $this->insertUser($email, 'change-me', ['ROLE_USER'], true);
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => $email,
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('POST', '/api/v1/auth/clients/agent-default/revoke-token');
         self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
@@ -875,11 +843,10 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.0.63');
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'admin@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('POST', '/api/v1/auth/clients/agent-default/revoke-token');
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
@@ -945,11 +912,10 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.0.642');
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'admin@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('PATCH', '/api/v1/app/features', [
             'app_feature_enabled' => [
@@ -1044,11 +1010,10 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.0.72');
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'admin@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('POST', '/api/v1/auth/clients/device/start', [
             'client_kind' => 'AGENT',
@@ -1101,11 +1066,10 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.0.721');
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'admin@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('POST', '/device', [
             'user_code' => 'INVALID01',
@@ -1119,11 +1083,10 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.0.722');
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'admin@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('POST', '/api/v1/auth/clients/device/start', [
             'client_kind' => 'AGENT',
@@ -1155,11 +1118,10 @@ final class ApiAuthFlowTest extends WebTestCase
         $email = sprintf('device-2fa-required-%s@retaia.local', bin2hex(random_bytes(4)));
         $this->insertUser($email, 'change-me', ['ROLE_ADMIN'], true);
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => $email,
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('POST', '/api/v1/auth/2fa/setup');
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
@@ -1173,12 +1135,11 @@ final class ApiAuthFlowTest extends WebTestCase
         $client->jsonRequest('POST', '/api/v1/auth/logout');
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => $email,
             'password' => 'change-me',
             'otp_code' => $otpCode,
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('POST', '/api/v1/auth/clients/device/start', [
             'client_kind' => 'AGENT',
@@ -1203,11 +1164,10 @@ final class ApiAuthFlowTest extends WebTestCase
         $email = sprintf('device-2fa-invalid-%s@retaia.local', bin2hex(random_bytes(4)));
         $this->insertUser($email, 'change-me', ['ROLE_ADMIN'], true);
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => $email,
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('POST', '/api/v1/auth/2fa/setup');
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
@@ -1404,11 +1364,10 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.0.32');
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'admin@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('POST', '/api/v1/agents/register', [
             'agent_name' => 'ffmpeg-worker',
@@ -1424,11 +1383,10 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.0.46');
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'agent@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('POST', '/api/v1/agents/register', [
             'agent_name' => 'ffmpeg-worker',
@@ -1444,11 +1402,10 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.0.33');
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'agent@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('POST', '/api/v1/agents/register', [
             'agent_name' => 'ffmpeg-worker',
@@ -1472,11 +1429,10 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.0.44');
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'agent@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('POST', '/api/v1/agents/register', [
             'agent_name' => 'ffmpeg-worker',
@@ -1495,11 +1451,10 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.0.45');
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'agent@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('POST', '/api/v1/agents/register', [
             'agent_name' => 'ffmpeg-worker',
@@ -1528,11 +1483,10 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.0.41');
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'admin@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->request('GET', '/api/v1/app/policy');
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
@@ -1549,11 +1503,10 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.0.42');
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'admin@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->request('GET', '/api/v1/app/policy?client_feature_flags_contract_version=0.9.0');
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
@@ -1566,11 +1519,10 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.0.43');
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
+        $this->loginAndAttachBearer($client, [
             'email' => 'admin@retaia.local',
             'password' => 'change-me',
         ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->request('GET', '/api/v1/app/policy?client_feature_flags_contract_version=2.0.0');
         self::assertResponseStatusCodeSame(Response::HTTP_UPGRADE_REQUIRED);
@@ -1589,6 +1541,24 @@ final class ApiAuthFlowTest extends WebTestCase
         $client->disableReboot();
 
         return $client;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function loginAndAttachBearer(\Symfony\Bundle\FrameworkBundle\KernelBrowser $client, array $payload): void
+    {
+        $client->jsonRequest('POST', '/api/v1/auth/login', $payload);
+
+        $responsePayload = json_decode((string) $client->getResponse()->getContent(), true);
+        $accessToken = is_array($responsePayload) ? ($responsePayload['access_token'] ?? null) : null;
+        if (is_string($accessToken) && $accessToken !== '') {
+            $client->setServerParameter('HTTP_AUTHORIZATION', 'Bearer '.$accessToken);
+
+            return;
+        }
+
+        $client->setServerParameter('HTTP_AUTHORIZATION', '');
     }
 
     /**
