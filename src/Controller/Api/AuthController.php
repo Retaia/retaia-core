@@ -20,6 +20,8 @@ use App\Application\Auth\PatchMyFeaturesHandler;
 use App\Application\Auth\PatchMyFeaturesResult;
 use App\Application\Auth\ResolveAdminActorHandler;
 use App\Application\Auth\ResolveAdminActorResult;
+use App\Application\Auth\ResolveAuthenticatedUserHandler;
+use App\Application\Auth\ResolveAuthenticatedUserResult;
 use App\Application\Auth\GetAuthMeProfileHandler;
 use App\Application\Auth\RequestEmailVerificationHandler;
 use App\Application\AuthClient\MintClientTokenHandler;
@@ -34,7 +36,6 @@ use App\Application\AuthClient\RotateClientSecretHandler;
 use App\Application\AuthClient\RotateClientSecretResult;
 use App\Application\AuthClient\StartDeviceFlowHandler;
 use App\Application\AuthClient\StartDeviceFlowResult;
-use App\Entity\User;
 use App\Observability\Repository\MetricEventRepository;
 use App\User\Service\EmailVerificationService;
 use Psr\Log\LoggerInterface;
@@ -44,14 +45,12 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[Route('/api/v1/auth')]
 final class AuthController
 {
     public function __construct(
-        private Security $security,
         private RequestPasswordResetHandler $requestPasswordResetHandler,
         private ResetPasswordHandler $resetPasswordHandler,
         private EmailVerificationService $emailVerificationService,
@@ -65,6 +64,7 @@ final class AuthController
         private PatchMyFeaturesHandler $patchMyFeaturesHandler,
         private GetAuthMeProfileHandler $getAuthMeProfileHandler,
         private ResolveAdminActorHandler $resolveAdminActorHandler,
+        private ResolveAuthenticatedUserHandler $resolveAuthenticatedUserHandler,
         private TranslatorInterface $translator,
         #[Autowire(service: 'limiter.lost_password_request')]
         private RateLimiterFactory $lostPasswordRequestLimiter,
@@ -98,15 +98,19 @@ final class AuthController
     #[Route('/me', name: 'api_auth_me', methods: ['GET'])]
     public function me(): JsonResponse
     {
-        $user = $this->security->getUser();
-        if (!$user instanceof User) {
+        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
+        if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
                 Response::HTTP_UNAUTHORIZED
             );
         }
 
-        $result = $this->getAuthMeProfileHandler->handle($user->getId(), $user->getEmail(), $user->getRoles());
+        $result = $this->getAuthMeProfileHandler->handle(
+            (string) $authenticatedUser->id(),
+            (string) $authenticatedUser->email(),
+            $authenticatedUser->roles()
+        );
 
         return new JsonResponse([
             'id' => $result->id(),
@@ -118,15 +122,15 @@ final class AuthController
     #[Route('/2fa/setup', name: 'api_auth_2fa_setup', methods: ['POST'])]
     public function twoFactorSetup(): JsonResponse
     {
-        $user = $this->security->getUser();
-        if (!$user instanceof User) {
+        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
+        if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
                 Response::HTTP_UNAUTHORIZED
             );
         }
 
-        $result = $this->setupTwoFactorHandler->handle($user->getId(), $user->getEmail());
+        $result = $this->setupTwoFactorHandler->handle((string) $authenticatedUser->id(), (string) $authenticatedUser->email());
         if ($result->status() === SetupTwoFactorResult::STATUS_ALREADY_ENABLED) {
             return new JsonResponse(
                 ['code' => 'MFA_ALREADY_ENABLED', 'message' => $this->translator->trans('auth.error.mfa_already_enabled')],
@@ -140,8 +144,8 @@ final class AuthController
     #[Route('/2fa/enable', name: 'api_auth_2fa_enable', methods: ['POST'])]
     public function twoFactorEnable(Request $request): JsonResponse
     {
-        $user = $this->security->getUser();
-        if (!$user instanceof User) {
+        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
+        if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
                 Response::HTTP_UNAUTHORIZED
@@ -156,7 +160,7 @@ final class AuthController
             );
         }
 
-        $result = $this->enableTwoFactorHandler->handle($user->getId(), $otpCode);
+        $result = $this->enableTwoFactorHandler->handle((string) $authenticatedUser->id(), $otpCode);
         if ($result->status() === EnableTwoFactorResult::STATUS_ALREADY_ENABLED) {
             return new JsonResponse(
                 ['code' => 'MFA_ALREADY_ENABLED', 'message' => $this->translator->trans('auth.error.mfa_already_enabled')],
@@ -182,8 +186,8 @@ final class AuthController
     #[Route('/2fa/disable', name: 'api_auth_2fa_disable', methods: ['POST'])]
     public function twoFactorDisable(Request $request): JsonResponse
     {
-        $user = $this->security->getUser();
-        if (!$user instanceof User) {
+        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
+        if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
                 Response::HTTP_UNAUTHORIZED
@@ -198,7 +202,7 @@ final class AuthController
             );
         }
 
-        $result = $this->disableTwoFactorHandler->handle($user->getId(), $otpCode);
+        $result = $this->disableTwoFactorHandler->handle((string) $authenticatedUser->id(), $otpCode);
         if ($result->status() === DisableTwoFactorResult::STATUS_NOT_ENABLED) {
             return new JsonResponse(
                 ['code' => 'MFA_NOT_ENABLED', 'message' => $this->translator->trans('auth.error.mfa_not_enabled')],
@@ -218,15 +222,15 @@ final class AuthController
     #[Route('/me/features', name: 'api_auth_me_features_get', methods: ['GET'])]
     public function meFeatures(): JsonResponse
     {
-        $user = $this->security->getUser();
-        if (!$user instanceof User) {
+        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
+        if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
                 Response::HTTP_UNAUTHORIZED
             );
         }
 
-        $result = $this->getMyFeaturesHandler->handle($user->getId());
+        $result = $this->getMyFeaturesHandler->handle((string) $authenticatedUser->id());
 
         return new JsonResponse([
             'user_feature_enabled' => $result->userFeatureEnabled(),
@@ -239,8 +243,8 @@ final class AuthController
     #[Route('/me/features', name: 'api_auth_me_features_patch', methods: ['PATCH'])]
     public function patchMeFeatures(Request $request): JsonResponse
     {
-        $user = $this->security->getUser();
-        if (!$user instanceof User) {
+        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
+        if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
                 Response::HTTP_UNAUTHORIZED
@@ -256,7 +260,7 @@ final class AuthController
             );
         }
 
-        $result = $this->patchMyFeaturesHandler->handle($user->getId(), $rawUserFeatures);
+        $result = $this->patchMyFeaturesHandler->handle((string) $authenticatedUser->id(), $rawUserFeatures);
         if ($result->status() === PatchMyFeaturesResult::STATUS_FORBIDDEN_SCOPE) {
             return new JsonResponse(
                 ['code' => 'FORBIDDEN_SCOPE', 'message' => $this->translator->trans('auth.error.forbidden_scope')],
@@ -519,8 +523,8 @@ final class AuthController
     #[Route('/clients/{clientId}/revoke-token', name: 'api_auth_clients_revoke_token', methods: ['POST'])]
     public function revokeClientToken(string $clientId): JsonResponse
     {
-        $user = $this->security->getUser();
-        if (!$user instanceof User) {
+        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
+        if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
                 Response::HTTP_UNAUTHORIZED
@@ -560,8 +564,8 @@ final class AuthController
     #[Route('/clients/{clientId}/rotate-secret', name: 'api_auth_clients_rotate_secret', methods: ['POST'])]
     public function rotateClientSecret(string $clientId): JsonResponse
     {
-        $user = $this->security->getUser();
-        if (!$user instanceof User) {
+        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
+        if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
                 Response::HTTP_UNAUTHORIZED
