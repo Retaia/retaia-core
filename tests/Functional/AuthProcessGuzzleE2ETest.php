@@ -299,6 +299,111 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
         self::assertSame(1, $after);
     }
 
+    public function testSpecVerifyEmailAdminConfirmRequiresBearerAndUpdatesDb(): void
+    {
+        $client = $this->createGuzzleClient();
+        $email = sprintf('e2e-admin-verify-%s@retaia.local', bin2hex(random_bytes(4)));
+        $this->insertUser($email, 'change-me', ['ROLE_USER'], false);
+
+        $unauthorized = $this->requestJson($client, 'POST', '/api/v1/auth/verify-email/admin-confirm', [
+            'email' => $email,
+        ]);
+        self::assertSame(401, $unauthorized['status']);
+        self::assertSame('UNAUTHORIZED', $unauthorized['json']['code'] ?? null);
+
+        $adminToken = $this->loginAdminAndGetBearerToken($client);
+        $authorized = $this->requestJson($client, 'POST', '/api/v1/auth/verify-email/admin-confirm', [
+            'email' => $email,
+        ], [
+            'Authorization' => 'Bearer '.$adminToken,
+        ]);
+        self::assertSame(200, $authorized['status']);
+        self::assertSame(true, $authorized['json']['email_verified'] ?? null);
+
+        $connection = static::getContainer()->get(Connection::class);
+        $verified = (int) $connection->fetchOne(
+            'SELECT email_verified FROM app_user WHERE email = :email',
+            ['email' => $email]
+        );
+        self::assertSame(1, $verified);
+    }
+
+    public function testSpecRevokeClientTokenRequiresBearerAndInvalidatesClientToken(): void
+    {
+        $client = $this->createGuzzleClient();
+        $credentials = $this->provisionTechnicalClient('AGENT');
+
+        $mint = $this->requestJson($client, 'POST', '/api/v1/auth/clients/token', [
+            'client_id' => $credentials['client_id'],
+            'client_kind' => 'AGENT',
+            'secret_key' => $credentials['secret_key'],
+        ]);
+        self::assertSame(200, $mint['status']);
+        $clientToken = (string) ($mint['json']['access_token'] ?? '');
+        self::assertNotSame('', $clientToken);
+
+        $unauthorized = $this->requestJson(
+            $client,
+            'POST',
+            sprintf('/api/v1/auth/clients/%s/revoke-token', $credentials['client_id'])
+        );
+        self::assertSame(401, $unauthorized['status']);
+        self::assertSame('UNAUTHORIZED', $unauthorized['json']['code'] ?? null);
+
+        $adminToken = $this->loginAdminAndGetBearerToken($client);
+        $authorized = $this->requestJson(
+            $client,
+            'POST',
+            sprintf('/api/v1/auth/clients/%s/revoke-token', $credentials['client_id']),
+            null,
+            ['Authorization' => 'Bearer '.$adminToken]
+        );
+        self::assertSame(200, $authorized['status']);
+        self::assertSame(true, $authorized['json']['revoked'] ?? null);
+
+        $policyWithRevokedToken = $this->requestJson($client, 'GET', '/api/v1/app/policy', null, [
+            'Authorization' => 'Bearer '.$clientToken,
+        ]);
+        self::assertSame(401, $policyWithRevokedToken['status']);
+        self::assertSame('UNAUTHORIZED', $policyWithRevokedToken['json']['code'] ?? null);
+    }
+
+    public function testSpecRotateClientSecretReturnsNewOneAndRevokesPreviousCredentials(): void
+    {
+        $client = $this->createGuzzleClient();
+        $credentials = $this->provisionTechnicalClient('AGENT');
+        $adminToken = $this->loginAdminAndGetBearerToken($client);
+
+        $rotate = $this->requestJson(
+            $client,
+            'POST',
+            sprintf('/api/v1/auth/clients/%s/rotate-secret', $credentials['client_id']),
+            null,
+            ['Authorization' => 'Bearer '.$adminToken]
+        );
+        self::assertSame(200, $rotate['status']);
+        self::assertSame(true, $rotate['json']['rotated'] ?? null);
+        $newSecret = (string) ($rotate['json']['secret_key'] ?? '');
+        self::assertNotSame('', $newSecret);
+        self::assertNotSame($credentials['secret_key'], $newSecret);
+
+        $mintWithOldSecret = $this->requestJson($client, 'POST', '/api/v1/auth/clients/token', [
+            'client_id' => $credentials['client_id'],
+            'client_kind' => 'AGENT',
+            'secret_key' => $credentials['secret_key'],
+        ]);
+        self::assertSame(401, $mintWithOldSecret['status']);
+        self::assertSame('UNAUTHORIZED', $mintWithOldSecret['json']['code'] ?? null);
+
+        $mintWithNewSecret = $this->requestJson($client, 'POST', '/api/v1/auth/clients/token', [
+            'client_id' => $credentials['client_id'],
+            'client_kind' => 'AGENT',
+            'secret_key' => $newSecret,
+        ]);
+        self::assertSame(200, $mintWithNewSecret['status']);
+        self::assertSame('Bearer', $mintWithNewSecret['json']['token_type'] ?? null);
+    }
+
     private function createGuzzleClient(): Client
     {
         static::bootKernel();
@@ -363,6 +468,20 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
         self::assertIsString($credentials['secret_key'] ?? null);
 
         return $credentials;
+    }
+
+    private function loginAdminAndGetBearerToken(Client $client): string
+    {
+        $login = $this->requestJson($client, 'POST', '/api/v1/auth/login', [
+            'email' => FixtureUsers::ADMIN_EMAIL,
+            'password' => FixtureUsers::DEFAULT_PASSWORD,
+        ]);
+        self::assertSame(200, $login['status']);
+
+        $token = (string) ($login['json']['access_token'] ?? '');
+        self::assertNotSame('', $token);
+
+        return $token;
     }
 
     /**
