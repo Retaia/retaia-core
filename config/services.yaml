@@ -38,6 +38,7 @@ services:
     App\Asset\Repository\AssetRepositoryInterface: '@App\Asset\Repository\AssetRepository'
     App\Application\Agent\RegisterAgentUseCase: '@App\Application\Agent\RegisterAgentHandler'
     App\Application\Auth\ResolveAuthenticatedUserUseCase: '@App\Application\Auth\ResolveAuthenticatedUserHandler'
+    App\Application\Auth\Port\PasswordResetRequestRateLimiterGateway: '@App\Infrastructure\Auth\PasswordResetRequestRateLimiterGateway'
     App\Application\AuthClient\Port\AuthClientGateway: '@App\Infrastructure\Auth\AuthClientAdminGateway'
     App\Application\AuthClient\Port\DeviceFlowGateway: '@App\Infrastructure\Auth\DeviceFlowGateway'
     App\Application\AuthClient\Port\DeviceApprovalSecondFactorGateway: '@App\Infrastructure\Auth\DeviceApprovalSecondFactorGateway'
@@ -71,6 +72,10 @@ services:
     App\Infrastructure\Asset\AssetReadGateway:
         bind:
             bool $featureSuggestedTagsFiltersEnabled: '%app.features.ai.suggested_tags_filters%'
+
+    App\Infrastructure\Auth\PasswordResetRequestRateLimiterGateway:
+        bind:
+            Symfony\Component\RateLimiter\RateLimiterFactory $rateLimiterFactory: '@limiter.lost_password_request'
 
     App\Feature\FeatureGovernanceService:
         bind:

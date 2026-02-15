@@ -362,6 +362,19 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - résolution actor authentifié (fallback `unknown`)
   - délégation du use case register + mapping des statuts
 
+## Trente-septième lot (auth lost-password request endpoint handler)
+
+- extraction de l'orchestration endpoint `/auth/lost-password/request` en couche Application:
+  - `RequestPasswordResetEndpointHandler`
+- ajout du port applicatif de rate-limit:
+  - `Application/Auth/Port/PasswordResetRequestRateLimiterGateway`
+- adapter infra:
+  - `Infrastructure/Auth/PasswordResetRequestRateLimiterGateway`
+- `AuthController` délègue désormais:
+  - validation payload email
+  - contrôle rate-limit
+  - délégation du use case `RequestPasswordResetHandler`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants

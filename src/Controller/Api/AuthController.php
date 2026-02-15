@@ -2,7 +2,8 @@
 
 namespace App\Controller\Api;
 
-use App\Application\Auth\RequestPasswordResetHandler;
+use App\Application\Auth\RequestPasswordResetEndpointHandler;
+use App\Application\Auth\RequestPasswordResetEndpointResult;
 use App\Application\Auth\ResetPasswordHandler;
 use App\Application\Auth\ResetPasswordResult;
 use App\Application\Auth\SetupTwoFactorHandler;
@@ -50,7 +51,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 final class AuthController
 {
     public function __construct(
-        private RequestPasswordResetHandler $requestPasswordResetHandler,
+        private RequestPasswordResetEndpointHandler $requestPasswordResetEndpointHandler,
         private ResetPasswordHandler $resetPasswordHandler,
         private RequestEmailVerificationHandler $requestEmailVerificationHandler,
         private ConfirmEmailVerificationHandler $confirmEmailVerificationHandler,
@@ -64,8 +65,6 @@ final class AuthController
         private ResolveAdminActorHandler $resolveAdminActorHandler,
         private ResolveAuthenticatedUserHandler $resolveAuthenticatedUserHandler,
         private TranslatorInterface $translator,
-        #[Autowire(service: 'limiter.lost_password_request')]
-        private RateLimiterFactory $lostPasswordRequestLimiter,
         #[Autowire(service: 'limiter.verify_email_request')]
         private RateLimiterFactory $verifyEmailRequestLimiter,
         #[Autowire(service: 'limiter.client_token_mint')]
@@ -289,32 +288,27 @@ final class AuthController
     #[Route('/lost-password/request', name: 'api_auth_lost_password_request', methods: ['POST'])]
     public function requestReset(Request $request): JsonResponse
     {
-        $payload = $this->payload($request);
-        $email = trim((string) ($payload['email'] ?? ''));
-        if ($email === '') {
+        $result = $this->requestPasswordResetEndpointHandler->handle(
+            $this->payload($request),
+            (string) ($request->getClientIp() ?? 'unknown')
+        );
+        if ($result->status() === RequestPasswordResetEndpointResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.email_required')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
-
-        $remoteAddress = (string) ($request->getClientIp() ?? 'unknown');
-        $limiterKey = hash('sha256', mb_strtolower($email).'|'.$remoteAddress);
-        $limit = $this->lostPasswordRequestLimiter->create($limiterKey)->consume(1);
-        if (!$limit->isAccepted()) {
-            $retryAfter = $limit->getRetryAfter();
-
+        if ($result->status() === RequestPasswordResetEndpointResult::STATUS_TOO_MANY_ATTEMPTS) {
             return new JsonResponse(
                 [
                     'code' => 'TOO_MANY_ATTEMPTS',
                     'message' => $this->translator->trans('auth.error.too_many_password_reset_requests'),
-                    'retry_in_seconds' => $retryAfter !== null ? max(1, $retryAfter->getTimestamp() - time()) : 60,
+                    'retry_in_seconds' => $result->retryInSeconds() ?? 60,
                 ],
                 Response::HTTP_TOO_MANY_REQUESTS
             );
         }
 
-        $result = $this->requestPasswordResetHandler->handle($email);
         $response = ['accepted' => true];
         if ($result->token() !== null) {
             $response['reset_token'] = $result->token();
