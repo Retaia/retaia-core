@@ -409,6 +409,14 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - `POST /auth/clients/device/poll`
   - `POST /auth/clients/device/cancel`
 
+## Quarante-et-unième lot (auth verify-email confirm endpoints handler)
+
+- extraction de l'orchestration des endpoints `verify-email` de confirmation en couche Application:
+  - `VerifyEmailEndpointsHandler`
+- `AuthController` délègue désormais:
+  - `POST /auth/verify-email/confirm`
+  - `POST /auth/verify-email/admin-confirm`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
