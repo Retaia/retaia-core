@@ -312,6 +312,21 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - `POST /assets/{uuid}/reopen`
   - `POST /assets/{uuid}/reprocess`
 
+## Trente-quatrième lot (asset workflow handlers)
+
+- extraction des use cases de transition asset en couche Application:
+  - `DecideAssetHandler`
+  - `ReopenAssetHandler`
+  - `ReprocessAssetHandler`
+- ajout du port:
+  - `Application/Asset/Port/AssetWorkflowGateway`
+- adapter infra:
+  - `Infrastructure/Asset/AssetWorkflowGateway`
+- `AssetController` délègue désormais les transitions:
+  - `POST /assets/{uuid}/decision`
+  - `POST /assets/{uuid}/reopen`
+  - `POST /assets/{uuid}/reprocess`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
