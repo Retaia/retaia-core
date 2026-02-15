@@ -526,7 +526,8 @@ final class AuthController
                 Response::HTTP_UNAUTHORIZED
             );
         }
-        if (!$this->security->isGranted('ROLE_ADMIN')) {
+        $adminActor = $this->resolveAdminActorHandler->handle();
+        if ($adminActor->status() === ResolveAdminActorResult::STATUS_FORBIDDEN_ACTOR) {
             return new JsonResponse(
                 ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
                 Response::HTTP_FORBIDDEN
@@ -566,7 +567,8 @@ final class AuthController
                 Response::HTTP_UNAUTHORIZED
             );
         }
-        if (!$this->security->isGranted('ROLE_ADMIN')) {
+        $adminActor = $this->resolveAdminActorHandler->handle();
+        if ($adminActor->status() === ResolveAdminActorResult::STATUS_FORBIDDEN_ACTOR) {
             return new JsonResponse(
                 ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
                 Response::HTTP_FORBIDDEN
