@@ -1420,6 +1420,26 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('FORBIDDEN_SCOPE', $payload['code'] ?? null);
     }
 
+    public function testAgentRegisterRejectsInvalidPayload(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.46');
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'agent@retaia.local',
+            'password' => 'change-me',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/agents/register', [
+            'agent_name' => 'ffmpeg-worker',
+            'agent_version' => '1.0.0',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
+    }
+
     public function testAgentRegisterReturnsServerPolicy(): void
     {
         $client = $this->createIsolatedClient('10.0.0.33');

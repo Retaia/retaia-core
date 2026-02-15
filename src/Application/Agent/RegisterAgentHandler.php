@@ -4,7 +4,7 @@ namespace App\Application\Agent;
 
 use App\Domain\AppPolicy\FeatureFlagsContractPolicy;
 
-final class RegisterAgentHandler
+final class RegisterAgentHandler implements RegisterAgentUseCase
 {
     /**
      * @param array<int, string> $acceptedFeatureFlagsContractVersions
