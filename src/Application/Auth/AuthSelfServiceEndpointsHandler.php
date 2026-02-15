@@ -10,6 +10,7 @@ final class AuthSelfServiceEndpointsHandler
         private SetupTwoFactorHandler $setupTwoFactorHandler,
         private EnableTwoFactorHandler $enableTwoFactorHandler,
         private DisableTwoFactorHandler $disableTwoFactorHandler,
+        private RegenerateTwoFactorRecoveryCodesHandler $regenerateTwoFactorRecoveryCodesHandler,
         private GetMyFeaturesHandler $getMyFeaturesHandler,
         private PatchMyFeaturesHandler $patchMyFeaturesHandler,
     ) {
@@ -77,7 +78,10 @@ final class AuthSelfServiceEndpointsHandler
             return new TwoFactorEnableEndpointResult(TwoFactorEnableEndpointResult::STATUS_INVALID_CODE);
         }
 
-        return new TwoFactorEnableEndpointResult(TwoFactorEnableEndpointResult::STATUS_ENABLED);
+        return new TwoFactorEnableEndpointResult(
+            TwoFactorEnableEndpointResult::STATUS_ENABLED,
+            $result->recoveryCodes()
+        );
     }
 
     /**
@@ -104,6 +108,24 @@ final class AuthSelfServiceEndpointsHandler
         }
 
         return new TwoFactorDisableEndpointResult(TwoFactorDisableEndpointResult::STATUS_DISABLED);
+    }
+
+    public function regenerateTwoFactorRecoveryCodes(): TwoFactorRecoveryCodesEndpointResult
+    {
+        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
+        if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
+            return new TwoFactorRecoveryCodesEndpointResult(TwoFactorRecoveryCodesEndpointResult::STATUS_UNAUTHORIZED);
+        }
+
+        $result = $this->regenerateTwoFactorRecoveryCodesHandler->handle((string) $authenticatedUser->id());
+        if ($result->status() === RegenerateTwoFactorRecoveryCodesResult::STATUS_NOT_ENABLED) {
+            return new TwoFactorRecoveryCodesEndpointResult(TwoFactorRecoveryCodesEndpointResult::STATUS_NOT_ENABLED);
+        }
+
+        return new TwoFactorRecoveryCodesEndpointResult(
+            TwoFactorRecoveryCodesEndpointResult::STATUS_REGENERATED,
+            $result->codes()
+        );
     }
 
     public function getMyFeatures(): GetMyFeaturesEndpointResult

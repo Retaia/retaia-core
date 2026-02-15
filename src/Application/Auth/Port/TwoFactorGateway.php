@@ -12,4 +12,9 @@ interface TwoFactorGateway
     public function enable(string $userId, string $otpCode): bool;
 
     public function disable(string $userId, string $otpCode): bool;
+
+    /**
+     * @return list<string>
+     */
+    public function regenerateRecoveryCodes(string $userId): array;
 }

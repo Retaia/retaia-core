@@ -568,6 +568,88 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
         }
     }
 
+    public function testSpecTwoFactorRecoveryCodesAllowOneShotLoginAndRegeneration(): void
+    {
+        $client = $this->createGuzzleClient();
+        $adminToken = $this->loginAdminAndGetBearerToken($client);
+        $secret = '';
+        $postRecoveryBearer = '';
+
+        try {
+            $setup = $this->requestJson($client, 'POST', '/api/v1/auth/2fa/setup', null, [
+                'Authorization' => 'Bearer '.$adminToken,
+            ]);
+            self::assertSame(200, $setup['status']);
+            $secret = (string) ($setup['json']['secret'] ?? '');
+            self::assertNotSame('', $secret);
+
+            $enable = $this->requestJson($client, 'POST', '/api/v1/auth/2fa/enable', [
+                'otp_code' => $this->generateOtpCode($secret),
+            ], [
+                'Authorization' => 'Bearer '.$adminToken,
+            ]);
+            self::assertSame(200, $enable['status']);
+            self::assertSame(true, $enable['json']['mfa_enabled'] ?? null);
+            self::assertIsArray($enable['json']['recovery_codes'] ?? null);
+            $recoveryCodes = $enable['json']['recovery_codes'];
+            self::assertCount(10, $recoveryCodes);
+
+            $firstRecoveryCode = (string) ($recoveryCodes[0] ?? '');
+            self::assertNotSame('', $firstRecoveryCode);
+
+            $loginWithRecovery = $this->requestJson($client, 'POST', '/api/v1/auth/login', [
+                'email' => FixtureUsers::ADMIN_EMAIL,
+                'password' => FixtureUsers::DEFAULT_PASSWORD,
+                'recovery_code' => $firstRecoveryCode,
+            ]);
+            self::assertSame(200, $loginWithRecovery['status']);
+            $postRecoveryBearer = (string) ($loginWithRecovery['json']['access_token'] ?? '');
+            self::assertNotSame('', $postRecoveryBearer);
+
+            $reuseRecovery = $this->requestJson($client, 'POST', '/api/v1/auth/login', [
+                'email' => FixtureUsers::ADMIN_EMAIL,
+                'password' => FixtureUsers::DEFAULT_PASSWORD,
+                'recovery_code' => $firstRecoveryCode,
+            ]);
+            self::assertSame(401, $reuseRecovery['status']);
+            self::assertSame('INVALID_2FA_CODE', $reuseRecovery['json']['code'] ?? null);
+
+            $regenerated = $this->requestJson($client, 'POST', '/api/v1/auth/2fa/recovery-codes/regenerate', null, [
+                'Authorization' => 'Bearer '.$postRecoveryBearer,
+            ]);
+            self::assertSame(200, $regenerated['status']);
+            self::assertIsArray($regenerated['json']['recovery_codes'] ?? null);
+            self::assertCount(10, $regenerated['json']['recovery_codes']);
+
+            $oldCodeAfterRegeneration = $this->requestJson($client, 'POST', '/api/v1/auth/login', [
+                'email' => FixtureUsers::ADMIN_EMAIL,
+                'password' => FixtureUsers::DEFAULT_PASSWORD,
+                'recovery_code' => (string) ($recoveryCodes[1] ?? ''),
+            ]);
+            self::assertSame(401, $oldCodeAfterRegeneration['status']);
+            self::assertSame('INVALID_2FA_CODE', $oldCodeAfterRegeneration['json']['code'] ?? null);
+
+            $newRecoveryCode = (string) (($regenerated['json']['recovery_codes'] ?? [])[0] ?? '');
+            self::assertNotSame('', $newRecoveryCode);
+            $loginWithRegeneratedCode = $this->requestJson($client, 'POST', '/api/v1/auth/login', [
+                'email' => FixtureUsers::ADMIN_EMAIL,
+                'password' => FixtureUsers::DEFAULT_PASSWORD,
+                'recovery_code' => $newRecoveryCode,
+            ]);
+            self::assertSame(200, $loginWithRegeneratedCode['status']);
+            $postRecoveryBearer = (string) ($loginWithRegeneratedCode['json']['access_token'] ?? $postRecoveryBearer);
+        } finally {
+            if ($secret !== '' && $postRecoveryBearer !== '') {
+                $disable = $this->requestJson($client, 'POST', '/api/v1/auth/2fa/disable', [
+                    'otp_code' => $this->generateOtpCode($secret),
+                ], [
+                    'Authorization' => 'Bearer '.$postRecoveryBearer,
+                ]);
+                self::assertSame(200, $disable['status']);
+            }
+        }
+    }
+
     private function createGuzzleClient(): Client
     {
         static::bootKernel();

@@ -27,6 +27,9 @@ final class EnableTwoFactorHandler
             return new EnableTwoFactorResult(EnableTwoFactorResult::STATUS_INVALID_CODE);
         }
 
-        return new EnableTwoFactorResult(EnableTwoFactorResult::STATUS_ENABLED);
+        return new EnableTwoFactorResult(
+            EnableTwoFactorResult::STATUS_ENABLED,
+            $this->gateway->regenerateRecoveryCodes($userId)
+        );
     }
 }

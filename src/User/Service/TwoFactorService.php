@@ -7,6 +7,8 @@ use Psr\Cache\CacheItemPoolInterface;
 
 final class TwoFactorService
 {
+    private const RECOVERY_CODE_COUNT = 10;
+
     public function __construct(
         private CacheItemPoolInterface $cache,
     ) {
@@ -105,6 +107,67 @@ final class TwoFactorService
         return $this->isValidOtp($secret, $otpCode);
     }
 
+    public function consumeRecoveryCode(string $userId, string $recoveryCode): bool
+    {
+        $state = $this->state($userId);
+        if (!(bool) ($state['enabled'] ?? false)) {
+            return false;
+        }
+
+        $normalized = $this->normalizeRecoveryCode($recoveryCode);
+        if ($normalized === '') {
+            return false;
+        }
+
+        $targetHash = hash('sha256', $normalized);
+        $hashes = array_values(array_filter(
+            (array) ($state['recovery_code_hashes'] ?? []),
+            static fn (mixed $value): bool => is_string($value) && $value !== ''
+        ));
+
+        $matchedIndex = null;
+        foreach ($hashes as $index => $hash) {
+            if (hash_equals($hash, $targetHash)) {
+                $matchedIndex = $index;
+                break;
+            }
+        }
+
+        if (!is_int($matchedIndex)) {
+            return false;
+        }
+
+        unset($hashes[$matchedIndex]);
+        $state['recovery_code_hashes'] = array_values($hashes);
+        $this->saveState($userId, $state);
+
+        return true;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function regenerateRecoveryCodes(string $userId): array
+    {
+        $state = $this->state($userId);
+        if (!(bool) ($state['enabled'] ?? false)) {
+            throw new \RuntimeException('MFA_NOT_ENABLED');
+        }
+
+        $codes = [];
+        $hashes = [];
+        for ($i = 0; $i < self::RECOVERY_CODE_COUNT; ++$i) {
+            $code = $this->generateRecoveryCode();
+            $codes[] = $code;
+            $hashes[] = hash('sha256', $code);
+        }
+
+        $state['recovery_code_hashes'] = $hashes;
+        $this->saveState($userId, $state);
+
+        return $codes;
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -142,5 +205,15 @@ final class TwoFactorService
 
         // Accept +/- 1 time-step (30s) to tolerate small clock drift between client and server.
         return $totp->verify($code, null, 29);
+    }
+
+    private function generateRecoveryCode(): string
+    {
+        return strtoupper(bin2hex(random_bytes(4)));
+    }
+
+    private function normalizeRecoveryCode(string $code): string
+    {
+        return strtoupper(trim(str_replace('-', '', $code)));
     }
 }

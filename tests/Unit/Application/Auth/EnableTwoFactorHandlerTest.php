@@ -13,17 +13,20 @@ final class EnableTwoFactorHandlerTest extends TestCase
     {
         $gateway = $this->createMock(TwoFactorGateway::class);
         $gateway->expects(self::once())->method('enable')->with('u-1', '123456')->willReturn(true);
+        $gateway->expects(self::once())->method('regenerateRecoveryCodes')->with('u-1')->willReturn(['ABC12345']);
 
         $handler = new EnableTwoFactorHandler($gateway);
         $result = $handler->handle('u-1', '123456');
 
         self::assertSame(EnableTwoFactorResult::STATUS_ENABLED, $result->status());
+        self::assertSame(['ABC12345'], $result->recoveryCodes());
     }
 
     public function testHandleReturnsInvalidCodeWhenGatewayRejectsCode(): void
     {
         $gateway = $this->createMock(TwoFactorGateway::class);
         $gateway->expects(self::once())->method('enable')->with('u-1', '000000')->willReturn(false);
+        $gateway->expects(self::never())->method('regenerateRecoveryCodes');
 
         $handler = new EnableTwoFactorHandler($gateway);
         $result = $handler->handle('u-1', '000000');
