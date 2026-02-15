@@ -2,6 +2,18 @@
 
 namespace App\Tests\Unit\Controller;
 
+use App\Application\Auth\Port\AgentActorGateway;
+use App\Application\Auth\Port\AuthenticatedUserGateway;
+use App\Application\Auth\ResolveAgentActorHandler;
+use App\Application\Auth\ResolveAuthenticatedUserHandler;
+use App\Application\Workflow\ApplyDecisionsHandler;
+use App\Application\Workflow\ApplyMovesHandler;
+use App\Application\Workflow\CheckBulkDecisionsEnabledHandler;
+use App\Application\Workflow\GetBatchReportHandler;
+use App\Application\Workflow\PreviewDecisionsHandler;
+use App\Application\Workflow\PreviewMovesHandler;
+use App\Application\Workflow\PreviewPurgeHandler;
+use App\Application\Workflow\PurgeAssetHandler;
 use App\Api\Service\IdempotencyService;
 use App\Asset\AssetState;
 use App\Asset\Repository\AssetRepositoryInterface;
@@ -9,12 +21,11 @@ use App\Asset\Service\AssetStateMachine;
 use App\Controller\Api\WorkflowController;
 use App\Entity\Asset;
 use App\Entity\User;
+use App\Infrastructure\Workflow\WorkflowGateway;
 use App\Lock\Repository\OperationLockRepository;
 use App\Workflow\Service\BatchWorkflowService;
 use Doctrine\DBAL\Connection;
 use PHPUnit\Framework\TestCase;
-use Symfony\Bundle\SecurityBundle\Security;
-use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Contracts\Translation\TranslatorInterface;
@@ -29,14 +40,10 @@ final class WorkflowControllerTest extends TestCase
         $idempotency = $this->idempotencyPassthrough();
         $translator = $this->translator();
 
-        $securityForbidden = $this->createMock(Security::class);
-        $securityForbidden->method('isGranted')->with('ROLE_AGENT')->willReturn(true);
-        $controller = new WorkflowController($workflows, $repo, $idempotency, $securityForbidden, $translator, false);
+        $controller = $this->controller($workflows, $repo, $idempotency, $translator, true, null, false);
         self::assertSame(Response::HTTP_FORBIDDEN, $controller->previewMoves(Request::create('/x', 'POST'))->getStatusCode());
 
-        $securityAllowed = $this->createMock(Security::class);
-        $securityAllowed->method('isGranted')->with('ROLE_AGENT')->willReturn(false);
-        $controller = new WorkflowController($workflows, $repo, $idempotency, $securityAllowed, $translator, false);
+        $controller = $this->controller($workflows, $repo, $idempotency, $translator, false, null, false);
         self::assertSame(Response::HTTP_OK, $controller->previewMoves(Request::create('/x', 'POST'))->getStatusCode());
     }
 
@@ -48,11 +55,15 @@ final class WorkflowControllerTest extends TestCase
         $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false));
         $idempotency = $this->idempotencyPassthrough();
         $translator = $this->translator();
-        $security = $this->createMock(Security::class);
-        $security->method('isGranted')->with('ROLE_AGENT')->willReturn(false);
-        $security->method('getUser')->willReturn(new User('u1', 'u@example.test', 'hash', ['ROLE_USER'], true));
-
-        $controller = new WorkflowController($workflows, $repo, $idempotency, $security, $translator, true);
+        $controller = $this->controller(
+            $workflows,
+            $repo,
+            $idempotency,
+            $translator,
+            false,
+            new User('u1', 'u@example.test', 'hash', ['ROLE_USER'], true),
+            true
+        );
 
         self::assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $controller->previewDecisions(Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{}'))->getStatusCode());
         self::assertSame(Response::HTTP_OK, $controller->previewDecisions(Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{"action":"KEEP","uuids":["a1"]}'))->getStatusCode());
@@ -74,11 +85,15 @@ final class WorkflowControllerTest extends TestCase
         $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false));
         $idempotency = $this->idempotencyPassthrough();
         $translator = $this->translator();
-        $security = $this->createMock(Security::class);
-        $security->method('isGranted')->with('ROLE_AGENT')->willReturn(false);
-        $security->method('getUser')->willReturn(new User('u1', 'u@example.test', 'hash', ['ROLE_USER'], true));
-
-        $controller = new WorkflowController($workflows, $repo, $idempotency, $security, $translator, false);
+        $controller = $this->controller(
+            $workflows,
+            $repo,
+            $idempotency,
+            $translator,
+            false,
+            new User('u1', 'u@example.test', 'hash', ['ROLE_USER'], true),
+            false
+        );
 
         $preview = $controller->previewDecisions(Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{"action":"KEEP","uuids":["a1"]}'));
         self::assertSame(Response::HTTP_FORBIDDEN, $preview->getStatusCode());
@@ -101,11 +116,7 @@ final class WorkflowControllerTest extends TestCase
         $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false));
         $idempotency = $this->idempotencyPassthrough();
         $translator = $this->translator();
-        $security = $this->createMock(Security::class);
-        $security->method('isGranted')->with('ROLE_AGENT')->willReturn(false);
-        $security->method('getUser')->willReturn(null);
-
-        $controller = new WorkflowController($workflows, $repo, $idempotency, $security, $translator, false);
+        $controller = $this->controller($workflows, $repo, $idempotency, $translator, false, null, false);
         self::assertSame(Response::HTTP_NOT_FOUND, $controller->previewPurge('missing')->getStatusCode());
         $purgeMissingRequest = Request::create('/x', 'POST');
         $purgeMissingRequest->headers->set('Idempotency-Key', 'idem-p1');
@@ -159,6 +170,65 @@ final class WorkflowControllerTest extends TestCase
         $locks->method('release');
 
         return $locks;
+    }
+
+    private function controller(
+        BatchWorkflowService $workflows,
+        AssetRepositoryInterface $assets,
+        IdempotencyService $idempotency,
+        TranslatorInterface $translator,
+        bool $isAgentActor,
+        ?User $authenticatedUser,
+        bool $bulkDecisionsEnabled,
+    ): WorkflowController {
+        $agentActorGateway = new class ($isAgentActor) implements AgentActorGateway {
+            public function __construct(
+                private bool $isAgentActor,
+            ) {
+            }
+
+            public function isAgent(): bool
+            {
+                return $this->isAgentActor;
+            }
+        };
+
+        $authenticatedUserGateway = new class ($authenticatedUser) implements AuthenticatedUserGateway {
+            public function __construct(
+                private ?User $authenticatedUser,
+            ) {
+            }
+
+            public function currentUser(): ?array
+            {
+                if (!$this->authenticatedUser instanceof User) {
+                    return null;
+                }
+
+                return [
+                    'id' => $this->authenticatedUser->getId(),
+                    'email' => $this->authenticatedUser->getEmail(),
+                    'roles' => $this->authenticatedUser->getRoles(),
+                ];
+            }
+        };
+
+        $workflowGateway = new WorkflowGateway($workflows, $assets);
+
+        return new WorkflowController(
+            $idempotency,
+            new ResolveAgentActorHandler($agentActorGateway),
+            new ResolveAuthenticatedUserHandler($authenticatedUserGateway),
+            new PreviewMovesHandler($workflowGateway),
+            new ApplyMovesHandler($workflowGateway),
+            new GetBatchReportHandler($workflowGateway),
+            new CheckBulkDecisionsEnabledHandler($bulkDecisionsEnabled),
+            new PreviewDecisionsHandler($workflowGateway),
+            new ApplyDecisionsHandler($workflowGateway),
+            new PreviewPurgeHandler($workflowGateway),
+            new PurgeAssetHandler($workflowGateway),
+            $translator
+        );
     }
 }
 
