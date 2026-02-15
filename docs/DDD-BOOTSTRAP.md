@@ -327,6 +327,19 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - `POST /assets/{uuid}/reopen`
   - `POST /assets/{uuid}/reprocess`
 
+## Trente-cinquième lot (asset read handlers)
+
+- extraction des use cases de lecture asset en couche Application:
+  - `ListAssetsHandler`
+  - `GetAssetHandler`
+- ajout du port:
+  - `Application/Asset/Port/AssetReadGateway`
+- adapter infra:
+  - `Infrastructure/Asset/AssetReadGateway`
+- `AssetController` délègue désormais:
+  - `GET /assets`
+  - `GET /assets/{uuid}`
+
 ## Trente-cinquième lot (asset patch handler)
 
 - extraction du use case de mise à jour asset en couche Application:

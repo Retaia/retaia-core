@@ -5,6 +5,10 @@ namespace App\Controller\Api;
 use App\Api\Service\IdempotencyService;
 use App\Application\Asset\DecideAssetHandler;
 use App\Application\Asset\DecideAssetResult;
+use App\Application\Asset\GetAssetHandler;
+use App\Application\Asset\GetAssetResult;
+use App\Application\Asset\ListAssetsHandler;
+use App\Application\Asset\ListAssetsResult;
 use App\Application\Asset\PatchAssetHandler;
 use App\Application\Asset\PatchAssetResult;
 use App\Application\Asset\ReopenAssetHandler;
@@ -15,8 +19,6 @@ use App\Application\Auth\ResolveAgentActorHandler;
 use App\Application\Auth\ResolveAgentActorResult;
 use App\Application\Auth\ResolveAuthenticatedUserHandler;
 use App\Application\Auth\ResolveAuthenticatedUserResult;
-use App\Asset\Repository\AssetRepositoryInterface;
-use App\Entity\Asset;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -27,7 +29,8 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 final class AssetController
 {
     public function __construct(
-        private AssetRepositoryInterface $assets,
+        private ListAssetsHandler $listAssetsHandler,
+        private GetAssetHandler $getAssetHandler,
         private PatchAssetHandler $patchAssetHandler,
         private DecideAssetHandler $decideAssetHandler,
         private ReopenAssetHandler $reopenAssetHandler,
@@ -36,7 +39,6 @@ final class AssetController
         private ResolveAgentActorHandler $resolveAgentActorHandler,
         private ResolveAuthenticatedUserHandler $resolveAuthenticatedUserHandler,
         private IdempotencyService $idempotency,
-        private bool $featureSuggestedTagsFiltersEnabled,
     ) {
     }
 
@@ -47,35 +49,29 @@ final class AssetController
         $mediaType = $request->query->get('media_type');
         $query = $request->query->get('q');
         $suggestedTags = $this->csvList($request->query->get('suggested_tags'));
-        $suggestedTagsMode = strtoupper((string) $request->query->get('suggested_tags_mode', 'AND'));
+        $suggestedTagsMode = (string) $request->query->get('suggested_tags_mode', 'AND');
         $limit = max(1, (int) $request->query->get('limit', 50));
 
-        if ($suggestedTags !== [] && !$this->featureSuggestedTagsFiltersEnabled) {
-            return $this->forbiddenScopeResponse();
-        }
-
-        if (!in_array($suggestedTagsMode, ['AND', 'OR'], true)) {
+        $result = $this->listAssetsHandler->handle(
+            is_string($state) ? $state : null,
+            is_string($mediaType) ? $mediaType : null,
+            is_string($query) ? $query : null,
+            $limit,
+            $suggestedTags,
+            $suggestedTagsMode,
+        );
+        if ($result->status() === ListAssetsResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse([
                 'code' => 'VALIDATION_FAILED',
                 'message' => 'suggested_tags_mode must be AND or OR',
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
-
-        $assets = $this->assets->listAssets(
-            is_string($state) ? $state : null,
-            is_string($mediaType) ? $mediaType : null,
-            is_string($query) ? $query : null,
-            $limit,
-        );
-        if ($suggestedTags !== []) {
-            $assets = array_values(array_filter(
-                $assets,
-                fn (Asset $asset): bool => $this->matchesSuggestedTags($asset, $suggestedTags, $suggestedTagsMode)
-            ));
+        if ($result->status() === ListAssetsResult::STATUS_FORBIDDEN_SCOPE) {
+            return $this->forbiddenScopeResponse();
         }
 
         return new JsonResponse([
-            'items' => array_map(fn (Asset $asset): array => $this->summary($asset), $assets),
+            'items' => $result->items(),
             'next_cursor' => null,
         ], Response::HTTP_OK);
     }
@@ -83,15 +79,15 @@ final class AssetController
     #[Route('/{uuid}', name: 'api_assets_get', methods: ['GET'])]
     public function getOne(string $uuid): JsonResponse
     {
-        $asset = $this->assets->findByUuid($uuid);
-        if (!$asset instanceof Asset) {
+        $result = $this->getAssetHandler->handle($uuid);
+        if ($result->status() === GetAssetResult::STATUS_NOT_FOUND) {
             return new JsonResponse([
                 'code' => 'NOT_FOUND',
                 'message' => $this->translator->trans('asset.error.not_found'),
             ], Response::HTTP_NOT_FOUND);
         }
 
-        return new JsonResponse($this->detail($asset), Response::HTTP_OK);
+        return new JsonResponse($result->asset() ?? [], Response::HTTP_OK);
     }
 
     #[Route('/{uuid}', name: 'api_assets_patch', methods: ['PATCH'])]
@@ -218,38 +214,6 @@ final class AssetController
     /**
      * @return array<string, mixed>
      */
-    private function detail(Asset $asset): array
-    {
-        return [
-            'uuid' => $asset->getUuid(),
-            'media_type' => $asset->getMediaType(),
-            'filename' => $asset->getFilename(),
-            'state' => $asset->getState()->value,
-            'tags' => $asset->getTags(),
-            'notes' => $asset->getNotes(),
-            'fields' => $asset->getFields(),
-            'created_at' => $asset->getCreatedAt()->format(DATE_ATOM),
-            'updated_at' => $asset->getUpdatedAt()->format(DATE_ATOM),
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function summary(Asset $asset): array
-    {
-        return [
-            'uuid' => $asset->getUuid(),
-            'media_type' => $asset->getMediaType(),
-            'filename' => $asset->getFilename(),
-            'state' => $asset->getState()->value,
-            'tags' => $asset->getTags(),
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
     private function payload(Request $request): array
     {
         if ($request->getContent() === '') {
@@ -307,40 +271,4 @@ final class AssetController
         return array_values(array_filter($items, static fn (string $item): bool => $item !== ''));
     }
 
-    /**
-     * @param array<int, string> $expected
-     */
-    private function matchesSuggestedTags(Asset $asset, array $expected, string $mode): bool
-    {
-        $fields = $asset->getFields();
-        $tags = [];
-        if (is_array($fields['suggestions']['suggested_tags'] ?? null)) {
-            $tags = $fields['suggestions']['suggested_tags'];
-        } elseif (is_array($fields['suggested_tags'] ?? null)) {
-            $tags = $fields['suggested_tags'];
-        }
-
-        $normalized = array_values(array_filter(
-            array_map(static fn (mixed $tag): string => mb_strtolower(trim((string) $tag)), $tags),
-            static fn (string $tag): bool => $tag !== ''
-        ));
-
-        if ($mode === 'OR') {
-            foreach ($expected as $tag) {
-                if (in_array($tag, $normalized, true)) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        foreach ($expected as $tag) {
-            if (!in_array($tag, $normalized, true)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
 }

@@ -46,6 +46,7 @@ services:
     App\Application\Job\Port\JobGateway: '@App\Infrastructure\Job\JobGateway'
     App\Application\Asset\Port\AssetWorkflowGateway: '@App\Infrastructure\Asset\AssetWorkflowGateway'
     App\Application\Asset\Port\AssetPatchGateway: '@App\Infrastructure\Asset\AssetPatchGateway'
+    App\Application\Asset\Port\AssetReadGateway: '@App\Infrastructure\Asset\AssetReadGateway'
     App\Ingest\Port\FilePollerInterface: '@App\Ingest\Service\FilesystemFilePoller'
     App\Ingest\Port\ScanStateStoreInterface: '@App\Ingest\Repository\ScanStateStore'
 
@@ -65,7 +66,7 @@ services:
         bind:
             bool $featureSuggestTagsEnabled: '%app.features.ai.suggest_tags%'
 
-    App\Controller\Api\AssetController:
+    App\Infrastructure\Asset\AssetReadGateway:
         bind:
             bool $featureSuggestedTagsFiltersEnabled: '%app.features.ai.suggested_tags_filters%'
 
