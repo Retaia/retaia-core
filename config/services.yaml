@@ -39,6 +39,7 @@ services:
     App\Application\Agent\RegisterAgentUseCase: '@App\Application\Agent\RegisterAgentHandler'
     App\Application\Auth\ResolveAuthenticatedUserUseCase: '@App\Application\Auth\ResolveAuthenticatedUserHandler'
     App\Application\Auth\Port\PasswordResetRequestRateLimiterGateway: '@App\Infrastructure\Auth\PasswordResetRequestRateLimiterGateway'
+    App\Application\Auth\Port\EmailVerificationRequestRateLimiterGateway: '@App\Infrastructure\Auth\EmailVerificationRequestRateLimiterGateway'
     App\Application\AuthClient\Port\AuthClientGateway: '@App\Infrastructure\Auth\AuthClientAdminGateway'
     App\Application\AuthClient\Port\DeviceFlowGateway: '@App\Infrastructure\Auth\DeviceFlowGateway'
     App\Application\AuthClient\Port\DeviceApprovalSecondFactorGateway: '@App\Infrastructure\Auth\DeviceApprovalSecondFactorGateway'
@@ -76,6 +77,10 @@ services:
     App\Infrastructure\Auth\PasswordResetRequestRateLimiterGateway:
         bind:
             Symfony\Component\RateLimiter\RateLimiterFactory $rateLimiterFactory: '@limiter.lost_password_request'
+
+    App\Infrastructure\Auth\EmailVerificationRequestRateLimiterGateway:
+        bind:
+            Symfony\Component\RateLimiter\RateLimiterFactory $rateLimiterFactory: '@limiter.verify_email_request'
 
     App\Feature\FeatureGovernanceService:
         bind:

@@ -384,6 +384,19 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - délégation du use case `ResetPasswordHandler`
   - mapping des statuts (`VALIDATION_FAILED`, `INVALID_TOKEN`, `PASSWORD_RESET`)
 
+## Trente-neuvième lot (auth verify-email request endpoint handler)
+
+- extraction de l'orchestration endpoint `/auth/verify-email/request` en couche Application:
+  - `RequestEmailVerificationEndpointHandler`
+- ajout du port applicatif de rate-limit:
+  - `Application/Auth/Port/EmailVerificationRequestRateLimiterGateway`
+- adapter infra:
+  - `Infrastructure/Auth/EmailVerificationRequestRateLimiterGateway`
+- `AuthController` délègue désormais:
+  - validation payload email
+  - contrôle rate-limit
+  - délégation du use case `RequestEmailVerificationHandler`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
