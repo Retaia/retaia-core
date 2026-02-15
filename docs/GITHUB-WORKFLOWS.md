@@ -55,6 +55,38 @@ Détail :
 - `push` sur `master`
 - `pull_request`
 
+## Auto-update (sans gate de validation)
+
+Deux workflows dedies executent une mise a jour automatique puis commit/push sur `master`:
+
+- `.github/workflows/docker-base-image-auto-update.yml`
+  - script: `scripts/auto-update-docker-base-image.sh`
+  - cadence: hebdomadaire + `workflow_dispatch`
+  - met a jour:
+    - `Dockerfile.prod`
+    - `docker-compose.prod.yaml`
+- `.github/workflows/ui-release-auto-update.yml`
+  - script: `scripts/auto-update-ui-release-manifest.sh`
+  - cadence: hebdomadaire + `workflow_dispatch`
+  - met a jour:
+    - `public/releases/latest.json`
+
+Ces workflows sont des jobs d'auto-remediation: ils n'executent pas de suite de validation metier.
+
+Variables utiles:
+
+- Docker:
+  - `RETAIA_DOCKER_BASE_REPO` (defaut: `fullfrontend/php-fpm`)
+  - `RETAIA_DOCKER_BASE_TAG` (defaut: `latest`)
+- UI:
+  - `RETAIA_UI_REPOSITORY` (defaut: `Retaia/retaia-ui`)
+  - `RETAIA_UI_REF` (defaut: `master`)
+  - `RETAIA_UI_RELEASE_CHANNEL` (defaut: `stable`)
+
+Secrets recommandes:
+
+- `RETAIA_UI_REPO_TOKEN`: token avec acces lecture au repo UI prive (si `Retaia/retaia-ui` n'est pas public).
+
 ## Required Checks (master)
 
 Objectif recommandé :
