@@ -258,6 +258,24 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - `Application/Auth/Port/AgentActorGateway`
   - `Infrastructure/Auth/AgentActorGateway`
 
+## Trentième lot (workflow controller handlers)
+
+- extraction des use cases `/batches/*`, `/decisions/*`, `/assets/{uuid}/purge*` en couche Application:
+  - `PreviewMovesHandler`
+  - `ApplyMovesHandler`
+  - `GetBatchReportHandler`
+  - `PreviewDecisionsHandler`
+  - `ApplyDecisionsHandler`
+  - `PreviewPurgeHandler`
+  - `PurgeAssetHandler`
+- ajout du port:
+  - `Application/Workflow/Port/WorkflowGateway`
+- adapter infra:
+  - `Infrastructure/Workflow/WorkflowGateway`
+- `WorkflowController` réutilise:
+  - `ResolveAgentActorHandler`
+  - `ResolveAuthenticatedUserHandler`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
