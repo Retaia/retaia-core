@@ -43,7 +43,7 @@ services:
     App\Ingest\Port\FilePollerInterface: '@App\Ingest\Service\FilesystemFilePoller'
     App\Ingest\Port\ScanStateStoreInterface: '@App\Ingest\Repository\ScanStateStore'
 
-    App\Controller\Api\AgentController:
+    App\Application\Agent\RegisterAgentHandler:
         bind:
             bool $featureSuggestTagsEnabled: '%app.features.ai.suggest_tags%'
             bool $featureSuggestedTagsFiltersEnabled: '%app.features.ai.suggested_tags_filters%'
