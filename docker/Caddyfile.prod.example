@@ -1,0 +1,14 @@
+{
+	auto_https off
+}
+
+{$RETAIA_PROD_API_HOST:api.retaia.local} {
+	request_body {
+		max_size 10GB
+	}
+
+	root * /var/www/html/public
+	encode zstd gzip
+	php_fastcgi app-prod:9000
+	file_server
+}

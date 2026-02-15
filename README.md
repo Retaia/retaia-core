@@ -165,6 +165,22 @@ Use docker-compose setup documented in:
 
 - `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/DOCKER-DEVELOPMENT.md`
 
+## Docker Prod (Example)
+
+Production Docker deployment example is documented in:
+
+- `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/DOCKER-PROD-EXAMPLE.md`
+
+Example compose file:
+
+- `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docker-compose.prod.yaml`
+
+Build is intentionally gated and requires V1 flag:
+
+```bash
+RETAIA_BUILD_V1_READY=1 composer prod:image:build
+```
+
 Local staging API for client tests:
 
 ```bash

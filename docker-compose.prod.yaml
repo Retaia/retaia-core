@@ -1,0 +1,85 @@
+services:
+  app-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+      args:
+        BASE_IMAGE: ${RETAIA_BASE_IMAGE:-fullfrontend/php-fpm:latest}
+        RETAIA_BUILD_V1_READY: ${RETAIA_BUILD_V1_READY:-0}
+    image: ${RETAIA_PROD_IMAGE:-retaia-core:prod}
+    container_name: retaia-core-app-prod
+    restart: unless-stopped
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      DATABASE_URL: ${DATABASE_URL:-postgresql://app:app@database-prod:5432/app_prod?serverVersion=16&charset=utf8}
+      APP_INGEST_WATCH_PATH: /var/local/RETAIA/INBOX
+      APP_SECRET: ${APP_SECRET:-change-me}
+      SYMFONY_TRUSTED_PROXIES: ${SYMFONY_TRUSTED_PROXIES:-127.0.0.1/32}
+    depends_on:
+      database-prod:
+        condition: service_healthy
+    volumes:
+      - retaia_var:/var/www/html/var
+      - ./docker/RETAIA:/var/local/RETAIA
+
+  ingest-cron-prod:
+    image: ${RETAIA_PROD_IMAGE:-retaia-core:prod}
+    container_name: retaia-core-ingest-cron-prod
+    restart: unless-stopped
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      DATABASE_URL: ${DATABASE_URL:-postgresql://app:app@database-prod:5432/app_prod?serverVersion=16&charset=utf8}
+      APP_INGEST_WATCH_PATH: /var/local/RETAIA/INBOX
+    depends_on:
+      database-prod:
+        condition: service_healthy
+    volumes:
+      - retaia_var:/var/www/html/var
+      - ./docker/RETAIA:/var/local/RETAIA
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        while true; do
+          php bin/console app:ingest:cron-tick --no-interaction --poll-limit=100 --enqueue-limit=100 --apply-limit=200 || true
+          sleep 60
+        done
+
+  caddy-prod:
+    image: caddy:2-alpine
+    container_name: retaia-core-caddy-prod
+    restart: unless-stopped
+    depends_on:
+      app-prod:
+        condition: service_started
+    ports:
+      - "${RETAIA_PROD_HTTP_PORT:-8080}:80"
+    environment:
+      RETAIA_PROD_API_HOST: ${RETAIA_PROD_API_HOST:-api.retaia.local}
+    volumes:
+      - ./docker/Caddyfile.prod.example:/etc/caddy/Caddyfile:ro
+      - ./public:/var/www/html/public:ro
+
+  database-prod:
+    image: postgres:16-alpine
+    container_name: retaia-core-db-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-app_prod}
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    healthcheck:
+      test: ["CMD", "pg_isready", "-d", "${POSTGRES_DB:-app_prod}", "-U", "${POSTGRES_USER:-app}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    volumes:
+      - retaia_db_prod:/var/lib/postgresql/data
+
+volumes:
+  retaia_var:
+  retaia_db_prod:
