@@ -196,6 +196,13 @@ Poser un premier découpage DDD sans changer le contrat API v1.
 - adapter infra:
   - `Infrastructure/Auth/AdminActorGateway`
 
+## Vingt-quatrième lot (admin actor reuse)
+
+- réutilisation de `ResolveAdminActorHandler` sur les endpoints admin clients:
+  - `/auth/clients/{clientId}/revoke-token`
+  - `/auth/clients/{clientId}/rotate-secret`
+- objectif: unifier la résolution d'acteur admin dans le controller auth
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
