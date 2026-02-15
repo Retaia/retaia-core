@@ -442,6 +442,15 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - `GET /auth/me/features`
   - `PATCH /auth/me/features`
 
+## Quarante-quatrième lot (app policy endpoints handler)
+
+- extraction de l'orchestration des endpoints `/app/*` en couche Application:
+  - `AppPolicyEndpointsHandler`
+- `AppController` délègue désormais:
+  - `GET /app/policy`
+  - `GET /app/features`
+  - `PATCH /app/features`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants

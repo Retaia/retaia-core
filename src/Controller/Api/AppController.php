@@ -2,14 +2,10 @@
 
 namespace App\Controller\Api;
 
-use App\Application\AppPolicy\GetAppFeaturesHandler;
-use App\Application\AppPolicy\PatchAppFeaturesHandler;
-use App\Application\AppPolicy\PatchAppFeaturesResult;
-use App\Application\AppPolicy\GetAppPolicyHandler;
-use App\Application\Auth\ResolveAdminActorHandler;
-use App\Application\Auth\ResolveAdminActorResult;
-use App\Application\Auth\ResolveAuthenticatedUserHandler;
-use App\Application\Auth\ResolveAuthenticatedUserResult;
+use App\Application\AppPolicy\AppPolicyEndpointsHandler;
+use App\Application\AppPolicy\AppPolicyEndpointResult;
+use App\Application\AppPolicy\GetAppFeaturesEndpointResult;
+use App\Application\AppPolicy\PatchAppFeaturesEndpointResult;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -21,11 +17,7 @@ final class AppController
 {
     public function __construct(
         private TranslatorInterface $translator,
-        private GetAppPolicyHandler $getAppPolicyHandler,
-        private GetAppFeaturesHandler $getAppFeaturesHandler,
-        private PatchAppFeaturesHandler $patchAppFeaturesHandler,
-        private ResolveAuthenticatedUserHandler $resolveAuthenticatedUserHandler,
-        private ResolveAdminActorHandler $resolveAdminActorHandler,
+        private AppPolicyEndpointsHandler $appPolicyEndpointsHandler,
     ) {
     }
 
@@ -33,15 +25,15 @@ final class AppController
     public function policy(Request $request): JsonResponse
     {
         $clientContractVersion = trim((string) $request->query->get('client_feature_flags_contract_version', ''));
-        $policy = $this->getAppPolicyHandler->handle($clientContractVersion);
+        $result = $this->appPolicyEndpointsHandler->policy($clientContractVersion);
 
-        if (!$policy->isSupported()) {
+        if ($result->status() === AppPolicyEndpointResult::STATUS_UNSUPPORTED_CONTRACT_VERSION) {
             return new JsonResponse(
                 [
                     'code' => 'UNSUPPORTED_FEATURE_FLAGS_CONTRACT_VERSION',
                     'message' => $this->translator->trans('auth.error.unsupported_feature_flags_contract_version'),
                     'details' => [
-                        'accepted_feature_flags_contract_versions' => $policy->acceptedVersions(),
+                        'accepted_feature_flags_contract_versions' => $result->acceptedVersions(),
                     ],
                 ],
                 Response::HTTP_UPGRADE_REQUIRED
@@ -61,14 +53,14 @@ final class AppController
                         'transcribe_audio',
                     ],
                     'feature_flags' => [
-                        'features.ai.suggest_tags' => $policy->featureFlags()['features.ai.suggest_tags'] ?? false,
-                        'features.ai.suggested_tags_filters' => $policy->featureFlags()['features.ai.suggested_tags_filters'] ?? false,
-                        'features.decisions.bulk' => $policy->featureFlags()['features.decisions.bulk'] ?? false,
+                        'features.ai.suggest_tags' => $result->featureFlags()['features.ai.suggest_tags'] ?? false,
+                        'features.ai.suggested_tags_filters' => $result->featureFlags()['features.ai.suggested_tags_filters'] ?? false,
+                        'features.decisions.bulk' => $result->featureFlags()['features.decisions.bulk'] ?? false,
                     ],
-                    'feature_flags_contract_version' => $policy->latestVersion(),
-                    'accepted_feature_flags_contract_versions' => $policy->acceptedVersions(),
-                    'effective_feature_flags_contract_version' => $policy->effectiveVersion(),
-                    'feature_flags_compatibility_mode' => $policy->compatibilityMode(),
+                    'feature_flags_contract_version' => $result->latestVersion(),
+                    'accepted_feature_flags_contract_versions' => $result->acceptedVersions(),
+                    'effective_feature_flags_contract_version' => $result->effectiveVersion(),
+                    'feature_flags_compatibility_mode' => $result->compatibilityMode(),
                 ],
             ],
             Response::HTTP_OK
@@ -78,29 +70,26 @@ final class AppController
     #[Route('/features', name: 'api_app_features_get', methods: ['GET'])]
     public function features(): JsonResponse
     {
-        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
-        if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
+        $result = $this->appPolicyEndpointsHandler->features();
+        if ($result->status() === GetAppFeaturesEndpointResult::STATUS_UNAUTHORIZED) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
                 Response::HTTP_UNAUTHORIZED
             );
         }
-
-        $adminActor = $this->resolveAdminActorHandler->handle();
-        if ($adminActor->status() === ResolveAdminActorResult::STATUS_FORBIDDEN_ACTOR) {
+        if ($result->status() === GetAppFeaturesEndpointResult::STATUS_FORBIDDEN_ACTOR) {
             return new JsonResponse(
                 ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
                 Response::HTTP_FORBIDDEN
             );
         }
-
-        $features = $this->getAppFeaturesHandler->handle();
+        $features = $result->features();
 
         return new JsonResponse(
             [
-                'app_feature_enabled' => $features->appFeatureEnabled(),
-                'feature_governance' => $features->featureGovernance(),
-                'core_v1_global_features' => $features->coreV1GlobalFeatures(),
+                'app_feature_enabled' => $features?->appFeatureEnabled() ?? [],
+                'feature_governance' => $features?->featureGovernance() ?? [],
+                'core_v1_global_features' => $features?->coreV1GlobalFeatures() ?? [],
             ],
             Response::HTTP_OK
         );
@@ -109,33 +98,26 @@ final class AppController
     #[Route('/features', name: 'api_app_features_patch', methods: ['PATCH'])]
     public function patchFeatures(Request $request): JsonResponse
     {
-        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
-        if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
+        $result = $this->appPolicyEndpointsHandler->patchFeatures($this->payload($request));
+        if ($result->status() === PatchAppFeaturesEndpointResult::STATUS_UNAUTHORIZED) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
                 Response::HTTP_UNAUTHORIZED
             );
         }
-
-        $adminActor = $this->resolveAdminActorHandler->handle();
-        if ($adminActor->status() === ResolveAdminActorResult::STATUS_FORBIDDEN_ACTOR) {
+        if ($result->status() === PatchAppFeaturesEndpointResult::STATUS_FORBIDDEN_ACTOR) {
             return new JsonResponse(
                 ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
                 Response::HTTP_FORBIDDEN
             );
         }
-
-        $payload = $this->payload($request);
-        $appFeatureEnabled = $payload['app_feature_enabled'] ?? null;
-        if (!is_array($appFeatureEnabled)) {
+        if ($result->status() === PatchAppFeaturesEndpointResult::STATUS_VALIDATION_FAILED_PAYLOAD) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.invalid_app_feature_payload')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
-
-        $result = $this->patchAppFeaturesHandler->handle($appFeatureEnabled);
-        if ($result->status() === PatchAppFeaturesResult::STATUS_VALIDATION_FAILED) {
+        if ($result->status() === PatchAppFeaturesEndpointResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
                 [
                     'code' => 'VALIDATION_FAILED',
