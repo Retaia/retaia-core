@@ -213,6 +213,11 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - `Infrastructure/Auth/AuthenticatedUserGateway`
 - réutilisation dans `AuthController` pour les endpoints nécessitant auth user
 
+## Vingt-sixième lot (auth controller cleanup)
+
+- suppression de la dépendance directe résiduelle à `User/Service/EmailVerificationService` dans `AuthController`
+- `AuthController` passe entièrement par handlers applicatifs pour les use cases `verify-email`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
