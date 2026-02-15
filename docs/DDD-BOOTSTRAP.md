@@ -430,6 +430,18 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - contrôle rate-limit
   - délégation du use case `MintClientTokenHandler`
 
+## Quarante-troisième lot (auth self-service endpoints handler)
+
+- extraction de l'orchestration des endpoints self-service authentifiés en couche Application:
+  - `AuthSelfServiceEndpointsHandler`
+- `AuthController` délègue désormais:
+  - `GET /auth/me`
+  - `POST /auth/2fa/setup`
+  - `POST /auth/2fa/enable`
+  - `POST /auth/2fa/disable`
+  - `GET /auth/me/features`
+  - `PATCH /auth/me/features`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
