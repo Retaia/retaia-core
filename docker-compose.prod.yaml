@@ -57,10 +57,11 @@ services:
     ports:
       - "${RETAIA_PROD_HTTP_PORT:-8080}:80"
     environment:
-      RETAIA_PROD_API_HOST: ${RETAIA_PROD_API_HOST:-api.retaia.local}
+      RETAIA_PROD_API_HOST: ${RETAIA_PROD_API_HOST:-app.retaia.local}
     volumes:
       - ./docker/Caddyfile.prod.example:/etc/caddy/Caddyfile:ro
       - ./public:/var/www/html/public:ro
+      - ${RETAIA_UI_DIST_DIR:-./ui/dist}:/srv/ui:ro
 
   database-prod:
     image: postgres:16-alpine
