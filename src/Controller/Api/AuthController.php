@@ -18,6 +18,7 @@ use App\Application\Auth\ConfirmEmailVerificationResult;
 use App\Application\Auth\GetMyFeaturesHandler;
 use App\Application\Auth\PatchMyFeaturesHandler;
 use App\Application\Auth\PatchMyFeaturesResult;
+use App\Application\Auth\GetAuthMeProfileHandler;
 use App\Application\Auth\RequestEmailVerificationHandler;
 use App\Application\AuthClient\MintClientTokenHandler;
 use App\Application\AuthClient\MintClientTokenResult;
@@ -60,6 +61,7 @@ final class AuthController
         private DisableTwoFactorHandler $disableTwoFactorHandler,
         private GetMyFeaturesHandler $getMyFeaturesHandler,
         private PatchMyFeaturesHandler $patchMyFeaturesHandler,
+        private GetAuthMeProfileHandler $getAuthMeProfileHandler,
         private TranslatorInterface $translator,
         #[Autowire(service: 'limiter.lost_password_request')]
         private RateLimiterFactory $lostPasswordRequestLimiter,
@@ -101,14 +103,13 @@ final class AuthController
             );
         }
 
-        return new JsonResponse(
-            [
-                'id' => $user->getId(),
-                'email' => $user->getEmail(),
-                'roles' => $user->getRoles(),
-            ],
-            Response::HTTP_OK
-        );
+        $result = $this->getAuthMeProfileHandler->handle($user->getId(), $user->getEmail(), $user->getRoles());
+
+        return new JsonResponse([
+            'id' => $result->id(),
+            'email' => $result->email(),
+            'roles' => $result->roles(),
+        ], Response::HTTP_OK);
     }
 
     #[Route('/2fa/setup', name: 'api_auth_2fa_setup', methods: ['POST'])]

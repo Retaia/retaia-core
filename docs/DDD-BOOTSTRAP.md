@@ -181,6 +181,12 @@ Poser un premier découpage DDD sans changer le contrat API v1.
 - adapter infra:
   - `Infrastructure/Feature/FeatureGovernanceGateway`
 
+## Vingt-deuxième lot (auth me handler)
+
+- extraction du use case `/auth/me` en couche Application:
+  - `GetAuthMeProfileHandler`
+- objectif: centraliser la composition du payload profil auth dans un handler dédié
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
