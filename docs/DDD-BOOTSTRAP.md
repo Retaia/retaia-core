@@ -475,6 +475,17 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - `POST /jobs/{jobId}/submit`
   - `POST /jobs/{jobId}/fail`
 
+## Quarante-septième lot (derived endpoints handler)
+
+- extraction de l'orchestration des endpoints `/assets/{uuid}/derived/*` en couche Application:
+  - `DerivedEndpointsHandler`
+- `DerivedController` délègue désormais:
+  - `POST /assets/{uuid}/derived/upload/init`
+  - `POST /assets/{uuid}/derived/upload/part`
+  - `POST /assets/{uuid}/derived/upload/complete`
+  - `GET /assets/{uuid}/derived`
+  - `GET /assets/{uuid}/derived/{kind}`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants

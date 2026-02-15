@@ -6,6 +6,7 @@ use App\Application\Auth\Port\AgentActorGateway;
 use App\Application\Auth\ResolveAgentActorHandler;
 use App\Application\Derived\CheckDerivedAssetExistsHandler;
 use App\Application\Derived\CompleteDerivedUploadHandler;
+use App\Application\Derived\DerivedEndpointsHandler;
 use App\Application\Derived\GetDerivedByKindHandler;
 use App\Application\Derived\InitDerivedUploadHandler;
 use App\Application\Derived\ListDerivedFilesHandler;
@@ -94,13 +95,15 @@ final class DerivedControllerTest extends TestCase
         };
 
         return new DerivedController(
-            new ResolveAgentActorHandler($agentGateway),
-            new CheckDerivedAssetExistsHandler($gateway),
-            new InitDerivedUploadHandler($gateway),
-            new UploadDerivedPartHandler($gateway),
-            new CompleteDerivedUploadHandler($gateway),
-            new ListDerivedFilesHandler($gateway),
-            new GetDerivedByKindHandler($gateway),
+            new DerivedEndpointsHandler(
+                new ResolveAgentActorHandler($agentGateway),
+                new CheckDerivedAssetExistsHandler($gateway),
+                new InitDerivedUploadHandler($gateway),
+                new UploadDerivedPartHandler($gateway),
+                new CompleteDerivedUploadHandler($gateway),
+                new ListDerivedFilesHandler($gateway),
+                new GetDerivedByKindHandler($gateway),
+            ),
             $this->translator()
         );
     }
