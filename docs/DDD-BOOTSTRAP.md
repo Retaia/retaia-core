@@ -203,6 +203,16 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - `/auth/clients/{clientId}/rotate-secret`
 - objectif: unifier la résolution d'acteur admin dans le controller auth
 
+## Vingt-cinquième lot (authenticated user handler)
+
+- extraction de la résolution d'utilisateur authentifié en couche Application:
+  - `ResolveAuthenticatedUserHandler`
+- ajout du port:
+  - `Application/Auth/Port/AuthenticatedUserGateway`
+- adapter infra:
+  - `Infrastructure/Auth/AuthenticatedUserGateway`
+- réutilisation dans `AuthController` pour les endpoints nécessitant auth user
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
