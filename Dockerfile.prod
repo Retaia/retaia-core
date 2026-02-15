@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=fullfrontend/php-fpm:latest
+ARG BASE_IMAGE=fullfrontend/php-fpm:latest@sha256:6cee40b509710376fc9aa7d78b91f711afb6c4ba4a138b9e0e35a55114263647
 FROM ${BASE_IMAGE}
 
 ARG RETAIA_BUILD_V1_READY=0
