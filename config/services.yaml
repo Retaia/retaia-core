@@ -44,6 +44,7 @@ services:
     App\Application\Derived\Port\DerivedGateway: '@App\Infrastructure\Derived\DerivedGateway'
     App\Application\Workflow\Port\WorkflowGateway: '@App\Infrastructure\Workflow\WorkflowGateway'
     App\Application\Job\Port\JobGateway: '@App\Infrastructure\Job\JobGateway'
+    App\Application\Asset\Port\AssetWorkflowGateway: '@App\Infrastructure\Asset\AssetWorkflowGateway'
     App\Ingest\Port\FilePollerInterface: '@App\Ingest\Service\FilesystemFilePoller'
     App\Ingest\Port\ScanStateStoreInterface: '@App\Ingest\Repository\ScanStateStore'
 
