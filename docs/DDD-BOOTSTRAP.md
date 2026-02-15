@@ -351,6 +351,17 @@ Poser un premier découpage DDD sans changer le contrat API v1.
 - `AssetController` délègue désormais:
   - `PATCH /assets/{uuid}`
 
+## Trente-sixième lot (agent register endpoint handler)
+
+- extraction de l'orchestration endpoint `/agents/register` en couche Application:
+  - `RegisterAgentEndpointHandler`
+- extraction du contrat applicatif pour le use case register:
+  - `RegisterAgentUseCase` (implémenté par `RegisterAgentHandler`)
+- `AgentController` délègue désormais:
+  - validation payload (`agent_name`, `agent_version`, `capabilities`)
+  - résolution actor authentifié (fallback `unknown`)
+  - délégation du use case register + mapping des statuts
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
