@@ -45,6 +45,7 @@ services:
     App\Application\Workflow\Port\WorkflowGateway: '@App\Infrastructure\Workflow\WorkflowGateway'
     App\Application\Job\Port\JobGateway: '@App\Infrastructure\Job\JobGateway'
     App\Application\Asset\Port\AssetWorkflowGateway: '@App\Infrastructure\Asset\AssetWorkflowGateway'
+    App\Application\Asset\Port\AssetPatchGateway: '@App\Infrastructure\Asset\AssetPatchGateway'
     App\Ingest\Port\FilePollerInterface: '@App\Ingest\Service\FilesystemFilePoller'
     App\Ingest\Port\ScanStateStoreInterface: '@App\Ingest\Repository\ScanStateStore'
 

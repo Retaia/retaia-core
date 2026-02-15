@@ -327,6 +327,17 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - `POST /assets/{uuid}/reopen`
   - `POST /assets/{uuid}/reprocess`
 
+## Trente-cinquième lot (asset patch handler)
+
+- extraction du use case de mise à jour asset en couche Application:
+  - `PatchAssetHandler`
+- ajout du port:
+  - `Application/Asset/Port/AssetPatchGateway`
+- adapter infra:
+  - `Infrastructure/Asset/AssetPatchGateway`
+- `AssetController` délègue désormais:
+  - `PATCH /assets/{uuid}`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
