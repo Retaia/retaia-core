@@ -486,6 +486,18 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - `GET /assets/{uuid}/derived`
   - `GET /assets/{uuid}/derived/{kind}`
 
+## Quarante-huitième lot (asset endpoints handler)
+
+- extraction de l'orchestration des endpoints `/assets/*` en couche Application:
+  - `AssetEndpointsHandler`
+- `AssetController` délègue désormais:
+  - `GET /assets`
+  - `GET /assets/{uuid}`
+  - `PATCH /assets/{uuid}`
+  - `POST /assets/{uuid}/decision`
+  - `POST /assets/{uuid}/reopen`
+  - `POST /assets/{uuid}/reprocess`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
