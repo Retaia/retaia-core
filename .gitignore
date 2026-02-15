@@ -5,6 +5,7 @@
 !/var/.gitignore
 /vendor/
 /node_modules/
+/ui/
 /config/reference.php
 
 ###> phpunit/phpunit ###

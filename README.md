@@ -174,6 +174,7 @@ Production Docker deployment example is documented in:
 Example compose file:
 
 - `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docker-compose.prod.yaml`
+- UI static dist mount (served by Caddy): `${RETAIA_UI_DIST_DIR:-./ui/dist}` (override env if needed)
 
 Build is intentionally gated and requires V1 flag:
 
