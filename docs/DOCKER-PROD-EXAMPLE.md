@@ -98,7 +98,35 @@ Si aucune URL de ping/version n'est encore disponible, utiliser un mode simple e
 2. l'UI telecharge la derniere release taggee (artefact officiel)
 3. verification checksum/signature avant activation
 
-Quand une URL de ping sera disponible, ce mode pourra evoluer vers:
+## Manifeste de ping UI (option implementee)
+
+Le Core fournit une commande pour generer un manifeste statique JSON (servi ensuite par Caddy/CDN):
+
+```bash
+php bin/console app:release:write-ui-manifest \
+  --ui-version=1.0.0 \
+  --asset-url=https://downloads.example.com/retaia-ui-1.0.0.zip \
+  --sha256=<sha256_64_hex> \
+  --notes-url=https://example.com/releases/1.0.0
+```
+
+Sortie par defaut:
+
+- `public/releases/latest.json`
+
+Tu peux surcharger le chemin:
+
+```bash
+php bin/console app:release:write-ui-manifest ... --output=public/releases/latest.json
+```
+
+Pattern recommande:
+
+1. pipeline release UI publie l'artefact
+2. pipeline ecrit/maj `public/releases/latest.json`
+3. client UI ping ce manifeste et telecharge l'asset reference
+
+Quand une URL de ping applicative dediee sera disponible, ce mode pourra evoluer vers:
 
 - ping version/manifeste
 - comparaison de version locale

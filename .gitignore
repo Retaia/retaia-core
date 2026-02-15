@@ -6,6 +6,7 @@
 /vendor/
 /node_modules/
 /ui/
+/public/releases/latest.json
 /config/reference.php
 
 ###> phpunit/phpunit ###
