@@ -3,14 +3,18 @@
 namespace App\Controller\Api;
 
 use App\Api\Service\IdempotencyService;
+use App\Application\Asset\DecideAssetHandler;
+use App\Application\Asset\DecideAssetResult;
+use App\Application\Asset\ReopenAssetHandler;
+use App\Application\Asset\ReopenAssetResult;
+use App\Application\Asset\ReprocessAssetHandler;
+use App\Application\Asset\ReprocessAssetResult;
 use App\Application\Auth\ResolveAgentActorHandler;
 use App\Application\Auth\ResolveAgentActorResult;
 use App\Application\Auth\ResolveAuthenticatedUserHandler;
 use App\Application\Auth\ResolveAuthenticatedUserResult;
 use App\Asset\AssetState;
 use App\Asset\Repository\AssetRepositoryInterface;
-use App\Asset\Service\AssetStateMachine;
-use App\Asset\Service\StateConflictException;
 use App\Entity\Asset;
 use App\Lock\Repository\OperationLockRepository;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -24,7 +28,9 @@ final class AssetController
 {
     public function __construct(
         private AssetRepositoryInterface $assets,
-        private AssetStateMachine $stateMachine,
+        private DecideAssetHandler $decideAssetHandler,
+        private ReopenAssetHandler $reopenAssetHandler,
+        private ReprocessAssetHandler $reprocessAssetHandler,
         private TranslatorInterface $translator,
         private ResolveAgentActorHandler $resolveAgentActorHandler,
         private ResolveAuthenticatedUserHandler $resolveAuthenticatedUserHandler,
@@ -143,44 +149,32 @@ final class AssetController
         }
 
         return $this->idempotency->execute($request, $this->actorId(), function () use ($uuid, $request): JsonResponse {
-            $asset = $this->assets->findByUuid($uuid);
-            if (!$asset instanceof Asset) {
+            $payload = $this->payload($request);
+            $action = trim((string) ($payload['action'] ?? ''));
+            $result = $this->decideAssetHandler->handle($uuid, $action);
+
+            if ($result->status() === DecideAssetResult::STATUS_NOT_FOUND) {
                 return new JsonResponse([
                     'code' => 'NOT_FOUND',
                     'message' => $this->translator->trans('asset.error.not_found'),
                 ], Response::HTTP_NOT_FOUND);
             }
 
-            if ($this->locks->hasActiveLock($asset->getUuid())) {
+            if ($result->status() === DecideAssetResult::STATUS_STATE_CONFLICT) {
                 return new JsonResponse([
                     'code' => 'STATE_CONFLICT',
                     'message' => $this->translator->trans('asset.error.state_conflict'),
                 ], Response::HTTP_CONFLICT);
             }
 
-            $payload = $this->payload($request);
-            $action = trim((string) ($payload['action'] ?? ''));
-            if ($action === '') {
+            if ($result->status() === DecideAssetResult::STATUS_VALIDATION_FAILED_ACTION_REQUIRED) {
                 return new JsonResponse([
                     'code' => 'VALIDATION_FAILED',
                     'message' => $this->translator->trans('asset.error.decision_action_required'),
                 ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
-            try {
-                $this->stateMachine->decide($asset, $action);
-                $this->assets->save($asset);
-            } catch (StateConflictException $exception) {
-                return new JsonResponse([
-                    'code' => 'STATE_CONFLICT',
-                    'message' => $this->translator->trans('asset.error.state_conflict'),
-                ], Response::HTTP_CONFLICT);
-            }
-
-            return new JsonResponse([
-                'uuid' => $asset->getUuid(),
-                'state' => $asset->getState()->value,
-            ], Response::HTTP_OK);
+            return new JsonResponse($result->payload() ?? [], Response::HTTP_OK);
         });
     }
 
@@ -191,35 +185,22 @@ final class AssetController
             return $this->forbiddenActorResponse();
         }
 
-        $asset = $this->assets->findByUuid($uuid);
-        if (!$asset instanceof Asset) {
+        $result = $this->reopenAssetHandler->handle($uuid);
+        if ($result->status() === ReopenAssetResult::STATUS_NOT_FOUND) {
             return new JsonResponse([
                 'code' => 'NOT_FOUND',
                 'message' => $this->translator->trans('asset.error.not_found'),
             ], Response::HTTP_NOT_FOUND);
         }
 
-        if ($this->locks->hasActiveLock($asset->getUuid())) {
+        if ($result->status() === ReopenAssetResult::STATUS_STATE_CONFLICT) {
             return new JsonResponse([
                 'code' => 'STATE_CONFLICT',
                 'message' => $this->translator->trans('asset.error.state_conflict'),
             ], Response::HTTP_CONFLICT);
         }
 
-        try {
-            $this->stateMachine->transition($asset, AssetState::DECISION_PENDING);
-            $this->assets->save($asset);
-        } catch (StateConflictException $exception) {
-            return new JsonResponse([
-                'code' => 'STATE_CONFLICT',
-                'message' => $this->translator->trans('asset.error.state_conflict'),
-            ], Response::HTTP_CONFLICT);
-        }
-
-        return new JsonResponse([
-            'uuid' => $asset->getUuid(),
-            'state' => $asset->getState()->value,
-        ], Response::HTTP_OK);
+        return new JsonResponse($result->payload() ?? [], Response::HTTP_OK);
     }
 
     #[Route('/{uuid}/reprocess', name: 'api_assets_reprocess', methods: ['POST'])]
@@ -230,35 +211,22 @@ final class AssetController
         }
 
         return $this->idempotency->execute($request, $this->actorId(), function () use ($uuid): JsonResponse {
-            $asset = $this->assets->findByUuid($uuid);
-            if (!$asset instanceof Asset) {
+            $result = $this->reprocessAssetHandler->handle($uuid);
+            if ($result->status() === ReprocessAssetResult::STATUS_NOT_FOUND) {
                 return new JsonResponse([
                     'code' => 'NOT_FOUND',
                     'message' => $this->translator->trans('asset.error.not_found'),
                 ], Response::HTTP_NOT_FOUND);
             }
 
-            if ($this->locks->hasActiveLock($asset->getUuid())) {
+            if ($result->status() === ReprocessAssetResult::STATUS_STATE_CONFLICT) {
                 return new JsonResponse([
                     'code' => 'STATE_CONFLICT',
                     'message' => $this->translator->trans('asset.error.state_conflict'),
                 ], Response::HTTP_CONFLICT);
             }
 
-            try {
-                $this->stateMachine->transition($asset, AssetState::READY);
-                $this->assets->save($asset);
-            } catch (StateConflictException $exception) {
-                return new JsonResponse([
-                    'code' => 'STATE_CONFLICT',
-                    'message' => $this->translator->trans('asset.error.state_conflict'),
-                ], Response::HTTP_CONFLICT);
-            }
-
-            return new JsonResponse([
-                'uuid' => $asset->getUuid(),
-                'state' => $asset->getState()->value,
-            ], Response::HTTP_OK);
+            return new JsonResponse($result->payload() ?? [], Response::HTTP_OK);
         });
     }
 
