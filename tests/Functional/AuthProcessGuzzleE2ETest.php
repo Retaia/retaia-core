@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Functional;
 
 use App\Tests\Support\FixtureUsers;
+use Doctrine\DBAL\Connection;
 use GuzzleHttp\Client;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Promise\Create;
@@ -139,6 +140,79 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
         self::assertSame('INVALID_DEVICE_CODE', $pollInvalid['json']['code'] ?? null);
     }
 
+    public function testSpecLostPasswordFlowPersistsAndConsumesResetTokenInDb(): void
+    {
+        $client = $this->createGuzzleClient();
+
+        $requestReset = $this->requestJson($client, 'POST', '/api/v1/auth/lost-password/request', [
+            'email' => FixtureUsers::ADMIN_EMAIL,
+        ]);
+        self::assertSame(202, $requestReset['status']);
+        $resetToken = (string) ($requestReset['json']['reset_token'] ?? '');
+        self::assertNotSame('', $resetToken);
+
+        $connection = static::getContainer()->get(Connection::class);
+        $tokenHash = hash('sha256', $resetToken);
+        $storedCount = (int) $connection->fetchOne(
+            'SELECT COUNT(*) FROM password_reset_token WHERE token_hash = :tokenHash',
+            ['tokenHash' => $tokenHash]
+        );
+        self::assertSame(1, $storedCount);
+
+        $newPassword = 'New-password1!';
+        $reset = $this->requestJson($client, 'POST', '/api/v1/auth/lost-password/reset', [
+            'token' => $resetToken,
+            'new_password' => $newPassword,
+        ]);
+        self::assertSame(200, $reset['status']);
+
+        $remainingCount = (int) $connection->fetchOne(
+            'SELECT COUNT(*) FROM password_reset_token WHERE token_hash = :tokenHash',
+            ['tokenHash' => $tokenHash]
+        );
+        self::assertSame(0, $remainingCount);
+
+        $loginWithNewPassword = $this->requestJson($client, 'POST', '/api/v1/auth/login', [
+            'email' => FixtureUsers::ADMIN_EMAIL,
+            'password' => $newPassword,
+        ]);
+        self::assertSame(200, $loginWithNewPassword['status']);
+        self::assertSame('Bearer', $loginWithNewPassword['json']['token_type'] ?? null);
+    }
+
+    public function testSpecVerifyEmailConfirmUpdatesUserVerificationFlagInDb(): void
+    {
+        $client = $this->createGuzzleClient();
+        $email = sprintf('e2e-verify-%s@retaia.local', bin2hex(random_bytes(4)));
+        $this->insertUser($email, 'change-me', ['ROLE_USER'], false);
+
+        $connection = static::getContainer()->get(Connection::class);
+        $before = (int) $connection->fetchOne(
+            'SELECT email_verified FROM app_user WHERE email = :email',
+            ['email' => $email]
+        );
+        self::assertSame(0, $before);
+
+        $requestVerification = $this->requestJson($client, 'POST', '/api/v1/auth/verify-email/request', [
+            'email' => $email,
+        ]);
+        self::assertSame(202, $requestVerification['status']);
+        $verificationToken = (string) ($requestVerification['json']['verification_token'] ?? '');
+        self::assertNotSame('', $verificationToken);
+
+        $confirm = $this->requestJson($client, 'POST', '/api/v1/auth/verify-email/confirm', [
+            'token' => $verificationToken,
+        ]);
+        self::assertSame(200, $confirm['status']);
+        self::assertSame(true, $confirm['json']['email_verified'] ?? null);
+
+        $after = (int) $connection->fetchOne(
+            'SELECT email_verified FROM app_user WHERE email = :email',
+            ['email' => $email]
+        );
+        self::assertSame(1, $after);
+    }
+
     private function createGuzzleClient(): Client
     {
         static::bootKernel();
@@ -215,5 +289,22 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
             'json' => is_array($decoded) ? $decoded : null,
             'response' => $response,
         ];
+    }
+
+    /**
+     * @param array<int, string> $roles
+     */
+    private function insertUser(string $email, string $plainPassword, array $roles, bool $emailVerified): void
+    {
+        /** @var Connection $connection */
+        $connection = static::getContainer()->get(Connection::class);
+
+        $connection->insert('app_user', [
+            'id' => substr(bin2hex(random_bytes(16)), 0, 32),
+            'email' => mb_strtolower(trim($email)),
+            'password_hash' => password_hash($plainPassword, PASSWORD_BCRYPT),
+            'roles' => json_encode(array_values($roles), JSON_THROW_ON_ERROR),
+            'email_verified' => $emailVerified ? 1 : 0,
+        ]);
     }
 }
