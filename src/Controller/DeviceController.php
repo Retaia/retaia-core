@@ -2,10 +2,10 @@
 
 namespace App\Controller;
 
+use App\Application\Auth\ResolveAuthenticatedUserHandler;
+use App\Application\Auth\ResolveAuthenticatedUserResult;
 use App\Application\AuthClient\CompleteDeviceApprovalHandler;
 use App\Application\AuthClient\CompleteDeviceApprovalResult;
-use App\Entity\User;
-use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -16,7 +16,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 final class DeviceController
 {
     public function __construct(
-        private Security $security,
+        private ResolveAuthenticatedUserHandler $resolveAuthenticatedUserHandler,
         private CompleteDeviceApprovalHandler $completeDeviceApprovalHandler,
         private TranslatorInterface $translator,
     ) {
@@ -37,8 +37,8 @@ final class DeviceController
     #[Route('', name: 'device_approve', methods: ['POST'])]
     public function approve(Request $request): JsonResponse
     {
-        $user = $this->security->getUser();
-        if (!$user instanceof User) {
+        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
+        if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
                 Response::HTTP_UNAUTHORIZED
@@ -55,7 +55,7 @@ final class DeviceController
         }
 
         $result = $this->completeDeviceApprovalHandler->handle(
-            $user->getId(),
+            (string) $authenticatedUser->id(),
             $userCode,
             trim((string) ($payload['otp_code'] ?? ''))
         );
