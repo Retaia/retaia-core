@@ -14,6 +14,7 @@ use App\Application\Workflow\PreviewDecisionsHandler;
 use App\Application\Workflow\PreviewMovesHandler;
 use App\Application\Workflow\PreviewPurgeHandler;
 use App\Application\Workflow\PurgeAssetHandler;
+use App\Application\Workflow\WorkflowEndpointsHandler;
 use App\Api\Service\IdempotencyService;
 use App\Asset\AssetState;
 use App\Asset\Repository\AssetRepositoryInterface;
@@ -217,16 +218,18 @@ final class WorkflowControllerTest extends TestCase
 
         return new WorkflowController(
             $idempotency,
-            new ResolveAgentActorHandler($agentActorGateway),
-            new ResolveAuthenticatedUserHandler($authenticatedUserGateway),
-            new PreviewMovesHandler($workflowGateway),
-            new ApplyMovesHandler($workflowGateway),
-            new GetBatchReportHandler($workflowGateway),
-            new CheckBulkDecisionsEnabledHandler($bulkDecisionsEnabled),
-            new PreviewDecisionsHandler($workflowGateway),
-            new ApplyDecisionsHandler($workflowGateway),
-            new PreviewPurgeHandler($workflowGateway),
-            new PurgeAssetHandler($workflowGateway),
+            new WorkflowEndpointsHandler(
+                new ResolveAgentActorHandler($agentActorGateway),
+                new ResolveAuthenticatedUserHandler($authenticatedUserGateway),
+                new PreviewMovesHandler($workflowGateway),
+                new ApplyMovesHandler($workflowGateway),
+                new GetBatchReportHandler($workflowGateway),
+                new CheckBulkDecisionsEnabledHandler($bulkDecisionsEnabled),
+                new PreviewDecisionsHandler($workflowGateway),
+                new ApplyDecisionsHandler($workflowGateway),
+                new PreviewPurgeHandler($workflowGateway),
+                new PurgeAssetHandler($workflowGateway),
+            ),
             $translator
         );
     }
