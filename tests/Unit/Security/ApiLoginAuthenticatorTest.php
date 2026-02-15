@@ -5,6 +5,7 @@ namespace App\Tests\Unit\Security;
 use App\Auth\UserAccessTokenService;
 use App\Entity\User;
 use App\Security\ApiLoginAuthenticator;
+use App\User\Service\TwoFactorSecretCipher;
 use App\User\Service\TwoFactorService;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -171,7 +172,13 @@ final class ApiLoginAuthenticatorTest extends TestCase
 
     private function authenticator(): ApiLoginAuthenticator
     {
-        $twoFactor = new TwoFactorService(new ArrayAdapter());
+        $twoFactor = new TwoFactorService(
+            new ArrayAdapter(),
+            new TwoFactorSecretCipher(
+                'v1:BR/S2JUbOPhtWvvGSl7mme/p85UkTI3dxqWyj4eBJhs=,v2:WuCdN8gv+LrJgjvD+7nNe1DxvP/pbA4VOMdLhtGa1LU=',
+                'v2'
+            )
+        );
         $userTokens = new UserAccessTokenService(new ArrayAdapter(), 'test-secret', 3600);
 
         return new ApiLoginAuthenticator(new NullLogger(), $this->translator(), $twoFactor, $userTokens);
