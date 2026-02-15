@@ -14,6 +14,7 @@ use GuzzleHttp\Psr7\Response as Psr7Response;
 use GuzzleHttp\Psr7\Utils;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
 use OTPHP\TOTP;
+use Psr\Cache\CacheItemPoolInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
@@ -825,6 +826,116 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
         self::assertSame('FORBIDDEN_SCOPE', $mcpForbiddenByScope['json']['code'] ?? null);
     }
 
+    public function testSpecClientTokenValidatesPayloadRejectsInvalidCredentialsAndRateLimits(): void
+    {
+        $client = $this->createGuzzleClient();
+
+        $validationFailed = $this->requestJson($client, 'POST', '/api/v1/auth/clients/token', []);
+        self::assertSame(422, $validationFailed['status']);
+        self::assertSame('VALIDATION_FAILED', $validationFailed['json']['code'] ?? null);
+
+        $clientId = 'e2e-rate-limit-'.bin2hex(random_bytes(4));
+        $tooManyAttempts = null;
+        for ($attempt = 1; $attempt <= 10; ++$attempt) {
+            $response = $this->requestJson($client, 'POST', '/api/v1/auth/clients/token', [
+                'client_id' => $clientId,
+                'client_kind' => 'AGENT',
+                'secret_key' => 'invalid-secret',
+            ]);
+
+            if ($response['status'] === 429) {
+                $tooManyAttempts = $response;
+                break;
+            }
+
+            self::assertSame(401, $response['status']);
+            self::assertSame('UNAUTHORIZED', $response['json']['code'] ?? null);
+        }
+
+        self::assertIsArray($tooManyAttempts);
+        self::assertSame(429, $tooManyAttempts['status']);
+        self::assertSame('TOO_MANY_ATTEMPTS', $tooManyAttempts['json']['code'] ?? null);
+        self::assertGreaterThanOrEqual(1, (int) ($tooManyAttempts['json']['retry_in_seconds'] ?? 0));
+    }
+
+    public function testSpecDevicePollValidationApprovedStatusAndOneShotSecret(): void
+    {
+        $client = $this->createGuzzleClient();
+
+        $pollMissingCode = $this->requestJson($client, 'POST', '/api/v1/auth/clients/device/poll', []);
+        self::assertSame(422, $pollMissingCode['status']);
+        self::assertSame('VALIDATION_FAILED', $pollMissingCode['json']['code'] ?? null);
+
+        $start = $this->requestJson($client, 'POST', '/api/v1/auth/clients/device/start', [
+            'client_kind' => 'AGENT',
+        ]);
+        self::assertSame(200, $start['status']);
+        $deviceCode = (string) ($start['json']['device_code'] ?? '');
+        $userCode = (string) ($start['json']['user_code'] ?? '');
+        self::assertNotSame('', $deviceCode);
+        self::assertNotSame('', $userCode);
+
+        $firstPoll = $this->requestJson($client, 'POST', '/api/v1/auth/clients/device/poll', [
+            'device_code' => $deviceCode,
+        ]);
+        self::assertSame(200, $firstPoll['status']);
+        self::assertSame('PENDING', $firstPoll['json']['status'] ?? null);
+
+        $adminToken = $this->loginAdminAndGetBearerToken($client);
+        $approve = $this->requestJson($client, 'POST', '/device', [
+            'user_code' => $userCode,
+        ], [
+            'Authorization' => 'Bearer '.$adminToken,
+        ]);
+        self::assertSame(200, $approve['status']);
+        self::assertSame(true, $approve['json']['approved'] ?? null);
+
+        $this->forceDeviceFlowLastPolledAt($deviceCode, time() - 30);
+
+        $approvedPoll = $this->requestJson($client, 'POST', '/api/v1/auth/clients/device/poll', [
+            'device_code' => $deviceCode,
+        ]);
+        self::assertSame(200, $approvedPoll['status']);
+        self::assertSame('APPROVED', $approvedPoll['json']['status'] ?? null);
+        self::assertIsString($approvedPoll['json']['client_id'] ?? null);
+        self::assertNotSame('', (string) ($approvedPoll['json']['client_id'] ?? ''));
+        self::assertSame('AGENT', $approvedPoll['json']['client_kind'] ?? null);
+        self::assertIsString($approvedPoll['json']['secret_key'] ?? null);
+        self::assertNotSame('', (string) ($approvedPoll['json']['secret_key'] ?? ''));
+
+        $pollAfterApprovedConsumption = $this->requestJson($client, 'POST', '/api/v1/auth/clients/device/poll', [
+            'device_code' => $deviceCode,
+        ]);
+        self::assertSame(400, $pollAfterApprovedConsumption['status']);
+        self::assertSame('INVALID_DEVICE_CODE', $pollAfterApprovedConsumption['json']['code'] ?? null);
+    }
+
+    public function testSpecDevicePollExpiredStatusAndCancelExpiredCode(): void
+    {
+        $client = $this->createGuzzleClient();
+
+        $start = $this->requestJson($client, 'POST', '/api/v1/auth/clients/device/start', [
+            'client_kind' => 'AGENT',
+        ]);
+        self::assertSame(200, $start['status']);
+        $deviceCode = (string) ($start['json']['device_code'] ?? '');
+        self::assertNotSame('', $deviceCode);
+
+        $this->forceDeviceFlowExpiration($deviceCode);
+
+        $pollExpired = $this->requestJson($client, 'POST', '/api/v1/auth/clients/device/poll', [
+            'device_code' => $deviceCode,
+        ]);
+        self::assertSame(200, $pollExpired['status']);
+        self::assertSame('EXPIRED', $pollExpired['json']['status'] ?? null);
+
+        $cancelExpired = $this->requestJson($client, 'POST', '/api/v1/auth/clients/device/cancel', [
+            'device_code' => $deviceCode,
+        ]);
+        self::assertSame(400, $cancelExpired['status']);
+        self::assertSame('EXPIRED_DEVICE_CODE', $cancelExpired['json']['code'] ?? null);
+    }
+
     private function createGuzzleClient(): Client
     {
         static::bootKernel();
@@ -917,6 +1028,38 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
     private function generateOtpCode(string $secret): string
     {
         return TOTP::createFromSecret($secret)->now();
+    }
+
+    private function forceDeviceFlowExpiration(string $deviceCode): void
+    {
+        /** @var CacheItemPoolInterface $cache */
+        $cache = static::getContainer()->get('cache.app');
+        $item = $cache->getItem('auth_device_flows');
+        $flows = $item->get();
+        self::assertIsArray($flows);
+        self::assertIsArray($flows[$deviceCode] ?? null);
+
+        $flow = $flows[$deviceCode];
+        $flow['expires_at'] = time() - 1;
+        $flows[$deviceCode] = $flow;
+        $item->set($flows);
+        $cache->save($item);
+    }
+
+    private function forceDeviceFlowLastPolledAt(string $deviceCode, int $lastPolledAt): void
+    {
+        /** @var CacheItemPoolInterface $cache */
+        $cache = static::getContainer()->get('cache.app');
+        $item = $cache->getItem('auth_device_flows');
+        $flows = $item->get();
+        self::assertIsArray($flows);
+        self::assertIsArray($flows[$deviceCode] ?? null);
+
+        $flow = $flows[$deviceCode];
+        $flow['last_polled_at'] = $lastPolledAt;
+        $flows[$deviceCode] = $flow;
+        $item->set($flows);
+        $cache->save($item);
     }
 
     /**
