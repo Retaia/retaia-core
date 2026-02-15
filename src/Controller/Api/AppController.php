@@ -2,10 +2,14 @@
 
 namespace App\Controller\Api;
 
+use App\Application\AppPolicy\GetAppFeaturesHandler;
+use App\Application\AppPolicy\PatchAppFeaturesHandler;
+use App\Application\AppPolicy\PatchAppFeaturesResult;
 use App\Application\AppPolicy\GetAppPolicyHandler;
-use App\Entity\User;
-use App\Feature\FeatureGovernanceService;
-use Symfony\Bundle\SecurityBundle\Security;
+use App\Application\Auth\ResolveAdminActorHandler;
+use App\Application\Auth\ResolveAdminActorResult;
+use App\Application\Auth\ResolveAuthenticatedUserHandler;
+use App\Application\Auth\ResolveAuthenticatedUserResult;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -16,10 +20,12 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 final class AppController
 {
     public function __construct(
-        private Security $security,
-        private FeatureGovernanceService $featureGovernanceService,
         private TranslatorInterface $translator,
         private GetAppPolicyHandler $getAppPolicyHandler,
+        private GetAppFeaturesHandler $getAppFeaturesHandler,
+        private PatchAppFeaturesHandler $patchAppFeaturesHandler,
+        private ResolveAuthenticatedUserHandler $resolveAuthenticatedUserHandler,
+        private ResolveAdminActorHandler $resolveAdminActorHandler,
     ) {
     }
 
@@ -72,25 +78,29 @@ final class AppController
     #[Route('/features', name: 'api_app_features_get', methods: ['GET'])]
     public function features(): JsonResponse
     {
-        $user = $this->security->getUser();
-        if (!$user instanceof User) {
+        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
+        if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
                 Response::HTTP_UNAUTHORIZED
             );
         }
-        if (!$this->security->isGranted('ROLE_ADMIN')) {
+
+        $adminActor = $this->resolveAdminActorHandler->handle();
+        if ($adminActor->status() === ResolveAdminActorResult::STATUS_FORBIDDEN_ACTOR) {
             return new JsonResponse(
                 ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
                 Response::HTTP_FORBIDDEN
             );
         }
 
+        $features = $this->getAppFeaturesHandler->handle();
+
         return new JsonResponse(
             [
-                'app_feature_enabled' => $this->featureGovernanceService->appFeatureEnabled(),
-                'feature_governance' => $this->featureGovernanceService->featureGovernanceRules(),
-                'core_v1_global_features' => $this->featureGovernanceService->coreV1GlobalFeatures(),
+                'app_feature_enabled' => $features->appFeatureEnabled(),
+                'feature_governance' => $features->featureGovernance(),
+                'core_v1_global_features' => $features->coreV1GlobalFeatures(),
             ],
             Response::HTTP_OK
         );
@@ -99,14 +109,16 @@ final class AppController
     #[Route('/features', name: 'api_app_features_patch', methods: ['PATCH'])]
     public function patchFeatures(Request $request): JsonResponse
     {
-        $user = $this->security->getUser();
-        if (!$user instanceof User) {
+        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
+        if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
                 Response::HTTP_UNAUTHORIZED
             );
         }
-        if (!$this->security->isGranted('ROLE_ADMIN')) {
+
+        $adminActor = $this->resolveAdminActorHandler->handle();
+        if ($adminActor->status() === ResolveAdminActorResult::STATUS_FORBIDDEN_ACTOR) {
             return new JsonResponse(
                 ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
                 Response::HTTP_FORBIDDEN
@@ -122,28 +134,25 @@ final class AppController
             );
         }
 
-        $validation = $this->featureGovernanceService->validateFeaturePayload(
-            $appFeatureEnabled,
-            $this->featureGovernanceService->allowedAppFeatureKeys()
-        );
-        if ($validation['unknown_keys'] !== [] || $validation['non_boolean_keys'] !== []) {
+        $result = $this->patchAppFeaturesHandler->handle($appFeatureEnabled);
+        if ($result->status() === PatchAppFeaturesResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
                 [
                     'code' => 'VALIDATION_FAILED',
                     'message' => $this->translator->trans('auth.error.invalid_app_feature_payload'),
-                    'details' => $validation,
+                    'details' => $result->validationDetails(),
                 ],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
 
-        $this->featureGovernanceService->setAppFeatureEnabled($appFeatureEnabled);
+        $features = $result->features();
 
         return new JsonResponse(
             [
-                'app_feature_enabled' => $this->featureGovernanceService->appFeatureEnabled(),
-                'feature_governance' => $this->featureGovernanceService->featureGovernanceRules(),
-                'core_v1_global_features' => $this->featureGovernanceService->coreV1GlobalFeatures(),
+                'app_feature_enabled' => $features?->appFeatureEnabled() ?? [],
+                'feature_governance' => $features?->featureGovernance() ?? [],
+                'core_v1_global_features' => $features?->coreV1GlobalFeatures() ?? [],
             ],
             Response::HTTP_OK
         );
