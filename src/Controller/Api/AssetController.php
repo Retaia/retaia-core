@@ -5,6 +5,8 @@ namespace App\Controller\Api;
 use App\Api\Service\IdempotencyService;
 use App\Application\Asset\DecideAssetHandler;
 use App\Application\Asset\DecideAssetResult;
+use App\Application\Asset\PatchAssetHandler;
+use App\Application\Asset\PatchAssetResult;
 use App\Application\Asset\ReopenAssetHandler;
 use App\Application\Asset\ReopenAssetResult;
 use App\Application\Asset\ReprocessAssetHandler;
@@ -13,10 +15,8 @@ use App\Application\Auth\ResolveAgentActorHandler;
 use App\Application\Auth\ResolveAgentActorResult;
 use App\Application\Auth\ResolveAuthenticatedUserHandler;
 use App\Application\Auth\ResolveAuthenticatedUserResult;
-use App\Asset\AssetState;
 use App\Asset\Repository\AssetRepositoryInterface;
 use App\Entity\Asset;
-use App\Lock\Repository\OperationLockRepository;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -28,6 +28,7 @@ final class AssetController
 {
     public function __construct(
         private AssetRepositoryInterface $assets,
+        private PatchAssetHandler $patchAssetHandler,
         private DecideAssetHandler $decideAssetHandler,
         private ReopenAssetHandler $reopenAssetHandler,
         private ReprocessAssetHandler $reprocessAssetHandler,
@@ -35,7 +36,6 @@ final class AssetController
         private ResolveAgentActorHandler $resolveAgentActorHandler,
         private ResolveAuthenticatedUserHandler $resolveAuthenticatedUserHandler,
         private IdempotencyService $idempotency,
-        private OperationLockRepository $locks,
         private bool $featureSuggestedTagsFiltersEnabled,
     ) {
     }
@@ -101,44 +101,29 @@ final class AssetController
             return $this->forbiddenActorResponse();
         }
 
-        $asset = $this->assets->findByUuid($uuid);
-        if (!$asset instanceof Asset) {
+        $result = $this->patchAssetHandler->handle($uuid, $this->payload($request));
+        if ($result->status() === PatchAssetResult::STATUS_NOT_FOUND) {
             return new JsonResponse([
                 'code' => 'NOT_FOUND',
                 'message' => $this->translator->trans('asset.error.not_found'),
             ], Response::HTTP_NOT_FOUND);
         }
 
-        if ($asset->getState() === AssetState::PURGED) {
+        if ($result->status() === PatchAssetResult::STATUS_PURGED_READ_ONLY) {
             return new JsonResponse([
                 'code' => 'STATE_CONFLICT',
                 'message' => $this->translator->trans('asset.error.purged_read_only'),
             ], Response::HTTP_GONE);
         }
 
-        if ($this->locks->hasActiveLock($asset->getUuid())) {
+        if ($result->status() === PatchAssetResult::STATUS_STATE_CONFLICT) {
             return new JsonResponse([
                 'code' => 'STATE_CONFLICT',
                 'message' => $this->translator->trans('asset.error.state_conflict'),
             ], Response::HTTP_CONFLICT);
         }
 
-        $payload = $this->payload($request);
-        if (array_key_exists('tags', $payload) && is_array($payload['tags'])) {
-            $asset->setTags($payload['tags']);
-        }
-
-        if (array_key_exists('notes', $payload)) {
-            $asset->setNotes(is_string($payload['notes']) ? $payload['notes'] : null);
-        }
-
-        if (array_key_exists('fields', $payload) && is_array($payload['fields'])) {
-            $asset->setFields($payload['fields']);
-        }
-
-        $this->assets->save($asset);
-
-        return new JsonResponse($this->detail($asset), Response::HTTP_OK);
+        return new JsonResponse($result->payload() ?? [], Response::HTTP_OK);
     }
 
     #[Route('/{uuid}/decision', name: 'api_assets_decision', methods: ['POST'])]
