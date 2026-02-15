@@ -1,0 +1,35 @@
+#!/usr/bin/env sh
+set -eu
+
+git fetch --quiet origin master
+
+local_master_ref="$(git rev-parse --verify master 2>/dev/null || true)"
+origin_master_ref="$(git rev-parse --verify origin/master)"
+
+if [ -n "${local_master_ref}" ] && [ "${local_master_ref}" = "${origin_master_ref}" ]; then
+  echo "OK: local master is up to date with origin/master."
+  exit 0
+fi
+
+current_branch="$(git symbolic-ref --quiet --short HEAD || true)"
+if [ -z "${current_branch}" ]; then
+  echo "Cannot rebase automatically: detached HEAD and local master is not up to date with origin/master." >&2
+  exit 1
+fi
+
+if [ "${current_branch}" = "master" ]; then
+  echo "Current branch is master and local master is not up to date with origin/master." >&2
+  echo "Run: git pull --rebase origin master" >&2
+  exit 1
+fi
+
+echo "Local master is not up to date with origin/master."
+echo "Rebasing ${current_branch} on origin/master before push..."
+git rebase origin/master
+
+if [ -n "${local_master_ref}" ] && git merge-base --is-ancestor master origin/master; then
+  git branch -f master origin/master >/dev/null 2>&1 || true
+fi
+
+echo "Rebase completed. Re-run git push."
+exit 1
