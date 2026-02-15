@@ -126,6 +126,11 @@ Pattern recommande:
 2. pipeline ecrit/maj `public/releases/latest.json`
 3. client UI ping ce manifeste et telecharge l'asset reference
 
+Auto-update CI disponible:
+
+- `scripts/auto-update-ui-release-manifest.sh`
+- workflow: `.github/workflows/ui-release-auto-update.yml`
+
 Quand une URL de ping applicative dediee sera disponible, ce mode pourra evoluer vers:
 
 - ping version/manifeste

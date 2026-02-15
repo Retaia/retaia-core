@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile.prod
       args:
-        BASE_IMAGE: ${RETAIA_BASE_IMAGE:-fullfrontend/php-fpm:latest}
+        BASE_IMAGE: ${RETAIA_BASE_IMAGE:-fullfrontend/php-fpm:latest@sha256:6cee40b509710376fc9aa7d78b91f711afb6c4ba4a138b9e0e35a55114263647}
         RETAIA_BUILD_V1_READY: ${RETAIA_BUILD_V1_READY:-0}
     image: ${RETAIA_PROD_IMAGE:-retaia-core:prod}
     container_name: retaia-core-app-prod
