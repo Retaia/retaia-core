@@ -553,11 +553,24 @@ final class AuthController
     #[Route('/clients/device/start', name: 'api_auth_clients_device_start', methods: ['POST'])]
     public function startDeviceFlow(Request $request): JsonResponse
     {
-        $result = $this->authClientDeviceFlowEndpointsHandler->start($this->payload($request));
+        $result = $this->authClientDeviceFlowEndpointsHandler->start(
+            $this->payload($request),
+            (string) ($request->getClientIp() ?? 'unknown')
+        );
         if ($result->status() === StartDeviceFlowEndpointResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.client_kind_required')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+        if ($result->status() === StartDeviceFlowEndpointResult::STATUS_TOO_MANY_ATTEMPTS) {
+            return new JsonResponse(
+                [
+                    'code' => 'TOO_MANY_ATTEMPTS',
+                    'message' => $this->translator->trans('auth.error.too_many_client_token_requests'),
+                    'retry_in_seconds' => $result->retryInSeconds() ?? 60,
+                ],
+                Response::HTTP_TOO_MANY_REQUESTS
             );
         }
         if ($result->status() === StartDeviceFlowEndpointResult::STATUS_FORBIDDEN_ACTOR) {

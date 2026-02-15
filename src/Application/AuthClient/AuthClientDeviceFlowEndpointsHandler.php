@@ -8,17 +8,27 @@ final class AuthClientDeviceFlowEndpointsHandler
         private StartDeviceFlowHandler $startDeviceFlowHandler,
         private PollDeviceFlowHandler $pollDeviceFlowHandler,
         private CancelDeviceFlowHandler $cancelDeviceFlowHandler,
+        private Port\DeviceFlowStartRateLimiterGateway $startRateLimiter,
     ) {
     }
 
     /**
      * @param array<string, mixed> $payload
      */
-    public function start(array $payload): StartDeviceFlowEndpointResult
+    public function start(array $payload, string $remoteAddress): StartDeviceFlowEndpointResult
     {
         $clientKind = trim((string) ($payload['client_kind'] ?? ''));
         if ($clientKind === '') {
             return new StartDeviceFlowEndpointResult(StartDeviceFlowEndpointResult::STATUS_VALIDATION_FAILED);
+        }
+
+        $retryInSeconds = $this->startRateLimiter->retryInSecondsOrNull($clientKind, $remoteAddress);
+        if ($retryInSeconds !== null) {
+            return new StartDeviceFlowEndpointResult(
+                StartDeviceFlowEndpointResult::STATUS_TOO_MANY_ATTEMPTS,
+                null,
+                $retryInSeconds,
+            );
         }
 
         $result = $this->startDeviceFlowHandler->handle($clientKind);

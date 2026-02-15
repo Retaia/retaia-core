@@ -114,6 +114,348 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
         self::assertSame('UNAUTHORIZED', $logoutWithCookie['json']['code'] ?? null);
     }
 
+    public function testSpecLoginValidationEmailVerificationAndRateLimit(): void
+    {
+        $client = $this->createGuzzleClient('10.20.0.10');
+
+        $invalidBody = $this->requestJson($client, 'POST', '/api/v1/auth/login', []);
+        self::assertSame(422, $invalidBody['status']);
+        self::assertSame('VALIDATION_FAILED', $invalidBody['json']['code'] ?? null);
+
+        $email = sprintf('e2e-unverified-%s@retaia.local', bin2hex(random_bytes(4)));
+        $this->insertUser($email, 'change-me', ['ROLE_USER'], false);
+        $unverifiedLogin = $this->requestJson($client, 'POST', '/api/v1/auth/login', [
+            'email' => $email,
+            'password' => 'change-me',
+        ]);
+        self::assertSame(403, $unverifiedLogin['status']);
+        self::assertSame('EMAIL_NOT_VERIFIED', $unverifiedLogin['json']['code'] ?? null);
+
+        $throttleClient = $this->createGuzzleClient('10.20.0.11');
+        for ($attempt = 1; $attempt <= 5; ++$attempt) {
+            $failedAttempt = $this->requestJson($throttleClient, 'POST', '/api/v1/auth/login', [
+                'email' => FixtureUsers::ADMIN_EMAIL,
+                'password' => 'invalid-password',
+            ]);
+            self::assertSame(401, $failedAttempt['status']);
+            self::assertSame('UNAUTHORIZED', $failedAttempt['json']['code'] ?? null);
+        }
+
+        $throttled = $this->requestJson($throttleClient, 'POST', '/api/v1/auth/login', [
+            'email' => FixtureUsers::ADMIN_EMAIL,
+            'password' => 'invalid-password',
+        ]);
+        self::assertSame(429, $throttled['status']);
+        self::assertSame('TOO_MANY_ATTEMPTS', $throttled['json']['code'] ?? null);
+        self::assertGreaterThanOrEqual(1, (int) ($throttled['json']['retry_in_minutes'] ?? 0));
+    }
+
+    public function testSpecLostPasswordValidationInvalidTokenAndRateLimit(): void
+    {
+        $client = $this->createGuzzleClient('10.20.0.21');
+
+        $invalidRequest = $this->requestJson($client, 'POST', '/api/v1/auth/lost-password/request', []);
+        self::assertSame(422, $invalidRequest['status']);
+        self::assertSame('VALIDATION_FAILED', $invalidRequest['json']['code'] ?? null);
+
+        $rateLimitEmail = sprintf('e2e-reset-limit-%s@retaia.local', bin2hex(random_bytes(4)));
+        for ($attempt = 1; $attempt <= 5; ++$attempt) {
+            $accepted = $this->requestJson($client, 'POST', '/api/v1/auth/lost-password/request', [
+                'email' => $rateLimitEmail,
+            ]);
+            self::assertSame(202, $accepted['status']);
+        }
+        $throttled = $this->requestJson($client, 'POST', '/api/v1/auth/lost-password/request', [
+            'email' => $rateLimitEmail,
+        ]);
+        self::assertSame(429, $throttled['status']);
+        self::assertSame('TOO_MANY_ATTEMPTS', $throttled['json']['code'] ?? null);
+        self::assertGreaterThanOrEqual(1, (int) ($throttled['json']['retry_in_seconds'] ?? 0));
+
+        $resetInvalidToken = $this->requestJson($client, 'POST', '/api/v1/auth/lost-password/reset', [
+            'token' => 'invalid-token',
+            'new_password' => 'New-password1!',
+        ]);
+        self::assertSame(400, $resetInvalidToken['status']);
+        self::assertSame('INVALID_TOKEN', $resetInvalidToken['json']['code'] ?? null);
+
+        $resetValidationFailed = $this->requestJson($client, 'POST', '/api/v1/auth/lost-password/reset', [
+            'token' => 'some-token',
+        ]);
+        self::assertSame(422, $resetValidationFailed['status']);
+        self::assertSame('VALIDATION_FAILED', $resetValidationFailed['json']['code'] ?? null);
+    }
+
+    public function testSpecVerifyEmailValidationInvalidTokenAndRateLimit(): void
+    {
+        $client = $this->createGuzzleClient('10.20.0.31');
+
+        $invalidRequest = $this->requestJson($client, 'POST', '/api/v1/auth/verify-email/request', []);
+        self::assertSame(422, $invalidRequest['status']);
+        self::assertSame('VALIDATION_FAILED', $invalidRequest['json']['code'] ?? null);
+
+        $rateLimitEmail = sprintf('e2e-verify-limit-%s@retaia.local', bin2hex(random_bytes(4)));
+        for ($attempt = 1; $attempt <= 3; ++$attempt) {
+            $accepted = $this->requestJson($client, 'POST', '/api/v1/auth/verify-email/request', [
+                'email' => $rateLimitEmail,
+            ]);
+            self::assertSame(202, $accepted['status']);
+        }
+        $throttled = $this->requestJson($client, 'POST', '/api/v1/auth/verify-email/request', [
+            'email' => $rateLimitEmail,
+        ]);
+        self::assertSame(429, $throttled['status']);
+        self::assertSame('TOO_MANY_ATTEMPTS', $throttled['json']['code'] ?? null);
+        self::assertGreaterThanOrEqual(1, (int) ($throttled['json']['retry_in_seconds'] ?? 0));
+
+        $confirmInvalidToken = $this->requestJson($client, 'POST', '/api/v1/auth/verify-email/confirm', [
+            'token' => 'invalid-token',
+        ]);
+        self::assertSame(400, $confirmInvalidToken['status']);
+        self::assertSame('INVALID_TOKEN', $confirmInvalidToken['json']['code'] ?? null);
+
+        $confirmValidationFailed = $this->requestJson($client, 'POST', '/api/v1/auth/verify-email/confirm', []);
+        self::assertSame(422, $confirmValidationFailed['status']);
+        self::assertSame('VALIDATION_FAILED', $confirmValidationFailed['json']['code'] ?? null);
+    }
+
+    public function testSpecAppPolicyRequiresBearerAndSupportsUserAndTechnicalTokens(): void
+    {
+        $client = $this->createGuzzleClient();
+
+        $unauthorized = $this->requestJson($client, 'GET', '/api/v1/app/policy');
+        self::assertSame(401, $unauthorized['status']);
+        self::assertSame('UNAUTHORIZED', $unauthorized['json']['code'] ?? null);
+
+        $adminToken = $this->loginAdminAndGetBearerToken($client);
+        $policyForUser = $this->requestJson($client, 'GET', '/api/v1/app/policy', null, [
+            'Authorization' => 'Bearer '.$adminToken,
+        ]);
+        self::assertSame(200, $policyForUser['status']);
+        self::assertIsArray($policyForUser['json']['server_policy'] ?? null);
+        self::assertIsArray($policyForUser['json']['server_policy']['feature_flags'] ?? null);
+
+        $credentials = $this->provisionTechnicalClient('AGENT');
+        $mint = $this->requestJson($client, 'POST', '/api/v1/auth/clients/token', [
+            'client_id' => $credentials['client_id'],
+            'client_kind' => 'AGENT',
+            'secret_key' => $credentials['secret_key'],
+        ]);
+        self::assertSame(200, $mint['status']);
+        $technicalToken = (string) ($mint['json']['access_token'] ?? '');
+        self::assertNotSame('', $technicalToken);
+
+        $policyForTechnicalClient = $this->requestJson($client, 'GET', '/api/v1/app/policy', null, [
+            'Authorization' => 'Bearer '.$technicalToken,
+        ]);
+        self::assertSame(200, $policyForTechnicalClient['status']);
+        self::assertIsArray($policyForTechnicalClient['json']['server_policy'] ?? null);
+        self::assertIsArray($policyForTechnicalClient['json']['server_policy']['feature_flags'] ?? null);
+    }
+
+    public function testSpecFeatureEndpointsAuthorizationAndPayloadValidation(): void
+    {
+        $client = $this->createGuzzleClient();
+
+        $appFeaturesUnauthorized = $this->requestJson($client, 'GET', '/api/v1/app/features');
+        self::assertSame(401, $appFeaturesUnauthorized['status']);
+        self::assertSame('UNAUTHORIZED', $appFeaturesUnauthorized['json']['code'] ?? null);
+
+        $patchAppFeaturesUnauthorized = $this->requestJson($client, 'PATCH', '/api/v1/app/features', [
+            'app_feature_enabled' => ['features.ai' => false],
+        ]);
+        self::assertSame(401, $patchAppFeaturesUnauthorized['status']);
+        self::assertSame('UNAUTHORIZED', $patchAppFeaturesUnauthorized['json']['code'] ?? null);
+
+        $myFeaturesUnauthorized = $this->requestJson($client, 'GET', '/api/v1/auth/me/features');
+        self::assertSame(401, $myFeaturesUnauthorized['status']);
+        self::assertSame('UNAUTHORIZED', $myFeaturesUnauthorized['json']['code'] ?? null);
+
+        $patchMyFeaturesUnauthorized = $this->requestJson($client, 'PATCH', '/api/v1/auth/me/features', [
+            'user_feature_enabled' => ['features.ai.suggest_tags' => false],
+        ]);
+        self::assertSame(401, $patchMyFeaturesUnauthorized['status']);
+        self::assertSame('UNAUTHORIZED', $patchMyFeaturesUnauthorized['json']['code'] ?? null);
+
+        $adminToken = $this->loginAdminAndGetBearerToken($client);
+
+        $patchAppValidationFailed = $this->requestJson($client, 'PATCH', '/api/v1/app/features', [], [
+            'Authorization' => 'Bearer '.$adminToken,
+        ]);
+        self::assertSame(422, $patchAppValidationFailed['status']);
+        self::assertSame('VALIDATION_FAILED', $patchAppValidationFailed['json']['code'] ?? null);
+
+        $patchAppUnknownKey = $this->requestJson($client, 'PATCH', '/api/v1/app/features', [
+            'app_feature_enabled' => ['features.unknown.flag' => true],
+        ], [
+            'Authorization' => 'Bearer '.$adminToken,
+        ]);
+        self::assertSame(422, $patchAppUnknownKey['status']);
+        self::assertSame('VALIDATION_FAILED', $patchAppUnknownKey['json']['code'] ?? null);
+        self::assertSame(['features.unknown.flag'], $patchAppUnknownKey['json']['details']['unknown_keys'] ?? null);
+
+        $patchMyValidationFailed = $this->requestJson($client, 'PATCH', '/api/v1/auth/me/features', [], [
+            'Authorization' => 'Bearer '.$adminToken,
+        ]);
+        self::assertSame(422, $patchMyValidationFailed['status']);
+        self::assertSame('VALIDATION_FAILED', $patchMyValidationFailed['json']['code'] ?? null);
+
+        $patchMyUnknownKey = $this->requestJson($client, 'PATCH', '/api/v1/auth/me/features', [
+            'user_feature_enabled' => ['features.unknown.flag' => true],
+        ], [
+            'Authorization' => 'Bearer '.$adminToken,
+        ]);
+        self::assertSame(422, $patchMyUnknownKey['status']);
+        self::assertSame('VALIDATION_FAILED', $patchMyUnknownKey['json']['code'] ?? null);
+        self::assertSame(['features.unknown.flag'], $patchMyUnknownKey['json']['details']['unknown_keys'] ?? null);
+    }
+
+    public function testSpecDevicePollSlowDownAndCancelInvalidCode(): void
+    {
+        $client = $this->createGuzzleClient();
+
+        $start = $this->requestJson($client, 'POST', '/api/v1/auth/clients/device/start', [
+            'client_kind' => 'AGENT',
+        ]);
+        self::assertSame(200, $start['status']);
+        $deviceCode = (string) ($start['json']['device_code'] ?? '');
+        self::assertNotSame('', $deviceCode);
+
+        $firstPoll = $this->requestJson($client, 'POST', '/api/v1/auth/clients/device/poll', [
+            'device_code' => $deviceCode,
+        ]);
+        self::assertSame(200, $firstPoll['status']);
+        self::assertSame('PENDING', $firstPoll['json']['status'] ?? null);
+
+        $secondPoll = $this->requestJson($client, 'POST', '/api/v1/auth/clients/device/poll', [
+            'device_code' => $deviceCode,
+        ]);
+        self::assertSame(429, $secondPoll['status']);
+        self::assertSame('SLOW_DOWN', $secondPoll['json']['code'] ?? null);
+        self::assertGreaterThanOrEqual(1, (int) ($secondPoll['json']['retry_in_seconds'] ?? 0));
+
+        $cancelInvalid = $this->requestJson($client, 'POST', '/api/v1/auth/clients/device/cancel', [
+            'device_code' => 'invalid',
+        ]);
+        self::assertSame(400, $cancelInvalid['status']);
+        self::assertSame('INVALID_DEVICE_CODE', $cancelInvalid['json']['code'] ?? null);
+    }
+
+    public function testSpecDeviceStartIsRateLimited(): void
+    {
+        $client = $this->createGuzzleClient('10.20.0.61');
+        $throttled = null;
+
+        for ($attempt = 1; $attempt <= 10; ++$attempt) {
+            $response = $this->requestJson($client, 'POST', '/api/v1/auth/clients/device/start', [
+                'client_kind' => 'AGENT',
+            ]);
+
+            if ($response['status'] === 429) {
+                $throttled = $response;
+                break;
+            }
+
+            self::assertSame(200, $response['status']);
+        }
+
+        self::assertIsArray($throttled);
+        self::assertSame(429, $throttled['status']);
+        self::assertSame('TOO_MANY_ATTEMPTS', $throttled['json']['code'] ?? null);
+        self::assertGreaterThanOrEqual(1, (int) ($throttled['json']['retry_in_seconds'] ?? 0));
+    }
+
+    public function testSpecDeviceApprovalRequiresOtpWhenTwoFactorIsEnabled(): void
+    {
+        $client = $this->createGuzzleClient();
+        $adminToken = $this->loginAdminAndGetBearerToken($client);
+        $secret = '';
+
+        try {
+            $setup = $this->requestJson($client, 'POST', '/api/v1/auth/2fa/setup', null, [
+                'Authorization' => 'Bearer '.$adminToken,
+            ]);
+            self::assertSame(200, $setup['status']);
+            $secret = (string) ($setup['json']['secret'] ?? '');
+            self::assertNotSame('', $secret);
+
+            $enable = $this->requestJson($client, 'POST', '/api/v1/auth/2fa/enable', [
+                'otp_code' => $this->generateOtpCode($secret),
+            ], [
+                'Authorization' => 'Bearer '.$adminToken,
+            ]);
+            self::assertSame(200, $enable['status']);
+
+            $start = $this->requestJson($client, 'POST', '/api/v1/auth/clients/device/start', [
+                'client_kind' => 'AGENT',
+            ]);
+            self::assertSame(200, $start['status']);
+            $deviceCode = (string) ($start['json']['device_code'] ?? '');
+            $userCode = (string) ($start['json']['user_code'] ?? '');
+            self::assertNotSame('', $deviceCode);
+            self::assertNotSame('', $userCode);
+
+            $approveWithoutOtp = $this->requestJson($client, 'POST', '/device', [
+                'user_code' => $userCode,
+            ], [
+                'Authorization' => 'Bearer '.$adminToken,
+            ]);
+            self::assertSame(422, $approveWithoutOtp['status']);
+            self::assertSame('VALIDATION_FAILED', $approveWithoutOtp['json']['code'] ?? null);
+
+            $approveWithInvalidOtp = $this->requestJson($client, 'POST', '/device', [
+                'user_code' => $userCode,
+                'otp_code' => '000000',
+            ], [
+                'Authorization' => 'Bearer '.$adminToken,
+            ]);
+            self::assertSame(400, $approveWithInvalidOtp['status']);
+            self::assertSame('INVALID_2FA_CODE', $approveWithInvalidOtp['json']['code'] ?? null);
+
+            $approveWithValidOtp = $this->requestJson($client, 'POST', '/device', [
+                'user_code' => $userCode,
+                'otp_code' => $this->generateOtpCode($secret),
+            ], [
+                'Authorization' => 'Bearer '.$adminToken,
+            ]);
+            self::assertSame(200, $approveWithValidOtp['status']);
+            self::assertSame(true, $approveWithValidOtp['json']['approved'] ?? null);
+
+            $this->forceDeviceFlowLastPolledAt($deviceCode, time() - 30);
+            $pollApproved = $this->requestJson($client, 'POST', '/api/v1/auth/clients/device/poll', [
+                'device_code' => $deviceCode,
+            ]);
+            self::assertSame(200, $pollApproved['status']);
+            self::assertSame('APPROVED', $pollApproved['json']['status'] ?? null);
+        } finally {
+            if ($secret !== '') {
+                $disable = $this->requestJson($client, 'POST', '/api/v1/auth/2fa/disable', [
+                    'otp_code' => $this->generateOtpCode($secret),
+                ], [
+                    'Authorization' => 'Bearer '.$adminToken,
+                ]);
+                self::assertSame(200, $disable['status']);
+            }
+        }
+    }
+
+    public function testSpecRevokeClientTokenForbidsUiRustScope(): void
+    {
+        $client = $this->createGuzzleClient();
+        $this->seedClientRegistryEntry('ui-rust-protected', 'UI_RUST', 'ui-rust-secret');
+        $adminToken = $this->loginAdminAndGetBearerToken($client);
+
+        $response = $this->requestJson(
+            $client,
+            'POST',
+            '/api/v1/auth/clients/ui-rust-protected/revoke-token',
+            null,
+            ['Authorization' => 'Bearer '.$adminToken]
+        );
+        self::assertSame(403, $response['status']);
+        self::assertSame('FORBIDDEN_SCOPE', $response['json']['code'] ?? null);
+    }
+
     public function testSpecClientTokenRejectsUiRust(): void
     {
         $client = $this->createGuzzleClient();
@@ -936,14 +1278,15 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
         self::assertSame('EXPIRED_DEVICE_CODE', $cancelExpired['json']['code'] ?? null);
     }
 
-    private function createGuzzleClient(): Client
+    private function createGuzzleClient(?string $remoteAddress = null, ?string $acceptLanguage = null): Client
     {
         static::bootKernel();
+        $resolvedRemoteAddress = $remoteAddress ?? sprintf('10.50.%d.%d', random_int(1, 200), random_int(1, 200));
 
         /** @var HttpKernelInterface $httpKernel */
         $httpKernel = static::getContainer()->get(HttpKernelInterface::class);
 
-        $handler = static function (RequestInterface $request) use ($httpKernel) {
+        $handler = static function (RequestInterface $request) use ($httpKernel, $resolvedRemoteAddress, $acceptLanguage) {
             $uri = $request->getUri();
             $server = [
                 'REQUEST_METHOD' => strtoupper($request->getMethod()),
@@ -952,7 +1295,12 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
                 'SERVER_NAME' => $uri->getHost() !== '' ? $uri->getHost() : 'localhost',
                 'SERVER_PORT' => $uri->getPort() ?? 80,
                 'HTTPS' => 'off',
+                'REMOTE_ADDR' => $resolvedRemoteAddress,
             ];
+
+            if (is_string($acceptLanguage) && $acceptLanguage !== '') {
+                $server['HTTP_ACCEPT_LANGUAGE'] = $acceptLanguage;
+            }
 
             foreach ($request->getHeaders() as $name => $values) {
                 $normalized = 'HTTP_'.strtoupper(str_replace('-', '_', $name));
@@ -1059,6 +1407,24 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
         $flow['last_polled_at'] = $lastPolledAt;
         $flows[$deviceCode] = $flow;
         $item->set($flows);
+        $cache->save($item);
+    }
+
+    private function seedClientRegistryEntry(string $clientId, string $clientKind, string $secretKey): void
+    {
+        /** @var CacheItemPoolInterface $cache */
+        $cache = static::getContainer()->get('cache.app');
+        $item = $cache->getItem('auth_client_registry');
+        $registry = $item->get();
+        if (!is_array($registry)) {
+            $registry = [];
+        }
+
+        $registry[$clientId] = [
+            'client_kind' => $clientKind,
+            'secret_key' => $secretKey,
+        ];
+        $item->set($registry);
         $cache->save($item);
     }
 

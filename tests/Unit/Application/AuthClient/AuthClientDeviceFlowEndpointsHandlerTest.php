@@ -7,6 +7,7 @@ use App\Application\AuthClient\CancelDeviceFlowEndpointResult;
 use App\Application\AuthClient\CancelDeviceFlowHandler;
 use App\Application\AuthClient\PollDeviceFlowEndpointResult;
 use App\Application\AuthClient\PollDeviceFlowHandler;
+use App\Application\AuthClient\Port\DeviceFlowStartRateLimiterGateway;
 use App\Application\AuthClient\Port\DeviceFlowGateway;
 use App\Application\AuthClient\StartDeviceFlowEndpointResult;
 use App\Application\AuthClient\StartDeviceFlowHandler;
@@ -19,14 +20,17 @@ final class AuthClientDeviceFlowEndpointsHandlerTest extends TestCase
     {
         $gateway = $this->createMock(DeviceFlowGateway::class);
         $gateway->expects(self::never())->method('startDeviceFlow');
+        $startRateLimiter = $this->createMock(DeviceFlowStartRateLimiterGateway::class);
+        $startRateLimiter->expects(self::never())->method('retryInSecondsOrNull');
 
         $handler = new AuthClientDeviceFlowEndpointsHandler(
             new StartDeviceFlowHandler(new TechnicalClientTokenPolicy(), $gateway),
             new PollDeviceFlowHandler($gateway),
             new CancelDeviceFlowHandler($gateway),
+            $startRateLimiter,
         );
 
-        $result = $handler->start([]);
+        $result = $handler->start([], '10.0.0.1');
 
         self::assertSame(StartDeviceFlowEndpointResult::STATUS_VALIDATION_FAILED, $result->status());
     }
@@ -36,14 +40,20 @@ final class AuthClientDeviceFlowEndpointsHandlerTest extends TestCase
         $gateway = $this->createMock(DeviceFlowGateway::class);
         $gateway->expects(self::once())->method('isMcpDisabledByAppPolicy')->willReturn(true);
         $gateway->expects(self::never())->method('startDeviceFlow');
+        $startRateLimiter = $this->createMock(DeviceFlowStartRateLimiterGateway::class);
+        $startRateLimiter->expects(self::once())
+            ->method('retryInSecondsOrNull')
+            ->with('MCP', '10.0.0.2')
+            ->willReturn(null);
 
         $handler = new AuthClientDeviceFlowEndpointsHandler(
             new StartDeviceFlowHandler(new TechnicalClientTokenPolicy(), $gateway),
             new PollDeviceFlowHandler($gateway),
             new CancelDeviceFlowHandler($gateway),
+            $startRateLimiter,
         );
 
-        $result = $handler->start(['client_kind' => 'MCP']);
+        $result = $handler->start(['client_kind' => 'MCP'], '10.0.0.2');
 
         self::assertSame(StartDeviceFlowEndpointResult::STATUS_FORBIDDEN_SCOPE, $result->status());
     }
@@ -55,11 +65,13 @@ final class AuthClientDeviceFlowEndpointsHandlerTest extends TestCase
             'status' => 'PENDING',
             'retry_in_seconds' => 4,
         ]);
+        $startRateLimiter = $this->createMock(DeviceFlowStartRateLimiterGateway::class);
 
         $handler = new AuthClientDeviceFlowEndpointsHandler(
             new StartDeviceFlowHandler(new TechnicalClientTokenPolicy(), $gateway),
             new PollDeviceFlowHandler($gateway),
             new CancelDeviceFlowHandler($gateway),
+            $startRateLimiter,
         );
 
         $result = $handler->poll(['device_code' => 'device-1']);
@@ -72,15 +84,41 @@ final class AuthClientDeviceFlowEndpointsHandlerTest extends TestCase
     {
         $gateway = $this->createMock(DeviceFlowGateway::class);
         $gateway->expects(self::once())->method('cancelDeviceFlow')->with('device-2')->willReturn(['status' => 'EXPIRED']);
+        $startRateLimiter = $this->createMock(DeviceFlowStartRateLimiterGateway::class);
 
         $handler = new AuthClientDeviceFlowEndpointsHandler(
             new StartDeviceFlowHandler(new TechnicalClientTokenPolicy(), $gateway),
             new PollDeviceFlowHandler($gateway),
             new CancelDeviceFlowHandler($gateway),
+            $startRateLimiter,
         );
 
         $result = $handler->cancel(['device_code' => 'device-2']);
 
         self::assertSame(CancelDeviceFlowEndpointResult::STATUS_EXPIRED_DEVICE_CODE, $result->status());
+    }
+
+    public function testStartReturnsTooManyAttemptsWhenRateLimited(): void
+    {
+        $gateway = $this->createMock(DeviceFlowGateway::class);
+        $gateway->expects(self::never())->method('startDeviceFlow');
+        $gateway->expects(self::never())->method('isMcpDisabledByAppPolicy');
+        $startRateLimiter = $this->createMock(DeviceFlowStartRateLimiterGateway::class);
+        $startRateLimiter->expects(self::once())
+            ->method('retryInSecondsOrNull')
+            ->with('AGENT', '10.0.0.3')
+            ->willReturn(42);
+
+        $handler = new AuthClientDeviceFlowEndpointsHandler(
+            new StartDeviceFlowHandler(new TechnicalClientTokenPolicy(), $gateway),
+            new PollDeviceFlowHandler($gateway),
+            new CancelDeviceFlowHandler($gateway),
+            $startRateLimiter,
+        );
+
+        $result = $handler->start(['client_kind' => 'AGENT'], '10.0.0.3');
+
+        self::assertSame(StartDeviceFlowEndpointResult::STATUS_TOO_MANY_ATTEMPTS, $result->status());
+        self::assertSame(42, $result->retryInSeconds());
     }
 }
