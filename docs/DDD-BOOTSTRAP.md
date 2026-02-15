@@ -301,6 +301,17 @@ Poser un premier découpage DDD sans changer le contrat API v1.
 - suppression de la dépendance directe à `Security` pour le endpoint:
   - `POST /device`
 
+## Trente-troisième lot (asset controller auth actors)
+
+- `AssetController` réutilise:
+  - `ResolveAgentActorHandler`
+  - `ResolveAuthenticatedUserHandler`
+- suppression de la dépendance directe à `Security` pour les use cases:
+  - `PATCH /assets/{uuid}`
+  - `POST /assets/{uuid}/decision`
+  - `POST /assets/{uuid}/reopen`
+  - `POST /assets/{uuid}/reprocess`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants

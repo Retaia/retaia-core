@@ -3,13 +3,15 @@
 namespace App\Controller\Api;
 
 use App\Api\Service\IdempotencyService;
+use App\Application\Auth\ResolveAgentActorHandler;
+use App\Application\Auth\ResolveAgentActorResult;
+use App\Application\Auth\ResolveAuthenticatedUserHandler;
+use App\Application\Auth\ResolveAuthenticatedUserResult;
 use App\Asset\AssetState;
 use App\Asset\Repository\AssetRepositoryInterface;
 use App\Asset\Service\AssetStateMachine;
 use App\Asset\Service\StateConflictException;
 use App\Entity\Asset;
-use Symfony\Bundle\SecurityBundle\Security;
-use App\Entity\User;
 use App\Lock\Repository\OperationLockRepository;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -24,7 +26,8 @@ final class AssetController
         private AssetRepositoryInterface $assets,
         private AssetStateMachine $stateMachine,
         private TranslatorInterface $translator,
-        private Security $security,
+        private ResolveAgentActorHandler $resolveAgentActorHandler,
+        private ResolveAuthenticatedUserHandler $resolveAuthenticatedUserHandler,
         private IdempotencyService $idempotency,
         private OperationLockRepository $locks,
         private bool $featureSuggestedTagsFiltersEnabled,
@@ -88,7 +91,7 @@ final class AssetController
     #[Route('/{uuid}', name: 'api_assets_patch', methods: ['PATCH'])]
     public function patch(string $uuid, Request $request): JsonResponse
     {
-        if ($this->security->isGranted('ROLE_AGENT')) {
+        if ($this->isForbiddenAgentActor()) {
             return $this->forbiddenActorResponse();
         }
 
@@ -135,7 +138,7 @@ final class AssetController
     #[Route('/{uuid}/decision', name: 'api_assets_decision', methods: ['POST'])]
     public function decision(string $uuid, Request $request): JsonResponse
     {
-        if ($this->security->isGranted('ROLE_AGENT')) {
+        if ($this->isForbiddenAgentActor()) {
             return $this->forbiddenActorResponse();
         }
 
@@ -184,7 +187,7 @@ final class AssetController
     #[Route('/{uuid}/reopen', name: 'api_assets_reopen', methods: ['POST'])]
     public function reopen(string $uuid): JsonResponse
     {
-        if ($this->security->isGranted('ROLE_AGENT')) {
+        if ($this->isForbiddenAgentActor()) {
             return $this->forbiddenActorResponse();
         }
 
@@ -222,7 +225,7 @@ final class AssetController
     #[Route('/{uuid}/reprocess', name: 'api_assets_reprocess', methods: ['POST'])]
     public function reprocess(string $uuid, Request $request): JsonResponse
     {
-        if ($this->security->isGranted('ROLE_AGENT')) {
+        if ($this->isForbiddenAgentActor()) {
             return $this->forbiddenActorResponse();
         }
 
@@ -323,9 +326,17 @@ final class AssetController
 
     private function actorId(): string
     {
-        $user = $this->security->getUser();
+        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
+        if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
+            return 'anonymous';
+        }
 
-        return $user instanceof User ? $user->getId() : 'anonymous';
+        return (string) $authenticatedUser->id();
+    }
+
+    private function isForbiddenAgentActor(): bool
+    {
+        return $this->resolveAgentActorHandler->handle()->status() === ResolveAgentActorResult::STATUS_AUTHORIZED;
     }
 
     /**
