@@ -6,20 +6,15 @@ use App\Application\Auth\RequestPasswordResetEndpointHandler;
 use App\Application\Auth\RequestPasswordResetEndpointResult;
 use App\Application\Auth\ResetPasswordEndpointHandler;
 use App\Application\Auth\ResetPasswordEndpointResult;
-use App\Application\Auth\SetupTwoFactorHandler;
-use App\Application\Auth\SetupTwoFactorResult;
-use App\Application\Auth\EnableTwoFactorHandler;
-use App\Application\Auth\EnableTwoFactorResult;
-use App\Application\Auth\DisableTwoFactorHandler;
-use App\Application\Auth\DisableTwoFactorResult;
+use App\Application\Auth\AuthSelfServiceEndpointsHandler;
+use App\Application\Auth\AuthMeEndpointResult;
+use App\Application\Auth\TwoFactorSetupEndpointResult;
+use App\Application\Auth\TwoFactorEnableEndpointResult;
+use App\Application\Auth\TwoFactorDisableEndpointResult;
+use App\Application\Auth\GetMyFeaturesEndpointResult;
+use App\Application\Auth\PatchMyFeaturesEndpointResult;
 use App\Application\Auth\AdminConfirmEmailVerificationEndpointResult;
 use App\Application\Auth\ConfirmEmailVerificationEndpointResult;
-use App\Application\Auth\GetMyFeaturesHandler;
-use App\Application\Auth\PatchMyFeaturesHandler;
-use App\Application\Auth\PatchMyFeaturesResult;
-use App\Application\Auth\ResolveAuthenticatedUserHandler;
-use App\Application\Auth\ResolveAuthenticatedUserResult;
-use App\Application\Auth\GetAuthMeProfileHandler;
 use App\Application\Auth\RequestEmailVerificationEndpointHandler;
 use App\Application\Auth\RequestEmailVerificationEndpointResult;
 use App\Application\Auth\VerifyEmailEndpointsHandler;
@@ -48,13 +43,7 @@ final class AuthController
         private ResetPasswordEndpointHandler $resetPasswordEndpointHandler,
         private RequestEmailVerificationEndpointHandler $requestEmailVerificationEndpointHandler,
         private VerifyEmailEndpointsHandler $verifyEmailEndpointsHandler,
-        private SetupTwoFactorHandler $setupTwoFactorHandler,
-        private EnableTwoFactorHandler $enableTwoFactorHandler,
-        private DisableTwoFactorHandler $disableTwoFactorHandler,
-        private GetMyFeaturesHandler $getMyFeaturesHandler,
-        private PatchMyFeaturesHandler $patchMyFeaturesHandler,
-        private GetAuthMeProfileHandler $getAuthMeProfileHandler,
-        private ResolveAuthenticatedUserHandler $resolveAuthenticatedUserHandler,
+        private AuthSelfServiceEndpointsHandler $authSelfServiceEndpointsHandler,
         private TranslatorInterface $translator,
         private MintClientTokenEndpointHandler $mintClientTokenEndpointHandler,
         private AuthClientAdminEndpointsHandler $authClientAdminEndpointsHandler,
@@ -79,23 +68,17 @@ final class AuthController
     #[Route('/me', name: 'api_auth_me', methods: ['GET'])]
     public function me(): JsonResponse
     {
-        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
-        if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
+        $result = $this->authSelfServiceEndpointsHandler->me();
+        if ($result->status() === AuthMeEndpointResult::STATUS_UNAUTHORIZED) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
                 Response::HTTP_UNAUTHORIZED
             );
         }
 
-        $result = $this->getAuthMeProfileHandler->handle(
-            (string) $authenticatedUser->id(),
-            (string) $authenticatedUser->email(),
-            $authenticatedUser->roles()
-        );
-
         return new JsonResponse([
-            'id' => $result->id(),
-            'email' => $result->email(),
+            'id' => $result->id() ?? '',
+            'email' => $result->email() ?? '',
             'roles' => $result->roles(),
         ], Response::HTTP_OK);
     }
@@ -103,16 +86,14 @@ final class AuthController
     #[Route('/2fa/setup', name: 'api_auth_2fa_setup', methods: ['POST'])]
     public function twoFactorSetup(): JsonResponse
     {
-        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
-        if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
+        $result = $this->authSelfServiceEndpointsHandler->twoFactorSetup();
+        if ($result->status() === TwoFactorSetupEndpointResult::STATUS_UNAUTHORIZED) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
                 Response::HTTP_UNAUTHORIZED
             );
         }
-
-        $result = $this->setupTwoFactorHandler->handle((string) $authenticatedUser->id(), (string) $authenticatedUser->email());
-        if ($result->status() === SetupTwoFactorResult::STATUS_ALREADY_ENABLED) {
+        if ($result->status() === TwoFactorSetupEndpointResult::STATUS_ALREADY_ENABLED) {
             return new JsonResponse(
                 ['code' => 'MFA_ALREADY_ENABLED', 'message' => $this->translator->trans('auth.error.mfa_already_enabled')],
                 Response::HTTP_CONFLICT
@@ -125,36 +106,32 @@ final class AuthController
     #[Route('/2fa/enable', name: 'api_auth_2fa_enable', methods: ['POST'])]
     public function twoFactorEnable(Request $request): JsonResponse
     {
-        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
-        if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
+        $result = $this->authSelfServiceEndpointsHandler->twoFactorEnable($this->payload($request));
+        if ($result->status() === TwoFactorEnableEndpointResult::STATUS_UNAUTHORIZED) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
                 Response::HTTP_UNAUTHORIZED
             );
         }
-
-        $otpCode = trim((string) ($this->payload($request)['otp_code'] ?? ''));
-        if ($otpCode === '') {
+        if ($result->status() === TwoFactorEnableEndpointResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.otp_code_required')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
-
-        $result = $this->enableTwoFactorHandler->handle((string) $authenticatedUser->id(), $otpCode);
-        if ($result->status() === EnableTwoFactorResult::STATUS_ALREADY_ENABLED) {
+        if ($result->status() === TwoFactorEnableEndpointResult::STATUS_ALREADY_ENABLED) {
             return new JsonResponse(
                 ['code' => 'MFA_ALREADY_ENABLED', 'message' => $this->translator->trans('auth.error.mfa_already_enabled')],
                 Response::HTTP_CONFLICT
             );
         }
-        if ($result->status() === EnableTwoFactorResult::STATUS_SETUP_REQUIRED) {
+        if ($result->status() === TwoFactorEnableEndpointResult::STATUS_SETUP_REQUIRED) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.mfa_setup_required')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
-        if ($result->status() === EnableTwoFactorResult::STATUS_INVALID_CODE) {
+        if ($result->status() === TwoFactorEnableEndpointResult::STATUS_INVALID_CODE) {
             return new JsonResponse(
                 ['code' => 'INVALID_2FA_CODE', 'message' => $this->translator->trans('auth.error.invalid_2fa_code')],
                 Response::HTTP_BAD_REQUEST
@@ -167,30 +144,26 @@ final class AuthController
     #[Route('/2fa/disable', name: 'api_auth_2fa_disable', methods: ['POST'])]
     public function twoFactorDisable(Request $request): JsonResponse
     {
-        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
-        if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
+        $result = $this->authSelfServiceEndpointsHandler->twoFactorDisable($this->payload($request));
+        if ($result->status() === TwoFactorDisableEndpointResult::STATUS_UNAUTHORIZED) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
                 Response::HTTP_UNAUTHORIZED
             );
         }
-
-        $otpCode = trim((string) ($this->payload($request)['otp_code'] ?? ''));
-        if ($otpCode === '') {
+        if ($result->status() === TwoFactorDisableEndpointResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.otp_code_required')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
-
-        $result = $this->disableTwoFactorHandler->handle((string) $authenticatedUser->id(), $otpCode);
-        if ($result->status() === DisableTwoFactorResult::STATUS_NOT_ENABLED) {
+        if ($result->status() === TwoFactorDisableEndpointResult::STATUS_NOT_ENABLED) {
             return new JsonResponse(
                 ['code' => 'MFA_NOT_ENABLED', 'message' => $this->translator->trans('auth.error.mfa_not_enabled')],
                 Response::HTTP_CONFLICT
             );
         }
-        if ($result->status() === DisableTwoFactorResult::STATUS_INVALID_CODE) {
+        if ($result->status() === TwoFactorDisableEndpointResult::STATUS_INVALID_CODE) {
             return new JsonResponse(
                 ['code' => 'INVALID_2FA_CODE', 'message' => $this->translator->trans('auth.error.invalid_2fa_code')],
                 Response::HTTP_BAD_REQUEST
@@ -203,52 +176,46 @@ final class AuthController
     #[Route('/me/features', name: 'api_auth_me_features_get', methods: ['GET'])]
     public function meFeatures(): JsonResponse
     {
-        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
-        if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
+        $result = $this->authSelfServiceEndpointsHandler->getMyFeatures();
+        if ($result->status() === GetMyFeaturesEndpointResult::STATUS_UNAUTHORIZED) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
                 Response::HTTP_UNAUTHORIZED
             );
         }
-
-        $result = $this->getMyFeaturesHandler->handle((string) $authenticatedUser->id());
+        $features = $result->features();
 
         return new JsonResponse([
-            'user_feature_enabled' => $result->userFeatureEnabled(),
-            'effective_feature_enabled' => $result->effectiveFeatureEnabled(),
-            'feature_governance' => $result->featureGovernance(),
-            'core_v1_global_features' => $result->coreV1GlobalFeatures(),
+            'user_feature_enabled' => $features?->userFeatureEnabled() ?? [],
+            'effective_feature_enabled' => $features?->effectiveFeatureEnabled() ?? [],
+            'feature_governance' => $features?->featureGovernance() ?? [],
+            'core_v1_global_features' => $features?->coreV1GlobalFeatures() ?? [],
         ], Response::HTTP_OK);
     }
 
     #[Route('/me/features', name: 'api_auth_me_features_patch', methods: ['PATCH'])]
     public function patchMeFeatures(Request $request): JsonResponse
     {
-        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
-        if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
+        $result = $this->authSelfServiceEndpointsHandler->patchMyFeatures($this->payload($request));
+        if ($result->status() === PatchMyFeaturesEndpointResult::STATUS_UNAUTHORIZED) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
                 Response::HTTP_UNAUTHORIZED
             );
         }
-
-        $payload = $this->payload($request);
-        $rawUserFeatures = $payload['user_feature_enabled'] ?? null;
-        if (!is_array($rawUserFeatures)) {
+        if ($result->status() === PatchMyFeaturesEndpointResult::STATUS_VALIDATION_FAILED_PAYLOAD) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.invalid_user_feature_payload')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
-
-        $result = $this->patchMyFeaturesHandler->handle((string) $authenticatedUser->id(), $rawUserFeatures);
-        if ($result->status() === PatchMyFeaturesResult::STATUS_FORBIDDEN_SCOPE) {
+        if ($result->status() === PatchMyFeaturesEndpointResult::STATUS_FORBIDDEN_SCOPE) {
             return new JsonResponse(
                 ['code' => 'FORBIDDEN_SCOPE', 'message' => $this->translator->trans('auth.error.forbidden_scope')],
                 Response::HTTP_FORBIDDEN
             );
         }
-        if ($result->status() === PatchMyFeaturesResult::STATUS_VALIDATION_FAILED) {
+        if ($result->status() === PatchMyFeaturesEndpointResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
                 [
                     'code' => 'VALIDATION_FAILED',
