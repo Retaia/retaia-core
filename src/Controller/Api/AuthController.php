@@ -4,8 +4,8 @@ namespace App\Controller\Api;
 
 use App\Application\Auth\RequestPasswordResetEndpointHandler;
 use App\Application\Auth\RequestPasswordResetEndpointResult;
-use App\Application\Auth\ResetPasswordHandler;
-use App\Application\Auth\ResetPasswordResult;
+use App\Application\Auth\ResetPasswordEndpointHandler;
+use App\Application\Auth\ResetPasswordEndpointResult;
 use App\Application\Auth\SetupTwoFactorHandler;
 use App\Application\Auth\SetupTwoFactorResult;
 use App\Application\Auth\EnableTwoFactorHandler;
@@ -52,7 +52,7 @@ final class AuthController
 {
     public function __construct(
         private RequestPasswordResetEndpointHandler $requestPasswordResetEndpointHandler,
-        private ResetPasswordHandler $resetPasswordHandler,
+        private ResetPasswordEndpointHandler $resetPasswordEndpointHandler,
         private RequestEmailVerificationHandler $requestEmailVerificationHandler,
         private ConfirmEmailVerificationHandler $confirmEmailVerificationHandler,
         private AdminConfirmEmailVerificationHandler $adminConfirmEmailVerificationHandler,
@@ -320,19 +320,8 @@ final class AuthController
     #[Route('/lost-password/reset', name: 'api_auth_lost_password_reset', methods: ['POST'])]
     public function reset(Request $request): JsonResponse
     {
-        $payload = $this->payload($request);
-        $token = trim((string) ($payload['token'] ?? ''));
-        $newPassword = (string) ($payload['new_password'] ?? '');
-
-        if ($token === '' || $newPassword === '') {
-            return new JsonResponse(
-                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.token_new_password_required')],
-                Response::HTTP_UNPROCESSABLE_ENTITY
-            );
-        }
-
-        $result = $this->resetPasswordHandler->handle($token, $newPassword);
-        if ($result->status() === ResetPasswordResult::STATUS_VALIDATION_FAILED) {
+        $result = $this->resetPasswordEndpointHandler->handle($this->payload($request));
+        if ($result->status() === ResetPasswordEndpointResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
                 [
                     'code' => 'VALIDATION_FAILED',
@@ -342,7 +331,7 @@ final class AuthController
             );
         }
 
-        if ($result->status() === ResetPasswordResult::STATUS_INVALID_TOKEN) {
+        if ($result->status() === ResetPasswordEndpointResult::STATUS_INVALID_TOKEN) {
             return new JsonResponse(
                 ['code' => 'INVALID_TOKEN', 'message' => $this->translator->trans('auth.error.invalid_or_expired_token')],
                 Response::HTTP_BAD_REQUEST
