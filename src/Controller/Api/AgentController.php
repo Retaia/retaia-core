@@ -2,10 +2,8 @@
 
 namespace App\Controller\Api;
 
-use App\Application\Agent\RegisterAgentHandler;
-use App\Application\Agent\RegisterAgentResult;
-use App\Application\Auth\ResolveAuthenticatedUserHandler;
-use App\Application\Auth\ResolveAuthenticatedUserResult;
+use App\Application\Agent\RegisterAgentEndpointHandler;
+use App\Application\Agent\RegisterAgentEndpointResult;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -17,21 +15,15 @@ final class AgentController
 {
     public function __construct(
         private TranslatorInterface $translator,
-        private RegisterAgentHandler $registerAgentHandler,
-        private ResolveAuthenticatedUserHandler $resolveAuthenticatedUserHandler,
+        private RegisterAgentEndpointHandler $registerAgentEndpointHandler,
     ) {
     }
 
     #[Route('/register', name: 'api_agents_register', methods: ['POST'])]
     public function register(Request $request): JsonResponse
     {
-        $payload = $this->payload($request);
-        $agentName = trim((string) ($payload['agent_name'] ?? ''));
-        $agentVersion = trim((string) ($payload['agent_version'] ?? ''));
-        $capabilities = $payload['capabilities'] ?? null;
-        $clientContractVersion = trim((string) ($payload['client_feature_flags_contract_version'] ?? ''));
-
-        if ($agentName === '' || $agentVersion === '' || !is_array($capabilities)) {
+        $result = $this->registerAgentEndpointHandler->handle($this->payload($request));
+        if ($result->status() === RegisterAgentEndpointResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
                 [
                     'code' => 'VALIDATION_FAILED',
@@ -41,13 +33,7 @@ final class AgentController
             );
         }
 
-        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
-        $actorId = $authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_AUTHENTICATED
-            ? (string) $authenticatedUser->id()
-            : 'unknown';
-
-        $result = $this->registerAgentHandler->handle($actorId, $agentName, $clientContractVersion);
-        if ($result->status() === RegisterAgentResult::STATUS_UNSUPPORTED_CONTRACT_VERSION) {
+        if ($result->status() === RegisterAgentEndpointResult::STATUS_UNSUPPORTED_CONTRACT_VERSION) {
             return new JsonResponse(
                 [
                     'code' => 'UNSUPPORTED_FEATURE_FLAGS_CONTRACT_VERSION',
