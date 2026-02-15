@@ -40,6 +40,8 @@ services:
     App\Application\AuthClient\Port\DeviceFlowGateway: '@App\Infrastructure\Auth\DeviceFlowGateway'
     App\Application\AuthClient\Port\DeviceApprovalSecondFactorGateway: '@App\Infrastructure\Auth\DeviceApprovalSecondFactorGateway'
     App\Application\AppPolicy\Port\AppFeatureGovernanceGateway: '@App\Infrastructure\AppPolicy\AppFeatureGovernanceGateway'
+    App\Application\Auth\Port\AgentActorGateway: '@App\Infrastructure\Auth\AgentActorGateway'
+    App\Application\Derived\Port\DerivedGateway: '@App\Infrastructure\Derived\DerivedGateway'
     App\Ingest\Port\FilePollerInterface: '@App\Ingest\Service\FilesystemFilePoller'
     App\Ingest\Port\ScanStateStoreInterface: '@App\Ingest\Repository\ScanStateStore'
 
