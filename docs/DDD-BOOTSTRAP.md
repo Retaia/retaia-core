@@ -276,6 +276,24 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - `ResolveAgentActorHandler`
   - `ResolveAuthenticatedUserHandler`
 
+## Trente-et-unième lot (job controller handlers)
+
+- extraction des use cases `/jobs/*` en couche Application:
+  - `ListClaimableJobsHandler`
+  - `ClaimJobHandler`
+  - `HeartbeatJobHandler`
+  - `SubmitJobHandler`
+  - `FailJobHandler`
+- extraction des règles transverses `jobs`:
+  - `ResolveJobLockConflictCodeHandler`
+  - `CheckSuggestTagsSubmitScopeHandler`
+- ajout du port:
+  - `Application/Job/Port/JobGateway`
+- adapter infra:
+  - `Infrastructure/Job/JobGateway`
+- `JobController` réutilise:
+  - `ResolveAuthenticatedUserHandler`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
