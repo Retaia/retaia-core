@@ -451,6 +451,19 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - `GET /app/features`
   - `PATCH /app/features`
 
+## Quarante-cinquième lot (workflow endpoints handler)
+
+- extraction de l'orchestration des endpoints `/batches/*`, `/decisions/*` et `purge` en couche Application:
+  - `WorkflowEndpointsHandler`
+- `WorkflowController` délègue désormais:
+  - `POST /batches/moves/preview`
+  - `POST /batches/moves`
+  - `GET /batches/moves/{batchId}`
+  - `POST /decisions/preview`
+  - `POST /decisions/apply`
+  - `POST /assets/{uuid}/purge/preview`
+  - `POST /assets/{uuid}/purge`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
