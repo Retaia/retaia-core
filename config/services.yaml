@@ -22,6 +22,8 @@ parameters:
     app.features.decisions.bulk: '%env(bool:APP_FEATURE_DECISIONS_BULK)%'
     app.feature_flags.contract.latest_version: '1.0.0'
     app.feature_flags.contract.accepted_versions: ['1.0.0', '0.9.0']
+    app.two_factor.keyring: '%env(string:APP_2FA_KEYRING)%'
+    app.two_factor.active_key_version: '%env(string:APP_2FA_ACTIVE_KEY_VERSION)%'
 
 services:
     # default configuration for services in *this* file
@@ -101,6 +103,11 @@ services:
             bool $featureDecisionsBulkEnabled: '%app.features.decisions.bulk%'
             string $featureFlagsContractVersion: '%app.feature_flags.contract.latest_version%'
             array $acceptedFeatureFlagsContractVersions: '%app.feature_flags.contract.accepted_versions%'
+
+    App\User\Service\TwoFactorSecretCipher:
+        bind:
+            string $keyringConfig: '%app.two_factor.keyring%'
+            string $activeVersion: '%app.two_factor.active_key_version%'
 
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones
