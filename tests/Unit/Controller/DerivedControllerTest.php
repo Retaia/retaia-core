@@ -2,14 +2,17 @@
 
 namespace App\Tests\Unit\Controller;
 
-use App\Asset\AssetState;
-use App\Asset\Repository\AssetRepositoryInterface;
+use App\Application\Auth\Port\AgentActorGateway;
+use App\Application\Auth\ResolveAgentActorHandler;
+use App\Application\Derived\CheckDerivedAssetExistsHandler;
+use App\Application\Derived\CompleteDerivedUploadHandler;
+use App\Application\Derived\GetDerivedByKindHandler;
+use App\Application\Derived\InitDerivedUploadHandler;
+use App\Application\Derived\ListDerivedFilesHandler;
+use App\Application\Derived\Port\DerivedGateway;
+use App\Application\Derived\UploadDerivedPartHandler;
 use App\Controller\Api\DerivedController;
-use App\Derived\Service\DerivedUploadService;
-use App\Entity\Asset;
-use Doctrine\DBAL\Connection;
 use PHPUnit\Framework\TestCase;
-use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Contracts\Translation\TranslatorInterface;
@@ -18,21 +21,17 @@ final class DerivedControllerTest extends TestCase
 {
     public function testInitUploadForbiddenNotFoundAndValidation(): void
     {
-        $assets = $this->createMock(AssetRepositoryInterface::class);
-        $translator = $this->translator();
-        $service = new DerivedUploadService($this->createMock(Connection::class));
-
-        $securityForbidden = $this->createMock(Security::class);
-        $securityForbidden->method('isGranted')->with('ROLE_AGENT')->willReturn(false);
-        $controller = new DerivedController($assets, $service, $securityForbidden, $translator);
+        $forbiddenGateway = new InMemoryDerivedGateway();
+        $controller = $this->controller(false, $forbiddenGateway);
         self::assertSame(Response::HTTP_FORBIDDEN, $controller->initUpload('a1', Request::create('/x', 'POST'))->getStatusCode());
 
-        $securityAgent = $this->createMock(Security::class);
-        $securityAgent->method('isGranted')->with('ROLE_AGENT')->willReturn(true);
-        $assets->method('findByUuid')->willReturnOnConsecutiveCalls(null, $this->asset('a3'));
-        $controller = new DerivedController($assets, $service, $securityAgent, $translator);
+        $notFoundGateway = new InMemoryDerivedGateway();
+        $notFoundGateway->assetExists = false;
+        $controller = $this->controller(true, $notFoundGateway);
         self::assertSame(Response::HTTP_NOT_FOUND, $controller->initUpload('a2', Request::create('/x', 'POST'))->getStatusCode());
 
+        $validationGateway = new InMemoryDerivedGateway();
+        $controller = $this->controller(true, $validationGateway);
         self::assertSame(
             Response::HTTP_UNPROCESSABLE_ENTITY,
             $controller->initUpload('a3', Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{}'))->getStatusCode()
@@ -41,17 +40,11 @@ final class DerivedControllerTest extends TestCase
 
     public function testUploadPartAndCompleteUploadValidationAndConflictBranches(): void
     {
-        $assets = $this->createMock(AssetRepositoryInterface::class);
-        $assets->method('findByUuid')->willReturn($this->asset('a4'));
-        $translator = $this->translator();
-        $security = $this->createMock(Security::class);
-        $security->method('isGranted')->with('ROLE_AGENT')->willReturn(true);
+        $gateway = new InMemoryDerivedGateway();
+        $gateway->addPartSuccess = false;
+        $gateway->completeResult = null;
+        $controller = $this->controller(true, $gateway);
 
-        $connection = $this->createMock(Connection::class);
-        $connection->method('fetchAssociative')->willReturn(['upload_id' => 'up-1', 'status' => 'completed']);
-        $service = new DerivedUploadService($connection);
-
-        $controller = new DerivedController($assets, $service, $security, $translator);
         self::assertSame(
             Response::HTTP_UNPROCESSABLE_ENTITY,
             $controller->uploadPart('a4', Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{}'))->getStatusCode()
@@ -73,24 +66,43 @@ final class DerivedControllerTest extends TestCase
 
     public function testListDerivedAndGetByKindBranches(): void
     {
-        $assets = $this->createMock(AssetRepositoryInterface::class);
-        $translator = $this->translator();
-        $security = $this->createMock(Security::class);
-        $security->method('isGranted')->willReturn(true);
+        $gateway = new InMemoryDerivedGateway();
+        $gateway->assetExistsSequence = [false, false, true, true];
+        $gateway->listItems = [];
+        $gateway->derivedByKind = null;
+        $controller = $this->controller(true, $gateway);
 
-        $connection = $this->createMock(Connection::class);
-        $connection->method('fetchAllAssociative')->willReturn([]);
-        $connection->method('fetchAssociative')->willReturn(false);
-        $service = new DerivedUploadService($connection);
-
-        $controller = new DerivedController($assets, $service, $security, $translator);
-
-        $assets->method('findByUuid')->willReturnOnConsecutiveCalls(null, null, $this->asset('a2'), $this->asset('a2'));
         self::assertSame(Response::HTTP_NOT_FOUND, $controller->listDerived('a1')->getStatusCode());
         self::assertSame(Response::HTTP_NOT_FOUND, $controller->getByKind('a1', 'proxy')->getStatusCode());
 
         self::assertSame(Response::HTTP_OK, $controller->listDerived('a2')->getStatusCode());
         self::assertSame(Response::HTTP_NOT_FOUND, $controller->getByKind('a2', 'proxy')->getStatusCode());
+    }
+
+    private function controller(bool $isAgent, DerivedGateway $gateway): DerivedController
+    {
+        $agentGateway = new class ($isAgent) implements AgentActorGateway {
+            public function __construct(
+                private bool $isAgent,
+            ) {
+            }
+
+            public function isAgent(): bool
+            {
+                return $this->isAgent;
+            }
+        };
+
+        return new DerivedController(
+            new ResolveAgentActorHandler($agentGateway),
+            new CheckDerivedAssetExistsHandler($gateway),
+            new InitDerivedUploadHandler($gateway),
+            new UploadDerivedPartHandler($gateway),
+            new CompleteDerivedUploadHandler($gateway),
+            new ListDerivedFilesHandler($gateway),
+            new GetDerivedByKindHandler($gateway),
+            $this->translator()
+        );
     }
 
     private function translator(): TranslatorInterface
@@ -101,18 +113,57 @@ final class DerivedControllerTest extends TestCase
         return $translator;
     }
 
-    private function asset(string $uuid): Asset
+}
+
+final class InMemoryDerivedGateway implements DerivedGateway
+{
+    public bool $assetExists = true;
+    /** @var array<int, bool> */
+    public array $assetExistsSequence = [];
+    /** @var array<string, mixed> */
+    public array $initSession = ['upload_id' => 'u1'];
+    public bool $addPartSuccess = true;
+    /** @var array<string, mixed>|null */
+    public ?array $completeResult = ['id' => 'd1'];
+    /** @var array<int, array<string, mixed>> */
+    public array $listItems = [];
+    /** @var array<string, mixed>|null */
+    public ?array $derivedByKind = ['id' => 'd1'];
+
+    public function assetExists(string $assetUuid): bool
     {
-        return new Asset(
-            uuid: $uuid,
-            mediaType: 'video',
-            filename: 'file.mp4',
-            state: AssetState::READY,
-            tags: [],
-            notes: null,
-            fields: [],
-            createdAt: new \DateTimeImmutable('-1 hour'),
-            updatedAt: new \DateTimeImmutable('-1 hour'),
-        );
+        if ($this->assetExistsSequence !== []) {
+            /** @var bool $next */
+            $next = array_shift($this->assetExistsSequence);
+
+            return $next;
+        }
+
+        return $this->assetExists;
+    }
+
+    public function initUpload(string $assetUuid, string $kind, string $contentType, int $sizeBytes, ?string $sha256): array
+    {
+        return $this->initSession;
+    }
+
+    public function addUploadPart(string $uploadId, int $partNumber): bool
+    {
+        return $this->addPartSuccess;
+    }
+
+    public function completeUpload(string $assetUuid, string $uploadId, int $totalParts): ?array
+    {
+        return $this->completeResult;
+    }
+
+    public function listDerivedForAsset(string $assetUuid): array
+    {
+        return $this->listItems;
+    }
+
+    public function findDerivedByAssetAndKind(string $assetUuid, string $kind): ?array
+    {
+        return $this->derivedByKind;
     }
 }

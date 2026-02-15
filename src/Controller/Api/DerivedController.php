@@ -2,9 +2,18 @@
 
 namespace App\Controller\Api;
 
-use App\Asset\Repository\AssetRepositoryInterface;
-use App\Derived\Service\DerivedUploadService;
-use Symfony\Bundle\SecurityBundle\Security;
+use App\Application\Auth\ResolveAgentActorHandler;
+use App\Application\Auth\ResolveAgentActorResult;
+use App\Application\Derived\CheckDerivedAssetExistsHandler;
+use App\Application\Derived\CompleteDerivedUploadHandler;
+use App\Application\Derived\CompleteDerivedUploadResult;
+use App\Application\Derived\GetDerivedByKindHandler;
+use App\Application\Derived\GetDerivedByKindResult;
+use App\Application\Derived\InitDerivedUploadHandler;
+use App\Application\Derived\InitDerivedUploadResult;
+use App\Application\Derived\ListDerivedFilesHandler;
+use App\Application\Derived\UploadDerivedPartHandler;
+use App\Application\Derived\UploadDerivedPartResult;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -15,9 +24,13 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 final class DerivedController
 {
     public function __construct(
-        private AssetRepositoryInterface $assets,
-        private DerivedUploadService $uploads,
-        private Security $security,
+        private ResolveAgentActorHandler $resolveAgentActorHandler,
+        private CheckDerivedAssetExistsHandler $checkDerivedAssetExistsHandler,
+        private InitDerivedUploadHandler $initDerivedUploadHandler,
+        private UploadDerivedPartHandler $uploadDerivedPartHandler,
+        private CompleteDerivedUploadHandler $completeDerivedUploadHandler,
+        private ListDerivedFilesHandler $listDerivedFilesHandler,
+        private GetDerivedByKindHandler $getDerivedByKindHandler,
         private TranslatorInterface $translator,
     ) {
     }
@@ -25,11 +38,11 @@ final class DerivedController
     #[Route('/upload/init', name: 'api_assets_derived_upload_init', methods: ['POST'])]
     public function initUpload(string $uuid, Request $request): JsonResponse
     {
-        if (!$this->security->isGranted('ROLE_AGENT')) {
+        $agentActor = $this->resolveAgentActorHandler->handle();
+        if ($agentActor->status() === ResolveAgentActorResult::STATUS_FORBIDDEN_ACTOR) {
             return $this->forbiddenActor();
         }
-
-        if ($this->assets->findByUuid($uuid) === null) {
+        if (!$this->checkDerivedAssetExistsHandler->handle($uuid)) {
             return $this->notFound();
         }
 
@@ -46,19 +59,22 @@ final class DerivedController
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        $session = $this->uploads->init($uuid, $kind, $contentType, $sizeBytes, $sha256 !== '' ? $sha256 : null);
+        $result = $this->initDerivedUploadHandler->handle($uuid, $kind, $contentType, $sizeBytes, $sha256 !== '' ? $sha256 : null);
+        if ($result->status() === InitDerivedUploadResult::STATUS_NOT_FOUND) {
+            return $this->notFound();
+        }
 
-        return new JsonResponse($session, Response::HTTP_OK);
+        return new JsonResponse($result->session() ?? [], Response::HTTP_OK);
     }
 
     #[Route('/upload/part', name: 'api_assets_derived_upload_part', methods: ['POST'])]
     public function uploadPart(string $uuid, Request $request): JsonResponse
     {
-        if (!$this->security->isGranted('ROLE_AGENT')) {
+        $agentActor = $this->resolveAgentActorHandler->handle();
+        if ($agentActor->status() === ResolveAgentActorResult::STATUS_FORBIDDEN_ACTOR) {
             return $this->forbiddenActor();
         }
-
-        if ($this->assets->findByUuid($uuid) === null) {
+        if (!$this->checkDerivedAssetExistsHandler->handle($uuid)) {
             return $this->notFound();
         }
 
@@ -73,7 +89,11 @@ final class DerivedController
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        if (!$this->uploads->addPart($uploadId, $partNumber)) {
+        $result = $this->uploadDerivedPartHandler->handle($uuid, $uploadId, $partNumber);
+        if ($result->status() === UploadDerivedPartResult::STATUS_NOT_FOUND) {
+            return $this->notFound();
+        }
+        if ($result->status() === UploadDerivedPartResult::STATUS_STATE_CONFLICT) {
             return new JsonResponse([
                 'code' => 'STATE_CONFLICT',
                 'message' => 'Upload session is invalid or already completed',
@@ -86,11 +106,11 @@ final class DerivedController
     #[Route('/upload/complete', name: 'api_assets_derived_upload_complete', methods: ['POST'])]
     public function completeUpload(string $uuid, Request $request): JsonResponse
     {
-        if (!$this->security->isGranted('ROLE_AGENT')) {
+        $agentActor = $this->resolveAgentActorHandler->handle();
+        if ($agentActor->status() === ResolveAgentActorResult::STATUS_FORBIDDEN_ACTOR) {
             return $this->forbiddenActor();
         }
-
-        if ($this->assets->findByUuid($uuid) === null) {
+        if (!$this->checkDerivedAssetExistsHandler->handle($uuid)) {
             return $this->notFound();
         }
 
@@ -104,45 +124,51 @@ final class DerivedController
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        $derived = $this->uploads->complete($uuid, $uploadId, $totalParts);
-        if ($derived === null) {
+        $result = $this->completeDerivedUploadHandler->handle($uuid, $uploadId, $totalParts);
+        if ($result->status() === CompleteDerivedUploadResult::STATUS_NOT_FOUND) {
+            return $this->notFound();
+        }
+        if ($result->status() === CompleteDerivedUploadResult::STATUS_STATE_CONFLICT) {
             return new JsonResponse([
                 'code' => 'STATE_CONFLICT',
                 'message' => 'Upload completion requirements are not satisfied',
             ], Response::HTTP_CONFLICT);
         }
 
-        return new JsonResponse($derived, Response::HTTP_OK);
+        return new JsonResponse($result->derived() ?? [], Response::HTTP_OK);
     }
 
     #[Route('', name: 'api_assets_derived_list', methods: ['GET'])]
     public function listDerived(string $uuid): JsonResponse
     {
-        if ($this->assets->findByUuid($uuid) === null) {
+        if (!$this->checkDerivedAssetExistsHandler->handle($uuid)) {
             return $this->notFound();
         }
 
+        $result = $this->listDerivedFilesHandler->handle($uuid);
+
         return new JsonResponse([
-            'items' => $this->uploads->listForAsset($uuid),
+            'items' => $result->items() ?? [],
         ], Response::HTTP_OK);
     }
 
     #[Route('/{kind}', name: 'api_assets_derived_get_kind', methods: ['GET'])]
     public function getByKind(string $uuid, string $kind): JsonResponse
     {
-        if ($this->assets->findByUuid($uuid) === null) {
+        if (!$this->checkDerivedAssetExistsHandler->handle($uuid)) {
             return $this->notFound();
         }
 
-        $derived = $this->uploads->findByAssetAndKind($uuid, $kind);
-        if ($derived === null) {
+        $result = $this->getDerivedByKindHandler->handle($uuid, $kind);
+
+        if ($result->status() === GetDerivedByKindResult::STATUS_DERIVED_NOT_FOUND) {
             return new JsonResponse([
                 'code' => 'NOT_FOUND',
                 'message' => $this->translator->trans('asset.error.not_found'),
             ], Response::HTTP_NOT_FOUND);
         }
 
-        return new JsonResponse($derived, Response::HTTP_OK);
+        return new JsonResponse($result->derived() ?? [], Response::HTTP_OK);
     }
 
     /**

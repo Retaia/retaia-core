@@ -241,6 +241,23 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - `ResolveAuthenticatedUserHandler`
 - objectif: isoler la policy de registration agent (contract-version + server policy payload) du contrôleur HTTP
 
+## Vingt-neuvième lot (derived controller handlers)
+
+- extraction des use cases `/assets/{uuid}/derived` en couche Application:
+  - `InitDerivedUploadHandler`
+  - `UploadDerivedPartHandler`
+  - `CompleteDerivedUploadHandler`
+  - `ListDerivedFilesHandler`
+  - `GetDerivedByKindHandler`
+- ajout du port:
+  - `Application/Derived/Port/DerivedGateway`
+- adapter infra:
+  - `Infrastructure/Derived/DerivedGateway`
+- extraction de la résolution d'acteur agent:
+  - `ResolveAgentActorHandler`
+  - `Application/Auth/Port/AgentActorGateway`
+  - `Infrastructure/Auth/AgentActorGateway`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
