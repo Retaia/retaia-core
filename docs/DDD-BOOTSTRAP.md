@@ -417,6 +417,19 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - `POST /auth/verify-email/confirm`
   - `POST /auth/verify-email/admin-confirm`
 
+## Quarante-deuxième lot (auth client token endpoint handler)
+
+- extraction de l'orchestration endpoint `/auth/clients/token` en couche Application:
+  - `MintClientTokenEndpointHandler`
+- ajout du port applicatif de rate-limit:
+  - `Application/AuthClient/Port/ClientTokenMintRateLimiterGateway`
+- adapter infra:
+  - `Infrastructure/Auth/ClientTokenMintRateLimiterGateway`
+- `AuthController` délègue désormais:
+  - validation payload (`client_id`, `client_kind`, `secret_key`)
+  - contrôle rate-limit
+  - délégation du use case `MintClientTokenHandler`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
