@@ -7,6 +7,11 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
+
+concurrency:
+  group: docker-base-image-auto-update
+  cancel-in-progress: false
 
 jobs:
   auto-update-docker-base-image:
@@ -22,15 +27,32 @@ jobs:
         run: bash scripts/auto-update-docker-base-image.sh
 
       - name: Commit and push update
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if git diff --quiet -- Dockerfile.prod docker-compose.prod.yaml; then
             echo "No docker base image update detected."
             exit 0
           fi
 
+          TIMESTAMP="$(date -u +%Y%m%d-%H%M%S)"
+          UPDATE_BRANCH="codex/auto-update-docker-${TIMESTAMP}"
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add Dockerfile.prod docker-compose.prod.yaml
           git commit -m "chore(docker): auto-update base image digest"
-          git push origin HEAD:master
+
+          if git push origin HEAD:master; then
+            echo "Pushed update directly to master."
+            exit 0
+          fi
+
+          echo "Direct push to master refused, fallback to PR."
+          git push origin HEAD:"${UPDATE_BRANCH}"
+          gh pr create \
+            --base master \
+            --head "${UPDATE_BRANCH}" \
+            --title "chore(docker): auto-update base image digest" \
+            --body "Automated Docker base image digest refresh."

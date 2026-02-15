@@ -72,6 +72,7 @@ Deux workflows dedies executent une mise a jour automatique puis commit/push sur
     - `public/releases/latest.json`
 
 Ces workflows sont des jobs d'auto-remediation: ils n'executent pas de suite de validation metier.
+Ils tentent un push direct sur `master`; si la protection de branche le refuse, ils ouvrent automatiquement une PR.
 
 Variables utiles:
 
@@ -86,6 +87,7 @@ Variables utiles:
 Secrets recommandes:
 
 - `RETAIA_UI_REPO_TOKEN`: token avec acces lecture au repo UI prive (si `Retaia/retaia-ui` n'est pas public).
+- `GITHUB_TOKEN`: utilise pour commit/push (ou creation de PR fallback si push direct refuse).
 
 ## Required Checks (master)
 
