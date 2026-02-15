@@ -231,6 +231,16 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - `ResolveAuthenticatedUserHandler`
   - `ResolveAdminActorHandler`
 
+## Vingt-huitième lot (agent register handler)
+
+- extraction du use case `/agents/register` en couche Application:
+  - `RegisterAgentHandler`
+- réutilisation du domain service:
+  - `Domain/AppPolicy/FeatureFlagsContractPolicy`
+- `AgentController` réutilise:
+  - `ResolveAuthenticatedUserHandler`
+- objectif: isoler la policy de registration agent (contract-version + server policy payload) du contrôleur HTTP
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
