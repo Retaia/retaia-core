@@ -96,6 +96,13 @@ Selon le scope :
 
 ## Test strategy minimale (à appliquer à chaque PR)
 
+Règle SSOT (obligatoire pour l'équipe) :
+
+- Les scénarios E2E et BDD sont dérivés des specs (`specs/`) et non du comportement observé dans le code.
+- Il est interdit de "faire passer" un test en l'alignant sur une implémentation qui diverge de la spec.
+- Si la logique implémentée semble correcte mais contredit la spec, proposer une mise à jour de spec (`retaia-docs`) et attendre validation.
+- Toute évolution fonctionnelle doit être propagée dans le code et dans les tests existants pertinents (unitaires, fonctionnels/E2E, BDD legacy).
+
 - Transitions autorisées/interdites de state machine.
 - Concurrence claim + expiry TTL + heartbeat.
 - Ownership patch par `job_type` (pas d’écrasement cross-domaine).

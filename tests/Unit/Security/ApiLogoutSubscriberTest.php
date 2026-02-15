@@ -2,9 +2,11 @@
 
 namespace App\Tests\Unit\Security;
 
+use App\Auth\UserAccessTokenService;
 use App\Security\ApiLogoutSubscriber;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
+use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Http\Event\LogoutEvent;
@@ -13,7 +15,7 @@ final class ApiLogoutSubscriberTest extends TestCase
 {
     public function testOnLogoutSkipsNonApiLogoutRoute(): void
     {
-        $subscriber = new ApiLogoutSubscriber(new NullLogger());
+        $subscriber = new ApiLogoutSubscriber(new NullLogger(), new UserAccessTokenService(new ArrayAdapter(), 'test-secret', 3600));
         $request = Request::create('/logout', Request::METHOD_POST);
         $request->attributes->set('_route', 'other_route');
 
@@ -25,7 +27,7 @@ final class ApiLogoutSubscriberTest extends TestCase
 
     public function testOnLogoutSetsApiResponseOnLogoutRoute(): void
     {
-        $subscriber = new ApiLogoutSubscriber(new NullLogger());
+        $subscriber = new ApiLogoutSubscriber(new NullLogger(), new UserAccessTokenService(new ArrayAdapter(), 'test-secret', 3600));
         $request = Request::create('/api/v1/auth/logout', Request::METHOD_POST);
         $request->attributes->set('_route', 'api_auth_logout');
 

@@ -21,6 +21,7 @@ security:
             user_checker: App\Security\UserChecker
             access_denied_handler: App\Security\ApiAccessDeniedHandler
             custom_authenticators:
+                - App\Security\ApiBearerAuthenticator
                 - App\Security\ApiLoginAuthenticator
             entry_point: App\Security\ApiLoginAuthenticator
             logout:

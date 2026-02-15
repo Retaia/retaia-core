@@ -15,6 +15,9 @@ Avant tout changement contractuel: modifier/valider `retaia-docs` puis implémen
 - Ajouter/mettre à jour les tests d'intégration et non-régression.
 - Conserver l'alignement avec la spec OpenAPI v1.
 - Respecter Bearer-only, authz matrix, error model, feature governance.
+- Les tests E2E et BDD DOIVENT être écrits depuis les specs (SSOT), jamais pour refléter le comportement actuel du code.
+- Toute modification de logique DOIT inclure les changements dans le code applicatif et dans les tests existants impactés (unitaires, fonctionnels/E2E, BDD legacy).
+- En cas d'incohérence logique constatée, ouvrir une proposition de changement dans `retaia-docs` au lieu d'adapter les tests à une implémentation divergente.
 
 ## Règles d'implémentation
 - `feature_flags`, `app_feature_enabled`, `user_feature_enabled` suivent les règles normatives.

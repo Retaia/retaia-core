@@ -2,6 +2,7 @@
 
 namespace App\Security;
 
+use App\Auth\UserAccessTokenService;
 use App\Entity\User;
 use App\User\Service\TwoFactorService;
 use Psr\Log\LoggerInterface;
@@ -28,6 +29,7 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
         private LoggerInterface $logger,
         private TranslatorInterface $translator,
         private TwoFactorService $twoFactorService,
+        private UserAccessTokenService $userAccessTokenService,
     ) {
     }
 
@@ -94,9 +96,35 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
             }
         }
 
+        if (!$user instanceof User) {
+            return new JsonResponse(
+                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.invalid_credentials')],
+                Response::HTTP_UNAUTHORIZED
+            );
+        }
+
+        $payload = json_decode($request->getContent(), true);
+        if (!is_array($payload)) {
+            $payload = [];
+        }
+        $clientId = trim((string) ($payload['client_id'] ?? 'interactive-default'));
+        if ($clientId === '') {
+            $clientId = 'interactive-default';
+        }
+        $clientKind = trim((string) ($payload['client_kind'] ?? 'UI_RUST'));
+        if (!\in_array($clientKind, ['UI_RUST', 'AGENT'], true)) {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.client_kind_required')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+        $accessToken = $this->userAccessTokenService->issue($user, $clientId, $clientKind);
+
         $this->logger->info('auth.login.succeeded', [
             'user_identifier' => $user->getUserIdentifier(),
             'roles' => $user->getRoles(),
+            'client_id' => $clientId,
+            'client_kind' => $clientKind,
         ]);
         $this->logger->info('auth.login.success', [
             'user_identifier' => $user->getUserIdentifier(),
@@ -107,6 +135,10 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
             [
                 'authenticated' => true,
                 'user' => $this->normalizeUser($user),
+                'access_token' => $accessToken['access_token'],
+                'token_type' => $accessToken['token_type'],
+                'client_id' => $accessToken['client_id'],
+                'client_kind' => $accessToken['client_kind'],
             ],
             Response::HTTP_OK
         );
