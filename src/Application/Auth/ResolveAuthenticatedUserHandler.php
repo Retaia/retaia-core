@@ -4,7 +4,7 @@ namespace App\Application\Auth;
 
 use App\Application\Auth\Port\AuthenticatedUserGateway;
 
-final class ResolveAuthenticatedUserHandler
+final class ResolveAuthenticatedUserHandler implements ResolveAuthenticatedUserUseCase
 {
     public function __construct(
         private AuthenticatedUserGateway $gateway,
