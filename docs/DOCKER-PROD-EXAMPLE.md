@@ -90,6 +90,20 @@ export RETAIA_UI_DIST_DIR=../retaia-ui/dist
 docker compose -f docker-compose.prod.yaml up -d caddy-prod
 ```
 
+## Mise a jour UI (sans URL de ping)
+
+Si aucune URL de ping/version n'est encore disponible, utiliser un mode simple et deterministe:
+
+1. l'UI ne suit jamais `master` directement
+2. l'UI telecharge la derniere release taggee (artefact officiel)
+3. verification checksum/signature avant activation
+
+Quand une URL de ping sera disponible, ce mode pourra evoluer vers:
+
+- ping version/manifeste
+- comparaison de version locale
+- download de la derniere release stable uniquement
+
 ## Important
 
 - Ce compose prod est un exemple redistribuable pour demarrage rapide.
