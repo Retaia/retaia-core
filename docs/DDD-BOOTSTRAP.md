@@ -397,6 +397,18 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - contrôle rate-limit
   - délégation du use case `RequestEmailVerificationHandler`
 
+## Quarantième lot (auth clients + device endpoints handlers)
+
+- extraction de l'orchestration des endpoints `/auth/clients/*` et `/auth/clients/device/*` en couche Application:
+  - `AuthClientAdminEndpointsHandler`
+  - `AuthClientDeviceFlowEndpointsHandler`
+- `AuthController` délègue désormais:
+  - `POST /auth/clients/{clientId}/revoke-token`
+  - `POST /auth/clients/{clientId}/rotate-secret`
+  - `POST /auth/clients/device/start`
+  - `POST /auth/clients/device/poll`
+  - `POST /auth/clients/device/cancel`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
