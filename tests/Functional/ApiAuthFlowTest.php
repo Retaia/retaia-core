@@ -131,17 +131,19 @@ final class ApiAuthFlowTest extends WebTestCase
     public function testLoginThrottlingReturns429AfterTooManyFailures(): void
     {
         $client = $this->createIsolatedClient(sprintf('10.0.%d.%d', random_int(1, 200), random_int(1, 200)));
+        $email = sprintf('login-throttle-%s@retaia.local', bin2hex(random_bytes(4)));
+        $this->insertUser($email, 'Change-me1!', ['ROLE_USER'], true);
 
         for ($attempt = 1; $attempt <= 5; ++$attempt) {
             $this->loginAndAttachBearer($client, [
-                'email' => 'admin@retaia.local',
+                'email' => $email,
                 'password' => 'invalid-password',
             ]);
             self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
         }
 
         $client->jsonRequest('POST', '/api/v1/auth/login', [
-            'email' => 'admin@retaia.local',
+            'email' => $email,
             'password' => 'invalid-password',
         ]);
 
