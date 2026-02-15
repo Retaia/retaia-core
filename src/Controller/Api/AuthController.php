@@ -12,20 +12,17 @@ use App\Application\Auth\EnableTwoFactorHandler;
 use App\Application\Auth\EnableTwoFactorResult;
 use App\Application\Auth\DisableTwoFactorHandler;
 use App\Application\Auth\DisableTwoFactorResult;
-use App\Application\Auth\AdminConfirmEmailVerificationHandler;
-use App\Application\Auth\AdminConfirmEmailVerificationResult;
-use App\Application\Auth\ConfirmEmailVerificationHandler;
-use App\Application\Auth\ConfirmEmailVerificationResult;
+use App\Application\Auth\AdminConfirmEmailVerificationEndpointResult;
+use App\Application\Auth\ConfirmEmailVerificationEndpointResult;
 use App\Application\Auth\GetMyFeaturesHandler;
 use App\Application\Auth\PatchMyFeaturesHandler;
 use App\Application\Auth\PatchMyFeaturesResult;
-use App\Application\Auth\ResolveAdminActorHandler;
-use App\Application\Auth\ResolveAdminActorResult;
 use App\Application\Auth\ResolveAuthenticatedUserHandler;
 use App\Application\Auth\ResolveAuthenticatedUserResult;
 use App\Application\Auth\GetAuthMeProfileHandler;
 use App\Application\Auth\RequestEmailVerificationEndpointHandler;
 use App\Application\Auth\RequestEmailVerificationEndpointResult;
+use App\Application\Auth\VerifyEmailEndpointsHandler;
 use App\Application\AuthClient\AuthClientAdminEndpointsHandler;
 use App\Application\AuthClient\AuthClientDeviceFlowEndpointsHandler;
 use App\Application\AuthClient\CancelDeviceFlowEndpointResult;
@@ -52,15 +49,13 @@ final class AuthController
         private RequestPasswordResetEndpointHandler $requestPasswordResetEndpointHandler,
         private ResetPasswordEndpointHandler $resetPasswordEndpointHandler,
         private RequestEmailVerificationEndpointHandler $requestEmailVerificationEndpointHandler,
-        private ConfirmEmailVerificationHandler $confirmEmailVerificationHandler,
-        private AdminConfirmEmailVerificationHandler $adminConfirmEmailVerificationHandler,
+        private VerifyEmailEndpointsHandler $verifyEmailEndpointsHandler,
         private SetupTwoFactorHandler $setupTwoFactorHandler,
         private EnableTwoFactorHandler $enableTwoFactorHandler,
         private DisableTwoFactorHandler $disableTwoFactorHandler,
         private GetMyFeaturesHandler $getMyFeaturesHandler,
         private PatchMyFeaturesHandler $patchMyFeaturesHandler,
         private GetAuthMeProfileHandler $getAuthMeProfileHandler,
-        private ResolveAdminActorHandler $resolveAdminActorHandler,
         private ResolveAuthenticatedUserHandler $resolveAuthenticatedUserHandler,
         private TranslatorInterface $translator,
         #[Autowire(service: 'limiter.client_token_mint')]
@@ -369,17 +364,14 @@ final class AuthController
     #[Route('/verify-email/confirm', name: 'api_auth_verify_email_confirm', methods: ['POST'])]
     public function confirmEmailVerification(Request $request): JsonResponse
     {
-        $payload = $this->payload($request);
-        $token = trim((string) ($payload['token'] ?? ''));
-        if ($token === '') {
+        $result = $this->verifyEmailEndpointsHandler->confirm($this->payload($request));
+        if ($result->status() === ConfirmEmailVerificationEndpointResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.token_required')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
-
-        $result = $this->confirmEmailVerificationHandler->handle($token);
-        if ($result->status() === ConfirmEmailVerificationResult::STATUS_INVALID_TOKEN) {
+        if ($result->status() === ConfirmEmailVerificationEndpointResult::STATUS_INVALID_TOKEN) {
             return new JsonResponse(
                 ['code' => 'INVALID_TOKEN', 'message' => $this->translator->trans('auth.error.invalid_or_expired_token')],
                 Response::HTTP_BAD_REQUEST
@@ -392,27 +384,20 @@ final class AuthController
     #[Route('/verify-email/admin-confirm', name: 'api_auth_verify_email_admin_confirm', methods: ['POST'])]
     public function adminConfirmEmailVerification(Request $request): JsonResponse
     {
-        $adminActor = $this->resolveAdminActorHandler->handle();
-        if ($adminActor->status() === ResolveAdminActorResult::STATUS_FORBIDDEN_ACTOR) {
+        $result = $this->verifyEmailEndpointsHandler->adminConfirm($this->payload($request));
+        if ($result->status() === AdminConfirmEmailVerificationEndpointResult::STATUS_FORBIDDEN_ACTOR) {
             return new JsonResponse(
                 ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
                 Response::HTTP_FORBIDDEN
             );
         }
-
-        $payload = $this->payload($request);
-        $email = trim((string) ($payload['email'] ?? ''));
-        if ($email === '') {
+        if ($result->status() === AdminConfirmEmailVerificationEndpointResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.email_required')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
-
-        $actorId = $adminActor->actorId();
-
-        $result = $this->adminConfirmEmailVerificationHandler->handle($email, $actorId);
-        if ($result->status() === AdminConfirmEmailVerificationResult::STATUS_USER_NOT_FOUND) {
+        if ($result->status() === AdminConfirmEmailVerificationEndpointResult::STATUS_USER_NOT_FOUND) {
             return new JsonResponse(
                 ['code' => 'USER_NOT_FOUND', 'message' => $this->translator->trans('auth.error.unknown_user')],
                 Response::HTTP_NOT_FOUND
