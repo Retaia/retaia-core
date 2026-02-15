@@ -26,19 +26,17 @@ use App\Application\Auth\VerifyEmailEndpointsHandler;
 use App\Application\AuthClient\AuthClientAdminEndpointsHandler;
 use App\Application\AuthClient\AuthClientDeviceFlowEndpointsHandler;
 use App\Application\AuthClient\CancelDeviceFlowEndpointResult;
-use App\Application\AuthClient\MintClientTokenHandler;
-use App\Application\AuthClient\MintClientTokenResult;
+use App\Application\AuthClient\MintClientTokenEndpointHandler;
+use App\Application\AuthClient\MintClientTokenEndpointResult;
 use App\Application\AuthClient\PollDeviceFlowEndpointResult;
 use App\Application\AuthClient\RevokeClientTokenEndpointResult;
 use App\Application\AuthClient\RotateClientSecretEndpointResult;
 use App\Application\AuthClient\StartDeviceFlowEndpointResult;
 use App\Observability\Repository\MetricEventRepository;
 use Psr\Log\LoggerInterface;
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
@@ -58,9 +56,7 @@ final class AuthController
         private GetAuthMeProfileHandler $getAuthMeProfileHandler,
         private ResolveAuthenticatedUserHandler $resolveAuthenticatedUserHandler,
         private TranslatorInterface $translator,
-        #[Autowire(service: 'limiter.client_token_mint')]
-        private RateLimiterFactory $clientTokenMintLimiter,
-        private MintClientTokenHandler $mintClientTokenHandler,
+        private MintClientTokenEndpointHandler $mintClientTokenEndpointHandler,
         private AuthClientAdminEndpointsHandler $authClientAdminEndpointsHandler,
         private AuthClientDeviceFlowEndpointsHandler $authClientDeviceFlowEndpointsHandler,
         private MetricEventRepository $metrics,
@@ -410,35 +406,27 @@ final class AuthController
     #[Route('/clients/token', name: 'api_auth_clients_token', methods: ['POST'])]
     public function clientToken(Request $request): JsonResponse
     {
-        $payload = $this->payload($request);
-        $clientId = trim((string) ($payload['client_id'] ?? ''));
-        $clientKind = trim((string) ($payload['client_kind'] ?? ''));
-        $secretKey = trim((string) ($payload['secret_key'] ?? ''));
-
-        if ($clientId === '' || $clientKind === '' || $secretKey === '') {
+        $result = $this->mintClientTokenEndpointHandler->handle(
+            $this->payload($request),
+            (string) ($request->getClientIp() ?? 'unknown')
+        );
+        if ($result->status() === MintClientTokenEndpointResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.client_credentials_required')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
-
-        $limiterKey = hash('sha256', mb_strtolower($clientId).'|'.$clientKind.'|'.(string) ($request->getClientIp() ?? 'unknown'));
-        $limit = $this->clientTokenMintLimiter->create($limiterKey)->consume(1);
-        if (!$limit->isAccepted()) {
-            $retryAfter = $limit->getRetryAfter();
-
+        if ($result->status() === MintClientTokenEndpointResult::STATUS_TOO_MANY_ATTEMPTS) {
             return new JsonResponse(
                 [
                     'code' => 'TOO_MANY_ATTEMPTS',
                     'message' => $this->translator->trans('auth.error.too_many_client_token_requests'),
-                    'retry_in_seconds' => $retryAfter !== null ? max(1, $retryAfter->getTimestamp() - time()) : 60,
+                    'retry_in_seconds' => $result->retryInSeconds() ?? 60,
                 ],
                 Response::HTTP_TOO_MANY_REQUESTS
             );
         }
-
-        $result = $this->mintClientTokenHandler->handle($clientId, $clientKind, $secretKey);
-        if ($result->status() === MintClientTokenResult::STATUS_FORBIDDEN_ACTOR) {
+        if ($result->status() === MintClientTokenEndpointResult::STATUS_FORBIDDEN_ACTOR) {
             $this->metrics->record('auth.client.token.forbidden_actor.ui_rust');
 
             return new JsonResponse(
@@ -446,20 +434,20 @@ final class AuthController
                 Response::HTTP_FORBIDDEN
             );
         }
-        if ($result->status() === MintClientTokenResult::STATUS_FORBIDDEN_SCOPE) {
+        if ($result->status() === MintClientTokenEndpointResult::STATUS_FORBIDDEN_SCOPE) {
             return new JsonResponse(
                 ['code' => 'FORBIDDEN_SCOPE', 'message' => $this->translator->trans('auth.error.forbidden_scope')],
                 Response::HTTP_FORBIDDEN
             );
         }
-        if ($result->status() === MintClientTokenResult::STATUS_UNAUTHORIZED) {
+        if ($result->status() === MintClientTokenEndpointResult::STATUS_UNAUTHORIZED) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.invalid_client_credentials')],
                 Response::HTTP_UNAUTHORIZED
             );
         }
         $token = $result->token();
-        if (!is_array($token)) {
+        if ($result->status() !== MintClientTokenEndpointResult::STATUS_SUCCESS || !is_array($token)) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.invalid_client_credentials')],
                 Response::HTTP_UNAUTHORIZED
@@ -467,8 +455,8 @@ final class AuthController
         }
 
         $this->logger->info('auth.client.token.minted', [
-            'client_id' => $clientId,
-            'client_kind' => $clientKind,
+            'client_id' => $result->clientId(),
+            'client_kind' => $result->clientKind(),
         ]);
 
         return new JsonResponse($token, Response::HTTP_OK);
