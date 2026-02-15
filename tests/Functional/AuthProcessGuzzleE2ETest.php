@@ -404,6 +404,99 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
         self::assertSame('Bearer', $mintWithNewSecret['json']['token_type'] ?? null);
     }
 
+    public function testSpecAppFeaturesAreAdminOnlyAndExposeStablePayload(): void
+    {
+        $client = $this->createGuzzleClient();
+        $email = sprintf('e2e-operator-%s@retaia.local', bin2hex(random_bytes(4)));
+        $password = 'Change-me1!';
+        $this->insertUser($email, $password, ['ROLE_USER'], true);
+
+        $userToken = $this->loginWithCredentialsAndGetBearerToken($client, $email, $password);
+        $forbidden = $this->requestJson($client, 'GET', '/api/v1/app/features', null, [
+            'Authorization' => 'Bearer '.$userToken,
+        ]);
+        self::assertSame(403, $forbidden['status']);
+        self::assertSame('FORBIDDEN_ACTOR', $forbidden['json']['code'] ?? null);
+
+        $adminToken = $this->loginAdminAndGetBearerToken($client);
+        $ok = $this->requestJson($client, 'GET', '/api/v1/app/features', null, [
+            'Authorization' => 'Bearer '.$adminToken,
+        ]);
+        self::assertSame(200, $ok['status']);
+        self::assertIsArray($ok['json']['app_feature_enabled'] ?? null);
+        self::assertIsArray($ok['json']['feature_governance'] ?? null);
+        self::assertIsArray($ok['json']['core_v1_global_features'] ?? null);
+
+        $firstRule = $ok['json']['feature_governance'][0] ?? null;
+        self::assertIsArray($firstRule);
+        self::assertArrayHasKey('key', $firstRule);
+        self::assertArrayHasKey('tier', $firstRule);
+        self::assertArrayHasKey('user_can_disable', $firstRule);
+        self::assertArrayHasKey('dependencies', $firstRule);
+        self::assertArrayHasKey('disable_escalation', $firstRule);
+    }
+
+    public function testSpecPatchAppFeaturesCanDisableMcpTokenScope(): void
+    {
+        $client = $this->createGuzzleClient();
+        $adminToken = $this->loginAdminAndGetBearerToken($client);
+
+        $patch = $this->requestJson($client, 'PATCH', '/api/v1/app/features', [
+            'app_feature_enabled' => [
+                'features.ai' => false,
+            ],
+        ], [
+            'Authorization' => 'Bearer '.$adminToken,
+        ]);
+        self::assertSame(200, $patch['status']);
+        self::assertSame(false, $patch['json']['app_feature_enabled']['features.ai'] ?? null);
+
+        $mcpToken = $this->requestJson($client, 'POST', '/api/v1/auth/clients/token', [
+            'client_id' => 'mcp-default',
+            'client_kind' => 'MCP',
+            'secret_key' => 'mcp-secret',
+        ]);
+        self::assertSame(403, $mcpToken['status']);
+        self::assertSame('FORBIDDEN_SCOPE', $mcpToken['json']['code'] ?? null);
+    }
+
+    public function testSpecMeFeaturesSupportsUserPatchEscalationAndCoreProtection(): void
+    {
+        $client = $this->createGuzzleClient();
+        $adminToken = $this->loginAdminAndGetBearerToken($client);
+
+        $read = $this->requestJson($client, 'GET', '/api/v1/auth/me/features', null, [
+            'Authorization' => 'Bearer '.$adminToken,
+        ]);
+        self::assertSame(200, $read['status']);
+        self::assertIsArray($read['json']['user_feature_enabled'] ?? null);
+        self::assertIsArray($read['json']['effective_feature_enabled'] ?? null);
+        self::assertIsArray($read['json']['feature_governance'] ?? null);
+        self::assertIsArray($read['json']['core_v1_global_features'] ?? null);
+
+        $patchOptional = $this->requestJson($client, 'PATCH', '/api/v1/auth/me/features', [
+            'user_feature_enabled' => [
+                'features.ai.suggest_tags' => false,
+            ],
+        ], [
+            'Authorization' => 'Bearer '.$adminToken,
+        ]);
+        self::assertSame(200, $patchOptional['status']);
+        self::assertSame(false, $patchOptional['json']['user_feature_enabled']['features.ai.suggest_tags'] ?? null);
+        self::assertSame(false, $patchOptional['json']['effective_feature_enabled']['features.ai.suggest_tags'] ?? null);
+        self::assertSame(false, $patchOptional['json']['effective_feature_enabled']['features.ai.suggested_tags_filters'] ?? null);
+
+        $patchCore = $this->requestJson($client, 'PATCH', '/api/v1/auth/me/features', [
+            'user_feature_enabled' => [
+                'features.core.auth' => false,
+            ],
+        ], [
+            'Authorization' => 'Bearer '.$adminToken,
+        ]);
+        self::assertSame(403, $patchCore['status']);
+        self::assertSame('FORBIDDEN_SCOPE', $patchCore['json']['code'] ?? null);
+    }
+
     private function createGuzzleClient(): Client
     {
         static::bootKernel();
@@ -472,9 +565,18 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
 
     private function loginAdminAndGetBearerToken(Client $client): string
     {
+        return $this->loginWithCredentialsAndGetBearerToken(
+            $client,
+            FixtureUsers::ADMIN_EMAIL,
+            FixtureUsers::DEFAULT_PASSWORD
+        );
+    }
+
+    private function loginWithCredentialsAndGetBearerToken(Client $client, string $email, string $password): string
+    {
         $login = $this->requestJson($client, 'POST', '/api/v1/auth/login', [
-            'email' => FixtureUsers::ADMIN_EMAIL,
-            'password' => FixtureUsers::DEFAULT_PASSWORD,
+            'email' => $email,
+            'password' => $password,
         ]);
         self::assertSame(200, $login['status']);
 
