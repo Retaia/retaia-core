@@ -375,6 +375,15 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - contrôle rate-limit
   - délégation du use case `RequestPasswordResetHandler`
 
+## Trente-huitième lot (auth lost-password reset endpoint handler)
+
+- extraction de l'orchestration endpoint `/auth/lost-password/reset` en couche Application:
+  - `ResetPasswordEndpointHandler`
+- `AuthController` délègue désormais:
+  - validation payload (`token`, `new_password`)
+  - délégation du use case `ResetPasswordHandler`
+  - mapping des statuts (`VALIDATION_FAILED`, `INVALID_TOKEN`, `PASSWORD_RESET`)
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
