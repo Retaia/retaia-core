@@ -18,6 +18,8 @@ use App\Application\Auth\ConfirmEmailVerificationResult;
 use App\Application\Auth\GetMyFeaturesHandler;
 use App\Application\Auth\PatchMyFeaturesHandler;
 use App\Application\Auth\PatchMyFeaturesResult;
+use App\Application\Auth\ResolveAdminActorHandler;
+use App\Application\Auth\ResolveAdminActorResult;
 use App\Application\Auth\GetAuthMeProfileHandler;
 use App\Application\Auth\RequestEmailVerificationHandler;
 use App\Application\AuthClient\MintClientTokenHandler;
@@ -62,6 +64,7 @@ final class AuthController
         private GetMyFeaturesHandler $getMyFeaturesHandler,
         private PatchMyFeaturesHandler $patchMyFeaturesHandler,
         private GetAuthMeProfileHandler $getAuthMeProfileHandler,
+        private ResolveAdminActorHandler $resolveAdminActorHandler,
         private TranslatorInterface $translator,
         #[Autowire(service: 'limiter.lost_password_request')]
         private RateLimiterFactory $lostPasswordRequestLimiter,
@@ -416,7 +419,8 @@ final class AuthController
     #[Route('/verify-email/admin-confirm', name: 'api_auth_verify_email_admin_confirm', methods: ['POST'])]
     public function adminConfirmEmailVerification(Request $request): JsonResponse
     {
-        if (!$this->security->isGranted('ROLE_ADMIN')) {
+        $adminActor = $this->resolveAdminActorHandler->handle();
+        if ($adminActor->status() === ResolveAdminActorResult::STATUS_FORBIDDEN_ACTOR) {
             return new JsonResponse(
                 ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
                 Response::HTTP_FORBIDDEN
@@ -432,8 +436,7 @@ final class AuthController
             );
         }
 
-        $actor = $this->security->getUser();
-        $actorId = $actor instanceof User ? $actor->getId() : null;
+        $actorId = $adminActor->actorId();
 
         $result = $this->adminConfirmEmailVerificationHandler->handle($email, $actorId);
         if ($result->status() === AdminConfirmEmailVerificationResult::STATUS_USER_NOT_FOUND) {
