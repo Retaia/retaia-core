@@ -37,7 +37,6 @@ use App\Application\AuthClient\RotateClientSecretResult;
 use App\Application\AuthClient\StartDeviceFlowHandler;
 use App\Application\AuthClient\StartDeviceFlowResult;
 use App\Observability\Repository\MetricEventRepository;
-use App\User\Service\EmailVerificationService;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -53,7 +52,6 @@ final class AuthController
     public function __construct(
         private RequestPasswordResetHandler $requestPasswordResetHandler,
         private ResetPasswordHandler $resetPasswordHandler,
-        private EmailVerificationService $emailVerificationService,
         private RequestEmailVerificationHandler $requestEmailVerificationHandler,
         private ConfirmEmailVerificationHandler $confirmEmailVerificationHandler,
         private AdminConfirmEmailVerificationHandler $adminConfirmEmailVerificationHandler,
