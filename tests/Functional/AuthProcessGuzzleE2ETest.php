@@ -13,6 +13,7 @@ use GuzzleHttp\Promise\Create;
 use GuzzleHttp\Psr7\Response as Psr7Response;
 use GuzzleHttp\Psr7\Utils;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
+use OTPHP\TOTP;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
@@ -497,6 +498,76 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
         self::assertSame('FORBIDDEN_SCOPE', $patchCore['json']['code'] ?? null);
     }
 
+    public function testSpecTwoFactorSetupRequiresBearer(): void
+    {
+        $client = $this->createGuzzleClient();
+
+        $setup = $this->requestJson($client, 'POST', '/api/v1/auth/2fa/setup');
+        self::assertSame(401, $setup['status']);
+        self::assertSame('UNAUTHORIZED', $setup['json']['code'] ?? null);
+    }
+
+    public function testSpecLoginWithEnabledTwoFactorRequiresValidOtp(): void
+    {
+        $client = $this->createGuzzleClient();
+        $adminToken = $this->loginAdminAndGetBearerToken($client);
+        $secret = '';
+        $loginBearer = '';
+
+        try {
+            $setup = $this->requestJson($client, 'POST', '/api/v1/auth/2fa/setup', null, [
+                'Authorization' => 'Bearer '.$adminToken,
+            ]);
+            self::assertSame(200, $setup['status']);
+            $secret = (string) ($setup['json']['secret'] ?? '');
+            self::assertNotSame('', $secret);
+            self::assertIsString($setup['json']['otpauth_uri'] ?? null);
+
+            $enable = $this->requestJson($client, 'POST', '/api/v1/auth/2fa/enable', [
+                'otp_code' => $this->generateOtpCode($secret),
+            ], [
+                'Authorization' => 'Bearer '.$adminToken,
+            ]);
+            self::assertSame(200, $enable['status']);
+            self::assertSame(true, $enable['json']['mfa_enabled'] ?? null);
+
+            $loginWithoutOtp = $this->requestJson($client, 'POST', '/api/v1/auth/login', [
+                'email' => FixtureUsers::ADMIN_EMAIL,
+                'password' => FixtureUsers::DEFAULT_PASSWORD,
+            ]);
+            self::assertSame(401, $loginWithoutOtp['status']);
+            self::assertSame('MFA_REQUIRED', $loginWithoutOtp['json']['code'] ?? null);
+
+            $loginWithInvalidOtp = $this->requestJson($client, 'POST', '/api/v1/auth/login', [
+                'email' => FixtureUsers::ADMIN_EMAIL,
+                'password' => FixtureUsers::DEFAULT_PASSWORD,
+                'otp_code' => '000000',
+            ]);
+            self::assertSame(401, $loginWithInvalidOtp['status']);
+            self::assertSame('INVALID_2FA_CODE', $loginWithInvalidOtp['json']['code'] ?? null);
+
+            $loginWithValidOtp = $this->requestJson($client, 'POST', '/api/v1/auth/login', [
+                'email' => FixtureUsers::ADMIN_EMAIL,
+                'password' => FixtureUsers::DEFAULT_PASSWORD,
+                'otp_code' => $this->generateOtpCode($secret),
+            ]);
+            self::assertSame(200, $loginWithValidOtp['status']);
+            self::assertSame('Bearer', $loginWithValidOtp['json']['token_type'] ?? null);
+            $loginBearer = (string) ($loginWithValidOtp['json']['access_token'] ?? '');
+            self::assertNotSame('', $loginBearer);
+        } finally {
+            if ($secret !== '' && $loginBearer !== '') {
+                $disable = $this->requestJson($client, 'POST', '/api/v1/auth/2fa/disable', [
+                    'otp_code' => $this->generateOtpCode($secret),
+                ], [
+                    'Authorization' => 'Bearer '.$loginBearer,
+                ]);
+                self::assertSame(200, $disable['status']);
+                self::assertSame(false, $disable['json']['mfa_enabled'] ?? null);
+            }
+        }
+    }
+
     private function createGuzzleClient(): Client
     {
         static::bootKernel();
@@ -584,6 +655,11 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
         self::assertNotSame('', $token);
 
         return $token;
+    }
+
+    private function generateOtpCode(string $secret): string
+    {
+        return TOTP::createFromSecret($secret)->now();
     }
 
     /**
