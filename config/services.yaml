@@ -44,6 +44,7 @@ services:
     App\Application\Auth\Port\PasswordResetRequestRateLimiterGateway: '@App\Infrastructure\Auth\PasswordResetRequestRateLimiterGateway'
     App\Application\Auth\Port\EmailVerificationRequestRateLimiterGateway: '@App\Infrastructure\Auth\EmailVerificationRequestRateLimiterGateway'
     App\Application\AuthClient\Port\ClientTokenMintRateLimiterGateway: '@App\Infrastructure\Auth\ClientTokenMintRateLimiterGateway'
+    App\Application\AuthClient\Port\DeviceFlowStartRateLimiterGateway: '@App\Infrastructure\Auth\DeviceFlowStartRateLimiterGateway'
     App\Application\AuthClient\Port\AuthClientGateway: '@App\Infrastructure\Auth\AuthClientAdminGateway'
     App\Application\AuthClient\Port\DeviceFlowGateway: '@App\Infrastructure\Auth\DeviceFlowGateway'
     App\Application\AuthClient\Port\DeviceApprovalSecondFactorGateway: '@App\Infrastructure\Auth\DeviceApprovalSecondFactorGateway'
@@ -89,6 +90,10 @@ services:
     App\Infrastructure\Auth\ClientTokenMintRateLimiterGateway:
         bind:
             Symfony\Component\RateLimiter\RateLimiterFactory $rateLimiterFactory: '@limiter.client_token_mint'
+
+    App\Infrastructure\Auth\DeviceFlowStartRateLimiterGateway:
+        bind:
+            Symfony\Component\RateLimiter\RateLimiterFactory $rateLimiterFactory: '@limiter.device_flow_start'
 
     App\Feature\FeatureGovernanceService:
         bind:

@@ -22,6 +22,10 @@ framework:
             policy: 'fixed_window'
             limit: '%env(int:APP_AUTH_CLIENT_TOKEN_LIMIT)%'
             interval: '%env(string:APP_AUTH_CLIENT_TOKEN_INTERVAL)%'
+        device_flow_start:
+            policy: 'fixed_window'
+            limit: '%env(int:APP_AUTH_DEVICE_START_LIMIT)%'
+            interval: '%env(string:APP_AUTH_DEVICE_START_INTERVAL)%'
 
     #esi: true
     #fragments: true
