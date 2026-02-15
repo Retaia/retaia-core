@@ -24,7 +24,8 @@ use App\Application\Auth\ResolveAdminActorResult;
 use App\Application\Auth\ResolveAuthenticatedUserHandler;
 use App\Application\Auth\ResolveAuthenticatedUserResult;
 use App\Application\Auth\GetAuthMeProfileHandler;
-use App\Application\Auth\RequestEmailVerificationHandler;
+use App\Application\Auth\RequestEmailVerificationEndpointHandler;
+use App\Application\Auth\RequestEmailVerificationEndpointResult;
 use App\Application\AuthClient\MintClientTokenHandler;
 use App\Application\AuthClient\MintClientTokenResult;
 use App\Application\AuthClient\CancelDeviceFlowHandler;
@@ -53,7 +54,7 @@ final class AuthController
     public function __construct(
         private RequestPasswordResetEndpointHandler $requestPasswordResetEndpointHandler,
         private ResetPasswordEndpointHandler $resetPasswordEndpointHandler,
-        private RequestEmailVerificationHandler $requestEmailVerificationHandler,
+        private RequestEmailVerificationEndpointHandler $requestEmailVerificationEndpointHandler,
         private ConfirmEmailVerificationHandler $confirmEmailVerificationHandler,
         private AdminConfirmEmailVerificationHandler $adminConfirmEmailVerificationHandler,
         private SetupTwoFactorHandler $setupTwoFactorHandler,
@@ -65,8 +66,6 @@ final class AuthController
         private ResolveAdminActorHandler $resolveAdminActorHandler,
         private ResolveAuthenticatedUserHandler $resolveAuthenticatedUserHandler,
         private TranslatorInterface $translator,
-        #[Autowire(service: 'limiter.verify_email_request')]
-        private RateLimiterFactory $verifyEmailRequestLimiter,
         #[Autowire(service: 'limiter.client_token_mint')]
         private RateLimiterFactory $clientTokenMintLimiter,
         private MintClientTokenHandler $mintClientTokenHandler,
@@ -344,32 +343,27 @@ final class AuthController
     #[Route('/verify-email/request', name: 'api_auth_verify_email_request', methods: ['POST'])]
     public function requestEmailVerification(Request $request): JsonResponse
     {
-        $payload = $this->payload($request);
-        $email = trim((string) ($payload['email'] ?? ''));
-        if ($email === '') {
+        $result = $this->requestEmailVerificationEndpointHandler->handle(
+            $this->payload($request),
+            (string) ($request->getClientIp() ?? 'unknown')
+        );
+        if ($result->status() === RequestEmailVerificationEndpointResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.email_required')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
-
-        $remoteAddress = (string) ($request->getClientIp() ?? 'unknown');
-        $limiterKey = hash('sha256', mb_strtolower($email).'|'.$remoteAddress);
-        $limit = $this->verifyEmailRequestLimiter->create($limiterKey)->consume(1);
-        if (!$limit->isAccepted()) {
-            $retryAfter = $limit->getRetryAfter();
-
+        if ($result->status() === RequestEmailVerificationEndpointResult::STATUS_TOO_MANY_ATTEMPTS) {
             return new JsonResponse(
                 [
                     'code' => 'TOO_MANY_ATTEMPTS',
                     'message' => $this->translator->trans('auth.error.too_many_verification_requests'),
-                    'retry_in_seconds' => $retryAfter !== null ? max(1, $retryAfter->getTimestamp() - time()) : 60,
+                    'retry_in_seconds' => $result->retryInSeconds() ?? 60,
                 ],
                 Response::HTTP_TOO_MANY_REQUESTS
             );
         }
 
-        $result = $this->requestEmailVerificationHandler->handle($email);
         $response = ['accepted' => true];
         if ($result->token() !== null) {
             $response['verification_token'] = $result->token();
