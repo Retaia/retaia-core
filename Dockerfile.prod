@@ -1,0 +1,22 @@
+ARG BASE_IMAGE=fullfrontend/php-fpm:latest
+FROM ${BASE_IMAGE}
+
+ARG RETAIA_BUILD_V1_READY=0
+RUN test "${RETAIA_BUILD_V1_READY}" = "1" || (echo "Production image build blocked: set RETAIA_BUILD_V1_READY=1 after V1 mark." >&2; exit 1)
+
+WORKDIR /var/www/html
+
+ENV APP_ENV=prod
+ENV APP_DEBUG=0
+
+COPY composer.json composer.lock symfony.lock ./
+RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --no-scripts
+
+COPY . .
+
+RUN rm -rf var/cache/* var/log/* \
+    && mkdir -p var/cache var/log \
+    && chown -R www-data:www-data var
+
+EXPOSE 9000
+CMD ["php-fpm", "-F"]
