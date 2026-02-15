@@ -42,6 +42,7 @@ services:
     App\Application\AppPolicy\Port\AppFeatureGovernanceGateway: '@App\Infrastructure\AppPolicy\AppFeatureGovernanceGateway'
     App\Application\Auth\Port\AgentActorGateway: '@App\Infrastructure\Auth\AgentActorGateway'
     App\Application\Derived\Port\DerivedGateway: '@App\Infrastructure\Derived\DerivedGateway'
+    App\Application\Workflow\Port\WorkflowGateway: '@App\Infrastructure\Workflow\WorkflowGateway'
     App\Ingest\Port\FilePollerInterface: '@App\Ingest\Service\FilesystemFilePoller'
     App\Ingest\Port\ScanStateStoreInterface: '@App\Ingest\Repository\ScanStateStore'
 
@@ -53,7 +54,7 @@ services:
             string $featureFlagsContractVersion: '%app.feature_flags.contract.latest_version%'
             array $acceptedFeatureFlagsContractVersions: '%app.feature_flags.contract.accepted_versions%'
 
-    App\Controller\Api\WorkflowController:
+    App\Application\Workflow\CheckBulkDecisionsEnabledHandler:
         bind:
             bool $bulkDecisionsEnabled: '%app.features.decisions.bulk%'
 
