@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Functional;
 
+use App\Auth\AuthClientProvisioningService;
 use App\Tests\Support\FixtureUsers;
 use Doctrine\DBAL\Connection;
 use GuzzleHttp\Client;
@@ -34,6 +35,7 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
         self::assertSame(200, $login['status']);
         self::assertSame('Bearer', $login['json']['token_type'] ?? null);
         self::assertIsString($login['json']['access_token'] ?? null);
+        self::assertSame('', $login['response']->getHeaderLine('Set-Cookie'));
 
         $token = (string) $login['json']['access_token'];
         self::assertNotSame('', $token);
@@ -59,6 +61,57 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
         self::assertSame('UNAUTHORIZED', $meAfterLogout['json']['code'] ?? null);
     }
 
+    public function testSpecLoginWithSameClientIdRevokesPreviousToken(): void
+    {
+        $client = $this->createGuzzleClient();
+        $payload = [
+            'email' => FixtureUsers::ADMIN_EMAIL,
+            'password' => FixtureUsers::DEFAULT_PASSWORD,
+            'client_id' => 'interactive-e2e-client',
+            'client_kind' => 'AGENT',
+        ];
+
+        $firstLogin = $this->requestJson($client, 'POST', '/api/v1/auth/login', $payload);
+        self::assertSame(200, $firstLogin['status']);
+        $firstToken = (string) ($firstLogin['json']['access_token'] ?? '');
+        self::assertNotSame('', $firstToken);
+
+        $secondLogin = $this->requestJson($client, 'POST', '/api/v1/auth/login', $payload);
+        self::assertSame(200, $secondLogin['status']);
+        $secondToken = (string) ($secondLogin['json']['access_token'] ?? '');
+        self::assertNotSame('', $secondToken);
+        self::assertNotSame($firstToken, $secondToken);
+
+        $meWithFirstToken = $this->requestJson($client, 'GET', '/api/v1/auth/me', null, [
+            'Authorization' => 'Bearer '.$firstToken,
+        ]);
+        self::assertSame(401, $meWithFirstToken['status']);
+        self::assertSame('UNAUTHORIZED', $meWithFirstToken['json']['code'] ?? null);
+
+        $meWithSecondToken = $this->requestJson($client, 'GET', '/api/v1/auth/me', null, [
+            'Authorization' => 'Bearer '.$secondToken,
+        ]);
+        self::assertSame(200, $meWithSecondToken['status']);
+        self::assertSame(FixtureUsers::ADMIN_EMAIL, $meWithSecondToken['json']['email'] ?? null);
+    }
+
+    public function testSpecAuthEndpointsRejectSessionCookieWithoutBearer(): void
+    {
+        $client = $this->createGuzzleClient();
+
+        $meWithCookie = $this->requestJson($client, 'GET', '/api/v1/auth/me', null, [
+            'Cookie' => 'PHPSESSID=legacy-session-cookie',
+        ]);
+        self::assertSame(401, $meWithCookie['status']);
+        self::assertSame('UNAUTHORIZED', $meWithCookie['json']['code'] ?? null);
+
+        $logoutWithCookie = $this->requestJson($client, 'POST', '/api/v1/auth/logout', null, [
+            'Cookie' => 'PHPSESSID=legacy-session-cookie',
+        ]);
+        self::assertSame(401, $logoutWithCookie['status']);
+        self::assertSame('UNAUTHORIZED', $logoutWithCookie['json']['code'] ?? null);
+    }
+
     public function testSpecClientTokenRejectsUiRust(): void
     {
         $client = $this->createGuzzleClient();
@@ -71,6 +124,39 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
 
         self::assertSame(403, $response['status']);
         self::assertSame('FORBIDDEN_ACTOR', $response['json']['code'] ?? null);
+    }
+
+    public function testSpecClientTokenMintRevokesPreviousTokenForSameClient(): void
+    {
+        $client = $this->createGuzzleClient();
+        $credentials = $this->provisionTechnicalClient('AGENT');
+        $payload = [
+            'client_id' => $credentials['client_id'],
+            'client_kind' => 'AGENT',
+            'secret_key' => $credentials['secret_key'],
+        ];
+
+        $firstMint = $this->requestJson($client, 'POST', '/api/v1/auth/clients/token', $payload);
+        self::assertSame(200, $firstMint['status']);
+        $firstToken = (string) ($firstMint['json']['access_token'] ?? '');
+        self::assertNotSame('', $firstToken);
+
+        $secondMint = $this->requestJson($client, 'POST', '/api/v1/auth/clients/token', $payload);
+        self::assertSame(200, $secondMint['status']);
+        $secondToken = (string) ($secondMint['json']['access_token'] ?? '');
+        self::assertNotSame('', $secondToken);
+        self::assertNotSame($firstToken, $secondToken);
+
+        $policyWithFirstToken = $this->requestJson($client, 'GET', '/api/v1/app/policy', null, [
+            'Authorization' => 'Bearer '.$firstToken,
+        ]);
+        self::assertSame(401, $policyWithFirstToken['status']);
+        self::assertSame('UNAUTHORIZED', $policyWithFirstToken['json']['code'] ?? null);
+
+        $policyWithSecondToken = $this->requestJson($client, 'GET', '/api/v1/app/policy', null, [
+            'Authorization' => 'Bearer '.$secondToken,
+        ]);
+        self::assertSame(200, $policyWithSecondToken['status']);
     }
 
     public function testSpecDeviceFlowIsStatusDrivenAndCancelable(): void
@@ -262,6 +348,21 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
             'handler' => HandlerStack::create($handler),
             'http_errors' => false,
         ]);
+    }
+
+    /**
+     * @return array{client_id: string, secret_key: string}
+     */
+    private function provisionTechnicalClient(string $clientKind): array
+    {
+        /** @var AuthClientProvisioningService $provisioning */
+        $provisioning = static::getContainer()->get(AuthClientProvisioningService::class);
+        $credentials = $provisioning->provisionClient($clientKind);
+        self::assertIsArray($credentials);
+        self::assertIsString($credentials['client_id'] ?? null);
+        self::assertIsString($credentials['secret_key'] ?? null);
+
+        return $credentials;
     }
 
     /**
