@@ -213,6 +213,7 @@ GitHub Actions workflow:
 See details in:
 
 - `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/GITHUB-WORKFLOWS.md`
+- `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/RELEASE-OPS-RUNBOOK.md`
 
 ## Sentry (Prod Probe)
 
