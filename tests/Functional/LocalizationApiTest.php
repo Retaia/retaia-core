@@ -48,6 +48,10 @@ final class LocalizationApiTest extends WebTestCase
         ]);
 
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        $token = $payload['access_token'] ?? null;
+        self::assertIsString($token);
+        $client->setServerParameter('HTTP_AUTHORIZATION', 'Bearer '.$token);
     }
 }
-

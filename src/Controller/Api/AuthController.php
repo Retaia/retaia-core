@@ -27,6 +27,7 @@ use App\Application\AuthClient\PollDeviceFlowEndpointResult;
 use App\Application\AuthClient\RevokeClientTokenEndpointResult;
 use App\Application\AuthClient\RotateClientSecretEndpointResult;
 use App\Application\AuthClient\StartDeviceFlowEndpointResult;
+use App\Auth\UserAccessTokenService;
 use App\Observability\Repository\MetricEventRepository;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -48,6 +49,7 @@ final class AuthController
         private MintClientTokenEndpointHandler $mintClientTokenEndpointHandler,
         private AuthClientAdminEndpointsHandler $authClientAdminEndpointsHandler,
         private AuthClientDeviceFlowEndpointsHandler $authClientDeviceFlowEndpointsHandler,
+        private UserAccessTokenService $userAccessTokenService,
         private MetricEventRepository $metrics,
         private LoggerInterface $logger,
     ) {
@@ -60,9 +62,25 @@ final class AuthController
     }
 
     #[Route('/logout', name: 'api_auth_logout', methods: ['POST'])]
-    public function logout(): JsonResponse
+    public function logout(Request $request): JsonResponse
     {
-        throw new \LogicException('This endpoint is handled by the firewall logout.');
+        $authorization = (string) $request->headers->get('Authorization', '');
+        if (!str_starts_with($authorization, 'Bearer ')) {
+            return new JsonResponse(
+                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
+                Response::HTTP_UNAUTHORIZED
+            );
+        }
+
+        $accessToken = trim(substr($authorization, 7));
+        if ($accessToken === '' || !$this->userAccessTokenService->revoke($accessToken)) {
+            return new JsonResponse(
+                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
+                Response::HTTP_UNAUTHORIZED
+            );
+        }
+
+        return new JsonResponse(['authenticated' => false], Response::HTTP_OK);
     }
 
     #[Route('/me', name: 'api_auth_me', methods: ['GET'])]
