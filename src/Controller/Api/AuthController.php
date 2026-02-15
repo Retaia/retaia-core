@@ -11,6 +11,7 @@ use App\Application\Auth\AuthMeEndpointResult;
 use App\Application\Auth\TwoFactorSetupEndpointResult;
 use App\Application\Auth\TwoFactorEnableEndpointResult;
 use App\Application\Auth\TwoFactorDisableEndpointResult;
+use App\Application\Auth\TwoFactorRecoveryCodesEndpointResult;
 use App\Application\Auth\GetMyFeaturesEndpointResult;
 use App\Application\Auth\PatchMyFeaturesEndpointResult;
 use App\Application\Auth\AdminConfirmEmailVerificationEndpointResult;
@@ -156,7 +157,10 @@ final class AuthController
             );
         }
 
-        return new JsonResponse(['mfa_enabled' => true], Response::HTTP_OK);
+        return new JsonResponse([
+            'mfa_enabled' => true,
+            'recovery_codes' => $result->recoveryCodes(),
+        ], Response::HTTP_OK);
     }
 
     #[Route('/2fa/disable', name: 'api_auth_2fa_disable', methods: ['POST'])]
@@ -189,6 +193,28 @@ final class AuthController
         }
 
         return new JsonResponse(['mfa_enabled' => false], Response::HTTP_OK);
+    }
+
+    #[Route('/2fa/recovery-codes/regenerate', name: 'api_auth_2fa_recovery_codes_regenerate', methods: ['POST'])]
+    public function regenerateTwoFactorRecoveryCodes(): JsonResponse
+    {
+        $result = $this->authSelfServiceEndpointsHandler->regenerateTwoFactorRecoveryCodes();
+        if ($result->status() === TwoFactorRecoveryCodesEndpointResult::STATUS_UNAUTHORIZED) {
+            return new JsonResponse(
+                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
+                Response::HTTP_UNAUTHORIZED
+            );
+        }
+        if ($result->status() === TwoFactorRecoveryCodesEndpointResult::STATUS_NOT_ENABLED) {
+            return new JsonResponse(
+                ['code' => 'MFA_NOT_ENABLED', 'message' => $this->translator->trans('auth.error.mfa_not_enabled')],
+                Response::HTTP_CONFLICT
+            );
+        }
+
+        return new JsonResponse([
+            'recovery_codes' => $result->recoveryCodes(),
+        ], Response::HTTP_OK);
     }
 
     #[Route('/me/features', name: 'api_auth_me_features_get', methods: ['GET'])]

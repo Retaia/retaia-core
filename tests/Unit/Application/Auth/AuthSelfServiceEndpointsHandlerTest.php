@@ -11,8 +11,10 @@ use App\Application\Auth\GetMyFeaturesEndpointResult;
 use App\Application\Auth\GetMyFeaturesHandler;
 use App\Application\Auth\PatchMyFeaturesEndpointResult;
 use App\Application\Auth\PatchMyFeaturesHandler;
+use App\Application\Auth\RegenerateTwoFactorRecoveryCodesHandler;
 use App\Application\Auth\ResolveAuthenticatedUserHandler;
 use App\Application\Auth\TwoFactorEnableEndpointResult;
+use App\Application\Auth\TwoFactorRecoveryCodesEndpointResult;
 use App\Application\Auth\TwoFactorSetupEndpointResult;
 use App\Application\Auth\SetupTwoFactorHandler;
 use App\Application\Auth\Port\AuthenticatedUserGateway;
@@ -98,6 +100,33 @@ final class AuthSelfServiceEndpointsHandlerTest extends TestCase
         self::assertSame(TwoFactorEnableEndpointResult::STATUS_INVALID_CODE, $result->status());
     }
 
+    public function testRegenerateRecoveryCodesReturnsUnauthorizedWhenNotAuthenticated(): void
+    {
+        $handler = $this->buildHandler(null);
+
+        $result = $handler->regenerateTwoFactorRecoveryCodes();
+
+        self::assertSame(TwoFactorRecoveryCodesEndpointResult::STATUS_UNAUTHORIZED, $result->status());
+    }
+
+    public function testRegenerateRecoveryCodesReturnsNotEnabledWhenGatewayThrows(): void
+    {
+        $twoFactorGateway = $this->createMock(TwoFactorGateway::class);
+        $twoFactorGateway->expects(self::once())
+            ->method('regenerateRecoveryCodes')
+            ->with('u_7')
+            ->willThrowException(new \RuntimeException('MFA_NOT_ENABLED'));
+
+        $handler = $this->buildHandler(
+            ['id' => 'u_7', 'email' => 'user@retaia.local', 'roles' => ['ROLE_USER']],
+            $twoFactorGateway
+        );
+
+        $result = $handler->regenerateTwoFactorRecoveryCodes();
+
+        self::assertSame(TwoFactorRecoveryCodesEndpointResult::STATUS_NOT_ENABLED, $result->status());
+    }
+
     public function testGetMyFeaturesReturnsUnauthorizedWhenNotAuthenticated(): void
     {
         $handler = $this->buildHandler(null);
@@ -163,6 +192,7 @@ final class AuthSelfServiceEndpointsHandlerTest extends TestCase
             new SetupTwoFactorHandler($twoFactorGateway),
             new EnableTwoFactorHandler($twoFactorGateway),
             new DisableTwoFactorHandler($twoFactorGateway),
+            new RegenerateTwoFactorRecoveryCodesHandler($twoFactorGateway),
             new GetMyFeaturesHandler($featureGateway),
             new PatchMyFeaturesHandler($featureGateway, new GetMyFeaturesHandler($featureGateway)),
         );

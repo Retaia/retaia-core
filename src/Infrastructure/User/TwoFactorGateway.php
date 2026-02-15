@@ -26,4 +26,9 @@ final class TwoFactorGateway implements TwoFactorGatewayPort
     {
         return $this->service->disable($userId, $otpCode);
     }
+
+    public function regenerateRecoveryCodes(string $userId): array
+    {
+        return $this->service->regenerateRecoveryCodes($userId);
+    }
 }

@@ -11,11 +11,21 @@ final class EnableTwoFactorResult
 
     public function __construct(
         private string $status,
+        /** @var list<string> */
+        private array $recoveryCodes = [],
     ) {
     }
 
     public function status(): string
     {
         return $this->status;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function recoveryCodes(): array
+    {
+        return $this->recoveryCodes;
     }
 }

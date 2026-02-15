@@ -82,13 +82,19 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
                 $payload = [];
             }
             $otpCode = trim((string) ($payload['otp_code'] ?? ''));
-            if ($otpCode === '') {
+            $recoveryCode = trim((string) ($payload['recovery_code'] ?? ''));
+            if ($otpCode === '' && $recoveryCode === '') {
                 return new JsonResponse(
                     ['code' => 'MFA_REQUIRED', 'message' => $this->translator->trans('auth.error.mfa_required')],
                     Response::HTTP_UNAUTHORIZED
                 );
             }
-            if (!$this->twoFactorService->verifyLoginOtp($user->getId(), $otpCode)) {
+
+            $secondFactorOk = $otpCode !== ''
+                ? $this->twoFactorService->verifyLoginOtp($user->getId(), $otpCode)
+                : $this->twoFactorService->consumeRecoveryCode($user->getId(), $recoveryCode);
+
+            if (!$secondFactorOk) {
                 return new JsonResponse(
                     ['code' => 'INVALID_2FA_CODE', 'message' => $this->translator->trans('auth.error.invalid_2fa_code')],
                     Response::HTTP_UNAUTHORIZED
