@@ -43,6 +43,7 @@ services:
     App\Application\Auth\Port\AgentActorGateway: '@App\Infrastructure\Auth\AgentActorGateway'
     App\Application\Derived\Port\DerivedGateway: '@App\Infrastructure\Derived\DerivedGateway'
     App\Application\Workflow\Port\WorkflowGateway: '@App\Infrastructure\Workflow\WorkflowGateway'
+    App\Application\Job\Port\JobGateway: '@App\Infrastructure\Job\JobGateway'
     App\Ingest\Port\FilePollerInterface: '@App\Ingest\Service\FilesystemFilePoller'
     App\Ingest\Port\ScanStateStoreInterface: '@App\Ingest\Repository\ScanStateStore'
 
@@ -58,13 +59,13 @@ services:
         bind:
             bool $bulkDecisionsEnabled: '%app.features.decisions.bulk%'
 
+    App\Application\Job\CheckSuggestTagsSubmitScopeHandler:
+        bind:
+            bool $featureSuggestTagsEnabled: '%app.features.ai.suggest_tags%'
+
     App\Controller\Api\AssetController:
         bind:
             bool $featureSuggestedTagsFiltersEnabled: '%app.features.ai.suggested_tags_filters%'
-
-    App\Controller\Api\JobController:
-        bind:
-            bool $featureSuggestTagsEnabled: '%app.features.ai.suggest_tags%'
 
     App\Feature\FeatureGovernanceService:
         bind:
