@@ -59,12 +59,13 @@ final class TwoFactorService
     public function enable(string $userId, string $otpCode): bool
     {
         $state = $this->state($userId);
+        if ((bool) ($state['enabled'] ?? false)) {
+            throw new \RuntimeException('MFA_ALREADY_ENABLED');
+        }
+
         $pendingSecret = $this->resolveSecretFromState($state, 'pending_secret_encrypted', 'pending_secret');
         if ($pendingSecret === '') {
             throw new \RuntimeException('MFA_SETUP_REQUIRED');
-        }
-        if ((bool) ($state['enabled'] ?? false)) {
-            throw new \RuntimeException('MFA_ALREADY_ENABLED');
         }
         if (!$this->isValidOtp($pendingSecret, $otpCode)) {
             return false;

@@ -650,6 +650,181 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
         }
     }
 
+    public function testSpecTwoFactorEnableDisableValidationAndConflictStatuses(): void
+    {
+        $client = $this->createGuzzleClient();
+        $adminToken = $this->loginAdminAndGetBearerToken($client);
+
+        $disableWhenNotEnabled = $this->requestJson($client, 'POST', '/api/v1/auth/2fa/disable', [
+            'otp_code' => '000000',
+        ], [
+            'Authorization' => 'Bearer '.$adminToken,
+        ]);
+        self::assertSame(409, $disableWhenNotEnabled['status']);
+        self::assertSame('MFA_NOT_ENABLED', $disableWhenNotEnabled['json']['code'] ?? null);
+
+        $setup = $this->requestJson($client, 'POST', '/api/v1/auth/2fa/setup', null, [
+            'Authorization' => 'Bearer '.$adminToken,
+        ]);
+        self::assertSame(200, $setup['status']);
+        $secret = (string) ($setup['json']['secret'] ?? '');
+        self::assertNotSame('', $secret);
+
+        $enableMissingOtp = $this->requestJson($client, 'POST', '/api/v1/auth/2fa/enable', [], [
+            'Authorization' => 'Bearer '.$adminToken,
+        ]);
+        self::assertSame(422, $enableMissingOtp['status']);
+        self::assertSame('VALIDATION_FAILED', $enableMissingOtp['json']['code'] ?? null);
+
+        $enable = $this->requestJson($client, 'POST', '/api/v1/auth/2fa/enable', [
+            'otp_code' => $this->generateOtpCode($secret),
+        ], [
+            'Authorization' => 'Bearer '.$adminToken,
+        ]);
+        self::assertSame(200, $enable['status']);
+        self::assertSame(true, $enable['json']['mfa_enabled'] ?? null);
+
+        $setupAgain = $this->requestJson($client, 'POST', '/api/v1/auth/2fa/setup', null, [
+            'Authorization' => 'Bearer '.$adminToken,
+        ]);
+        self::assertSame(409, $setupAgain['status']);
+        self::assertSame('MFA_ALREADY_ENABLED', $setupAgain['json']['code'] ?? null);
+
+        $enableAgain = $this->requestJson($client, 'POST', '/api/v1/auth/2fa/enable', [
+            'otp_code' => $this->generateOtpCode($secret),
+        ], [
+            'Authorization' => 'Bearer '.$adminToken,
+        ]);
+        self::assertSame(409, $enableAgain['status']);
+        self::assertSame('MFA_ALREADY_ENABLED', $enableAgain['json']['code'] ?? null);
+
+        $disableMissingOtp = $this->requestJson($client, 'POST', '/api/v1/auth/2fa/disable', [], [
+            'Authorization' => 'Bearer '.$adminToken,
+        ]);
+        self::assertSame(422, $disableMissingOtp['status']);
+        self::assertSame('VALIDATION_FAILED', $disableMissingOtp['json']['code'] ?? null);
+
+        $disableInvalidOtp = $this->requestJson($client, 'POST', '/api/v1/auth/2fa/disable', [
+            'otp_code' => '000000',
+        ], [
+            'Authorization' => 'Bearer '.$adminToken,
+        ]);
+        self::assertSame(400, $disableInvalidOtp['status']);
+        self::assertSame('INVALID_2FA_CODE', $disableInvalidOtp['json']['code'] ?? null);
+
+        $disable = $this->requestJson($client, 'POST', '/api/v1/auth/2fa/disable', [
+            'otp_code' => $this->generateOtpCode($secret),
+        ], [
+            'Authorization' => 'Bearer '.$adminToken,
+        ]);
+        self::assertSame(200, $disable['status']);
+        self::assertSame(false, $disable['json']['mfa_enabled'] ?? null);
+    }
+
+    public function testSpecVerifyEmailAdminConfirmForbidsNonAdminAndValidatesPayload(): void
+    {
+        $client = $this->createGuzzleClient();
+        $memberEmail = sprintf('e2e-member-%s@retaia.local', bin2hex(random_bytes(4)));
+        $this->insertUser($memberEmail, 'Change-me1!', ['ROLE_USER'], true);
+
+        $memberToken = $this->loginWithCredentialsAndGetBearerToken($client, $memberEmail, 'Change-me1!');
+        $forbiddenActor = $this->requestJson($client, 'POST', '/api/v1/auth/verify-email/admin-confirm', [
+            'email' => FixtureUsers::ADMIN_EMAIL,
+        ], [
+            'Authorization' => 'Bearer '.$memberToken,
+        ]);
+        self::assertSame(403, $forbiddenActor['status']);
+        self::assertSame('FORBIDDEN_ACTOR', $forbiddenActor['json']['code'] ?? null);
+
+        $adminToken = $this->loginAdminAndGetBearerToken($client);
+        $missingEmail = $this->requestJson($client, 'POST', '/api/v1/auth/verify-email/admin-confirm', [], [
+            'Authorization' => 'Bearer '.$adminToken,
+        ]);
+        self::assertSame(422, $missingEmail['status']);
+        self::assertSame('VALIDATION_FAILED', $missingEmail['json']['code'] ?? null);
+
+        $unknownUser = $this->requestJson($client, 'POST', '/api/v1/auth/verify-email/admin-confirm', [
+            'email' => 'unknown@retaia.local',
+        ], [
+            'Authorization' => 'Bearer '.$adminToken,
+        ]);
+        self::assertSame(404, $unknownUser['status']);
+        self::assertSame('USER_NOT_FOUND', $unknownUser['json']['code'] ?? null);
+    }
+
+    public function testSpecClientAdminEndpointsRequireAdminBearerAndValidClientId(): void
+    {
+        $client = $this->createGuzzleClient();
+
+        $rotateUnauthorized = $this->requestJson($client, 'POST', '/api/v1/auth/clients/agent-default/rotate-secret');
+        self::assertSame(401, $rotateUnauthorized['status']);
+        self::assertSame('UNAUTHORIZED', $rotateUnauthorized['json']['code'] ?? null);
+
+        $memberEmail = sprintf('e2e-client-member-%s@retaia.local', bin2hex(random_bytes(4)));
+        $this->insertUser($memberEmail, 'Change-me1!', ['ROLE_USER'], true);
+
+        $memberToken = $this->loginWithCredentialsAndGetBearerToken($client, $memberEmail, 'Change-me1!');
+        $rotateForbidden = $this->requestJson($client, 'POST', '/api/v1/auth/clients/agent-default/rotate-secret', null, [
+            'Authorization' => 'Bearer '.$memberToken,
+        ]);
+        self::assertSame(403, $rotateForbidden['status']);
+        self::assertSame('FORBIDDEN_ACTOR', $rotateForbidden['json']['code'] ?? null);
+
+        $revokeForbidden = $this->requestJson($client, 'POST', '/api/v1/auth/clients/agent-default/revoke-token', null, [
+            'Authorization' => 'Bearer '.$memberToken,
+        ]);
+        self::assertSame(403, $revokeForbidden['status']);
+        self::assertSame('FORBIDDEN_ACTOR', $revokeForbidden['json']['code'] ?? null);
+
+        $adminToken = $this->loginAdminAndGetBearerToken($client);
+        $invalidClientId = rawurlencode('bad client id');
+
+        $rotateInvalidClient = $this->requestJson(
+            $client,
+            'POST',
+            sprintf('/api/v1/auth/clients/%s/rotate-secret', $invalidClientId),
+            null,
+            ['Authorization' => 'Bearer '.$adminToken]
+        );
+        self::assertSame(422, $rotateInvalidClient['status']);
+        self::assertSame('VALIDATION_FAILED', $rotateInvalidClient['json']['code'] ?? null);
+
+        $revokeInvalidClient = $this->requestJson(
+            $client,
+            'POST',
+            sprintf('/api/v1/auth/clients/%s/revoke-token', $invalidClientId),
+            null,
+            ['Authorization' => 'Bearer '.$adminToken]
+        );
+        self::assertSame(422, $revokeInvalidClient['status']);
+        self::assertSame('VALIDATION_FAILED', $revokeInvalidClient['json']['code'] ?? null);
+    }
+
+    public function testSpecDeviceStartValidatesPayloadAndMcpScopeFlag(): void
+    {
+        $client = $this->createGuzzleClient();
+
+        $missingClientKind = $this->requestJson($client, 'POST', '/api/v1/auth/clients/device/start', []);
+        self::assertSame(422, $missingClientKind['status']);
+        self::assertSame('VALIDATION_FAILED', $missingClientKind['json']['code'] ?? null);
+
+        $adminToken = $this->loginAdminAndGetBearerToken($client);
+        $disableAi = $this->requestJson($client, 'PATCH', '/api/v1/app/features', [
+            'app_feature_enabled' => [
+                'features.ai' => false,
+            ],
+        ], [
+            'Authorization' => 'Bearer '.$adminToken,
+        ]);
+        self::assertSame(200, $disableAi['status']);
+
+        $mcpForbiddenByScope = $this->requestJson($client, 'POST', '/api/v1/auth/clients/device/start', [
+            'client_kind' => 'MCP',
+        ]);
+        self::assertSame(403, $mcpForbiddenByScope['status']);
+        self::assertSame('FORBIDDEN_SCOPE', $mcpForbiddenByScope['json']['code'] ?? null);
+    }
+
     private function createGuzzleClient(): Client
     {
         static::bootKernel();
