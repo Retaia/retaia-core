@@ -464,6 +464,17 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - `POST /assets/{uuid}/purge/preview`
   - `POST /assets/{uuid}/purge`
 
+## Quarante-sixième lot (job endpoints handler)
+
+- extraction de l'orchestration des endpoints `/jobs/*` en couche Application:
+  - `JobEndpointsHandler`
+- `JobController` délègue désormais:
+  - `GET /jobs`
+  - `POST /jobs/{jobId}/claim`
+  - `POST /jobs/{jobId}/heartbeat`
+  - `POST /jobs/{jobId}/submit`
+  - `POST /jobs/{jobId}/fail`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
