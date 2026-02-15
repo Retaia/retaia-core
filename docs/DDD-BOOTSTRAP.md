@@ -294,6 +294,13 @@ Poser un premier découpage DDD sans changer le contrat API v1.
 - `JobController` réutilise:
   - `ResolveAuthenticatedUserHandler`
 
+## Trente-deuxième lot (device controller auth actor)
+
+- `DeviceController` réutilise:
+  - `ResolveAuthenticatedUserHandler`
+- suppression de la dépendance directe à `Security` pour le endpoint:
+  - `POST /device`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
