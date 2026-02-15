@@ -1,4 +1,10 @@
 #!/usr/bin/env sh
 set -eu
 
+branch="$(git symbolic-ref --quiet --short HEAD || true)"
+if [ "${branch}" = "master" ]; then
+  echo "Direct commits on 'master' are forbidden. Create a feature branch first (e.g. codex/<name>)." >&2
+  exit 1
+fi
+
 composer test:quality
