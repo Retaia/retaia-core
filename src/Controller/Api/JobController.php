@@ -2,17 +2,8 @@
 
 namespace App\Controller\Api;
 
-use App\Application\Auth\ResolveAuthenticatedUserHandler;
-use App\Application\Auth\ResolveAuthenticatedUserResult;
-use App\Application\Job\ClaimJobHandler;
-use App\Application\Job\ClaimJobResult;
-use App\Application\Job\FailJobHandler;
-use App\Application\Job\FailJobResult;
-use App\Application\Job\HeartbeatJobHandler;
-use App\Application\Job\HeartbeatJobResult;
-use App\Application\Job\ListClaimableJobsHandler;
-use App\Application\Job\SubmitJobHandler;
-use App\Application\Job\SubmitJobResult;
+use App\Application\Job\JobEndpointResult;
+use App\Application\Job\JobEndpointsHandler;
 use App\Api\Service\IdempotencyService;
 use App\Job\Job;
 use Psr\Log\LoggerInterface;
@@ -27,12 +18,7 @@ final class JobController
 {
     public function __construct(
         private IdempotencyService $idempotency,
-        private ListClaimableJobsHandler $listClaimableJobsHandler,
-        private ClaimJobHandler $claimJobHandler,
-        private HeartbeatJobHandler $heartbeatJobHandler,
-        private SubmitJobHandler $submitJobHandler,
-        private FailJobHandler $failJobHandler,
-        private ResolveAuthenticatedUserHandler $resolveAuthenticatedUserHandler,
+        private JobEndpointsHandler $jobEndpointsHandler,
         private LoggerInterface $logger,
         private TranslatorInterface $translator,
     ) {
@@ -43,26 +29,25 @@ final class JobController
     {
         $limit = max(1, (int) $request->query->get('limit', 20));
 
-        $jobs = $this->listClaimableJobsHandler->handle($limit);
+        $result = $this->jobEndpointsHandler->list($limit);
+        $items = (array) ($result->payload()['items'] ?? []);
         $this->logger->info('jobs.list_claimable', [
-            'agent_id' => $this->actorId(),
+            'agent_id' => $result->actorId() ?? 'anonymous',
             'limit' => $limit,
-            'count' => count($jobs),
+            'count' => count($items),
         ]);
 
-        return new JsonResponse([
-            'items' => $jobs,
-        ], Response::HTTP_OK);
+        return new JsonResponse($result->payload() ?? ['items' => []], Response::HTTP_OK);
     }
 
     #[Route('/{jobId}/claim', name: 'api_jobs_claim', methods: ['POST'])]
     public function claim(string $jobId): JsonResponse
     {
-        $result = $this->claimJobHandler->handle($jobId, $this->actorId());
-        if ($result->status() === ClaimJobResult::STATUS_STATE_CONFLICT) {
+        $result = $this->jobEndpointsHandler->claim($jobId);
+        if ($result->status() === JobEndpointResult::STATUS_STATE_CONFLICT) {
             $this->logger->warning('jobs.claim.conflict', [
                 'job_id' => $jobId,
-                'agent_id' => $this->actorId(),
+                'agent_id' => $result->actorId() ?? 'anonymous',
             ]);
 
             return new JsonResponse([
@@ -86,19 +71,15 @@ final class JobController
     #[Route('/{jobId}/heartbeat', name: 'api_jobs_heartbeat', methods: ['POST'])]
     public function heartbeat(string $jobId, Request $request): JsonResponse
     {
-        $lockToken = trim((string) ($this->payload($request)['lock_token'] ?? ''));
-        if ($lockToken === '') {
+        $result = $this->jobEndpointsHandler->heartbeat($jobId, $this->payload($request));
+        if ($result->status() === JobEndpointResult::STATUS_LOCK_REQUIRED) {
             return $this->lockRequiredResponse();
         }
-
-        $result = $this->heartbeatJobHandler->handle($jobId, $lockToken);
-        if ($result->status() !== HeartbeatJobResult::STATUS_HEARTBEATED) {
-            $conflictCode = $result->status() === HeartbeatJobResult::STATUS_STALE_LOCK_TOKEN
-                ? 'STALE_LOCK_TOKEN'
-                : 'LOCK_INVALID';
+        if ($result->status() === JobEndpointResult::STATUS_LOCK_CONFLICT) {
+            $conflictCode = $result->conflictCode() ?? 'LOCK_INVALID';
             $this->logger->warning('jobs.heartbeat.conflict', [
                 'job_id' => $jobId,
-                'agent_id' => $this->actorId(),
+                'agent_id' => $result->actorId() ?? 'anonymous',
                 'code' => $conflictCode,
             ]);
 
@@ -111,36 +92,25 @@ final class JobController
         }
         $this->logger->info('jobs.heartbeat.succeeded', $this->jobContext($job));
 
-        return new JsonResponse([
-            'locked_until' => $job->lockedUntil?->format(DATE_ATOM),
-        ], Response::HTTP_OK);
+        return new JsonResponse($result->payload() ?? ['locked_until' => $job->lockedUntil?->format(DATE_ATOM)], Response::HTTP_OK);
     }
 
     #[Route('/{jobId}/submit', name: 'api_jobs_submit', methods: ['POST'])]
     public function submit(string $jobId, Request $request): JsonResponse
     {
         return $this->idempotency->execute($request, $this->actorId(), function () use ($jobId, $request): JsonResponse {
-            $payload = $this->payload($request);
-            $lockToken = trim((string) ($payload['lock_token'] ?? ''));
-            if ($lockToken === '') {
+            $submission = $this->jobEndpointsHandler->submit($jobId, $this->payload($request));
+            if ($submission->status() === JobEndpointResult::STATUS_LOCK_REQUIRED) {
                 return $this->lockRequiredResponse();
             }
-
-            $result = $payload['result'] ?? [];
-            if (!is_array($result)) {
-                $result = [];
-            }
-            $submission = $this->submitJobHandler->handle($jobId, $lockToken, $result, $this->actorRoles());
-            if ($submission->status() === SubmitJobResult::STATUS_FORBIDDEN_SCOPE) {
+            if ($submission->status() === JobEndpointResult::STATUS_FORBIDDEN_SCOPE) {
                 return $this->forbiddenScope();
             }
-            if ($submission->status() !== SubmitJobResult::STATUS_SUBMITTED) {
-                $conflictCode = $submission->status() === SubmitJobResult::STATUS_STALE_LOCK_TOKEN
-                    ? 'STALE_LOCK_TOKEN'
-                    : 'LOCK_INVALID';
+            if ($submission->status() === JobEndpointResult::STATUS_LOCK_CONFLICT) {
+                $conflictCode = $submission->conflictCode() ?? 'LOCK_INVALID';
                 $this->logger->warning('jobs.submit.conflict', [
                     'job_id' => $jobId,
-                    'agent_id' => $this->actorId(),
+                    'agent_id' => $submission->actorId() ?? 'anonymous',
                     'code' => $conflictCode,
                 ]);
 
@@ -161,33 +131,23 @@ final class JobController
     public function fail(string $jobId, Request $request): JsonResponse
     {
         return $this->idempotency->execute($request, $this->actorId(), function () use ($jobId, $request): JsonResponse {
-            $payload = $this->payload($request);
-            $lockToken = trim((string) ($payload['lock_token'] ?? ''));
-            $errorCode = trim((string) ($payload['error_code'] ?? ''));
-            $message = trim((string) ($payload['message'] ?? ''));
-            $retryable = (bool) ($payload['retryable'] ?? false);
-
-            if ($lockToken === '') {
+            $failure = $this->jobEndpointsHandler->fail($jobId, $this->payload($request));
+            if ($failure->status() === JobEndpointResult::STATUS_LOCK_REQUIRED) {
                 return $this->lockRequiredResponse();
             }
-
-            if ($errorCode === '' || $message === '') {
+            if ($failure->status() === JobEndpointResult::STATUS_VALIDATION_FAILED) {
                 return new JsonResponse([
                     'code' => 'VALIDATION_FAILED',
                     'message' => 'error_code and message are required',
                 ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
-
-            $failure = $this->failJobHandler->handle($jobId, $lockToken, $retryable, $errorCode, $message);
-            if ($failure->status() !== FailJobResult::STATUS_FAILED) {
-                $conflictCode = $failure->status() === FailJobResult::STATUS_STALE_LOCK_TOKEN
-                    ? 'STALE_LOCK_TOKEN'
-                    : 'LOCK_INVALID';
+            if ($failure->status() === JobEndpointResult::STATUS_LOCK_CONFLICT) {
+                $conflictCode = $failure->conflictCode() ?? 'LOCK_INVALID';
                 $this->logger->warning('jobs.fail.conflict', [
                     'job_id' => $jobId,
-                    'agent_id' => $this->actorId(),
-                    'error_code' => $errorCode,
-                    'retryable' => $retryable,
+                    'agent_id' => $failure->actorId() ?? 'anonymous',
+                    'error_code' => $failure->errorCode() ?? '',
+                    'retryable' => (bool) ($failure->retryable() ?? false),
                     'code' => $conflictCode,
                 ]);
 
@@ -199,8 +159,8 @@ final class JobController
                 return $this->lockConflictResponse('LOCK_INVALID');
             }
             $context = $this->jobContext($job);
-            $context['error_code'] = $errorCode;
-            $context['retryable'] = $retryable;
+            $context['error_code'] = $failure->errorCode() ?? '';
+            $context['retryable'] = (bool) ($failure->retryable() ?? false);
             $this->logger->info('jobs.fail.succeeded', $context);
 
             return new JsonResponse($job->toArray(), Response::HTTP_OK);
@@ -223,25 +183,7 @@ final class JobController
 
     private function actorId(): string
     {
-        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
-        if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
-            return 'anonymous';
-        }
-
-        return (string) $authenticatedUser->id();
-    }
-
-    /**
-     * @return array<int, string>
-     */
-    private function actorRoles(): array
-    {
-        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
-        if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
-            return [];
-        }
-
-        return $authenticatedUser->roles();
+        return $this->jobEndpointsHandler->actorId();
     }
 
     private function forbiddenScope(): JsonResponse
