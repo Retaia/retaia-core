@@ -35,6 +35,7 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
         self::assertIsString($login['json']['access_token'] ?? null);
 
         $token = (string) $login['json']['access_token'];
+        self::assertNotSame('', $token);
 
         $me = $this->requestJson($client, 'GET', '/api/v1/auth/me', null, [
             'Authorization' => 'Bearer '.$token,

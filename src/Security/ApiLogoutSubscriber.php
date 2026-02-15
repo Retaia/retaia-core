@@ -2,6 +2,7 @@
 
 namespace App\Security;
 
+use App\Auth\UserAccessTokenService;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -12,6 +13,7 @@ final class ApiLogoutSubscriber implements EventSubscriberInterface
 {
     public function __construct(
         private LoggerInterface $logger,
+        private UserAccessTokenService $userAccessTokenService,
     ) {
     }
 
@@ -35,6 +37,11 @@ final class ApiLogoutSubscriber implements EventSubscriberInterface
         $this->logger->info('auth.logout', [
             'user_identifier' => $token?->getUserIdentifier(),
         ]);
+
+        $authorization = (string) $event->getRequest()->headers->get('Authorization', '');
+        if (str_starts_with($authorization, 'Bearer ')) {
+            $this->userAccessTokenService->revoke(trim(substr($authorization, 7)));
+        }
 
         $event->setResponse(new JsonResponse(['authenticated' => false], Response::HTTP_OK));
     }

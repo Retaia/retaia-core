@@ -15,6 +15,7 @@ parameters:
     app.password_policy.require_number: true
     app.password_policy.require_special: true
     app.client_token_ttl_seconds: 3600
+    app.user_token_ttl_seconds: 3600
     app.ingest.watch_path: '%env(string:APP_INGEST_WATCH_PATH)%'
     app.features.ai.suggest_tags: '%env(bool:APP_FEATURE_AI_SUGGEST_TAGS)%'
     app.features.ai.suggested_tags_filters: '%env(bool:APP_FEATURE_AI_SUGGESTED_TAGS_FILTERS)%'
