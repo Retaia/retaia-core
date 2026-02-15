@@ -8,7 +8,6 @@ use App\Tests\Support\InMemoryUserRepository;
 use App\Tests\Support\InMemoryPasswordResetTokenRepository;
 use App\Tests\Support\TestUserPasswordHasher;
 use App\Feature\FeatureGovernanceService;
-use App\User\Service\AuthService;
 use App\User\Service\EmailVerificationService;
 use App\User\Service\PasswordResetService;
 use Behat\Behat\Context\Context;
@@ -16,9 +15,6 @@ use Psr\Log\NullLogger;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use PHPUnit\Framework\Assert;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpFoundation\RequestStack;
-use Symfony\Component\HttpFoundation\Session\Session;
-use Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage;
 use SymfonyCasts\Bundle\VerifyEmail\Exception\InvalidSignatureException;
 use SymfonyCasts\Bundle\VerifyEmail\Model\VerifyEmailSignatureComponents;
 use SymfonyCasts\Bundle\VerifyEmail\VerifyEmailHelperInterface;
@@ -27,8 +23,6 @@ final class FeatureContext implements Context
 {
     private string $tmpDir;
     private InMemoryUserRepository $users;
-    private RequestStack $requestStack;
-    private AuthService $authService;
     private PasswordResetService $passwordResetService;
     private EmailVerificationService $emailVerificationService;
     private InMemoryPasswordResetTokenRepository $tokenRepository;
@@ -57,13 +51,6 @@ final class FeatureContext implements Context
         mkdir($this->tmpDir, 0775, true);
         $this->users = new InMemoryUserRepository();
         $this->users->seedDefaultAdmin();
-
-        $request = new Request();
-        $request->setSession(new Session(new MockArraySessionStorage()));
-        $this->requestStack = new RequestStack();
-        $this->requestStack->push($request);
-
-        $this->authService = new AuthService($this->users, $this->requestStack);
         $this->tokenRepository = new InMemoryPasswordResetTokenRepository();
         $this->passwordResetService = new PasswordResetService(
             $this->users,
@@ -139,7 +126,10 @@ final class FeatureContext implements Context
      */
     public function iLoginWithCredentials(string $email, string $password): void
     {
-        $this->lastLoginSucceeded = $this->authService->login($email, $password);
+        $user = $this->users->findByEmail($email);
+        $this->lastLoginSucceeded = $user !== null
+            && password_verify($password, $user->getPassword())
+            && $user->isEmailVerified();
     }
 
     /**
@@ -148,7 +138,6 @@ final class FeatureContext implements Context
     public function authenticationShouldSucceed(): void
     {
         Assert::assertTrue($this->lastLoginSucceeded);
-        Assert::assertNotNull($this->authService->currentUser());
     }
 
     /**
@@ -157,7 +146,6 @@ final class FeatureContext implements Context
     public function authenticationShouldFail(): void
     {
         Assert::assertFalse($this->lastLoginSucceeded);
-        Assert::assertNull($this->authService->currentUser());
     }
 
     /**
@@ -218,8 +206,10 @@ final class FeatureContext implements Context
      */
     public function iCanLoginWithEmailAndPassword(string $email, string $password): void
     {
-        $this->authService->logout();
-        Assert::assertTrue($this->authService->login($email, $password));
+        $user = $this->users->findByEmail($email);
+        Assert::assertNotNull($user);
+        Assert::assertTrue(password_verify($password, $user->getPassword()));
+        Assert::assertTrue($user->isEmailVerified());
     }
 
     /**

@@ -44,6 +44,7 @@ final class UserAccessTokenService
             ->issuedBy('retaia-core')
             ->issuedAt($now)
             ->expiresAt($expiresAt)
+            ->identifiedBy(bin2hex(random_bytes(16)))
             ->relatedTo($user->getId())
             ->withClaim('email', $user->getEmail())
             ->withClaim('client_id', $clientId)

@@ -33,6 +33,7 @@ final class ClientAccessTokenFactory
             ->issuedBy('retaia-core')
             ->issuedAt($now)
             ->expiresAt($expiresAt)
+            ->identifiedBy(bin2hex(random_bytes(16)))
             ->relatedTo($clientId)
             ->withClaim('client_id', $clientId)
             ->withClaim('client_kind', $clientKind)
