@@ -187,6 +187,15 @@ Poser un premier découpage DDD sans changer le contrat API v1.
   - `GetAuthMeProfileHandler`
 - objectif: centraliser la composition du payload profil auth dans un handler dédié
 
+## Vingt-troisième lot (admin actor handler)
+
+- extraction de la résolution d'acteur admin pour `verify-email/admin-confirm`:
+  - `ResolveAdminActorHandler`
+- ajout du port:
+  - `Application/Auth/Port/AdminActorGateway`
+- adapter infra:
+  - `Infrastructure/Auth/AdminActorGateway`
+
 ## Règles de migration progressive
 
 - conserver le contrat HTTP et les codes d'erreur existants
