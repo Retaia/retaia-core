@@ -26,18 +26,15 @@ use App\Application\Auth\ResolveAuthenticatedUserResult;
 use App\Application\Auth\GetAuthMeProfileHandler;
 use App\Application\Auth\RequestEmailVerificationEndpointHandler;
 use App\Application\Auth\RequestEmailVerificationEndpointResult;
+use App\Application\AuthClient\AuthClientAdminEndpointsHandler;
+use App\Application\AuthClient\AuthClientDeviceFlowEndpointsHandler;
+use App\Application\AuthClient\CancelDeviceFlowEndpointResult;
 use App\Application\AuthClient\MintClientTokenHandler;
 use App\Application\AuthClient\MintClientTokenResult;
-use App\Application\AuthClient\CancelDeviceFlowHandler;
-use App\Application\AuthClient\CancelDeviceFlowResult;
-use App\Application\AuthClient\PollDeviceFlowHandler;
-use App\Application\AuthClient\PollDeviceFlowResult;
-use App\Application\AuthClient\RevokeClientTokenHandler;
-use App\Application\AuthClient\RevokeClientTokenResult;
-use App\Application\AuthClient\RotateClientSecretHandler;
-use App\Application\AuthClient\RotateClientSecretResult;
-use App\Application\AuthClient\StartDeviceFlowHandler;
-use App\Application\AuthClient\StartDeviceFlowResult;
+use App\Application\AuthClient\PollDeviceFlowEndpointResult;
+use App\Application\AuthClient\RevokeClientTokenEndpointResult;
+use App\Application\AuthClient\RotateClientSecretEndpointResult;
+use App\Application\AuthClient\StartDeviceFlowEndpointResult;
 use App\Observability\Repository\MetricEventRepository;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -69,11 +66,8 @@ final class AuthController
         #[Autowire(service: 'limiter.client_token_mint')]
         private RateLimiterFactory $clientTokenMintLimiter,
         private MintClientTokenHandler $mintClientTokenHandler,
-        private RevokeClientTokenHandler $revokeClientTokenHandler,
-        private RotateClientSecretHandler $rotateClientSecretHandler,
-        private StartDeviceFlowHandler $startDeviceFlowHandler,
-        private PollDeviceFlowHandler $pollDeviceFlowHandler,
-        private CancelDeviceFlowHandler $cancelDeviceFlowHandler,
+        private AuthClientAdminEndpointsHandler $authClientAdminEndpointsHandler,
+        private AuthClientDeviceFlowEndpointsHandler $authClientDeviceFlowEndpointsHandler,
         private MetricEventRepository $metrics,
         private LoggerInterface $logger,
     ) {
@@ -498,30 +492,27 @@ final class AuthController
     #[Route('/clients/{clientId}/revoke-token', name: 'api_auth_clients_revoke_token', methods: ['POST'])]
     public function revokeClientToken(string $clientId): JsonResponse
     {
-        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
-        if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
+        $result = $this->authClientAdminEndpointsHandler->revoke($clientId);
+        if ($result->status() === RevokeClientTokenEndpointResult::STATUS_UNAUTHORIZED) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
                 Response::HTTP_UNAUTHORIZED
             );
         }
-        $adminActor = $this->resolveAdminActorHandler->handle();
-        if ($adminActor->status() === ResolveAdminActorResult::STATUS_FORBIDDEN_ACTOR) {
+        if ($result->status() === RevokeClientTokenEndpointResult::STATUS_FORBIDDEN_ACTOR) {
             return new JsonResponse(
                 ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
                 Response::HTTP_FORBIDDEN
             );
         }
-
-        $result = $this->revokeClientTokenHandler->handle($clientId);
-        if ($result->status() === RevokeClientTokenResult::STATUS_VALIDATION_FAILED) {
+        if ($result->status() === RevokeClientTokenEndpointResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.invalid_client_id')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
 
-        if ($result->status() === RevokeClientTokenResult::STATUS_FORBIDDEN_SCOPE) {
+        if ($result->status() === RevokeClientTokenEndpointResult::STATUS_FORBIDDEN_SCOPE) {
             return new JsonResponse(
                 ['code' => 'FORBIDDEN_SCOPE', 'message' => $this->translator->trans('auth.error.forbidden_scope')],
                 Response::HTTP_FORBIDDEN
@@ -539,23 +530,21 @@ final class AuthController
     #[Route('/clients/{clientId}/rotate-secret', name: 'api_auth_clients_rotate_secret', methods: ['POST'])]
     public function rotateClientSecret(string $clientId): JsonResponse
     {
-        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
-        if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
+        $result = $this->authClientAdminEndpointsHandler->rotate($clientId);
+        if ($result->status() === RotateClientSecretEndpointResult::STATUS_UNAUTHORIZED) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
                 Response::HTTP_UNAUTHORIZED
             );
         }
-        $adminActor = $this->resolveAdminActorHandler->handle();
-        if ($adminActor->status() === ResolveAdminActorResult::STATUS_FORBIDDEN_ACTOR) {
+        if ($result->status() === RotateClientSecretEndpointResult::STATUS_FORBIDDEN_ACTOR) {
             return new JsonResponse(
                 ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
                 Response::HTTP_FORBIDDEN
             );
         }
 
-        $result = $this->rotateClientSecretHandler->handle($clientId);
-        if ($result->status() === RotateClientSecretResult::STATUS_VALIDATION_FAILED) {
+        if ($result->status() === RotateClientSecretEndpointResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.invalid_client_id')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
@@ -580,24 +569,20 @@ final class AuthController
     #[Route('/clients/device/start', name: 'api_auth_clients_device_start', methods: ['POST'])]
     public function startDeviceFlow(Request $request): JsonResponse
     {
-        $payload = $this->payload($request);
-        $clientKind = trim((string) ($payload['client_kind'] ?? ''));
-
-        if ($clientKind === '') {
+        $result = $this->authClientDeviceFlowEndpointsHandler->start($this->payload($request));
+        if ($result->status() === StartDeviceFlowEndpointResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.client_kind_required')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
-
-        $result = $this->startDeviceFlowHandler->handle($clientKind);
-        if ($result->status() === StartDeviceFlowResult::STATUS_FORBIDDEN_ACTOR) {
+        if ($result->status() === StartDeviceFlowEndpointResult::STATUS_FORBIDDEN_ACTOR) {
             return new JsonResponse(
                 ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
                 Response::HTTP_FORBIDDEN
             );
         }
-        if ($result->status() === StartDeviceFlowResult::STATUS_FORBIDDEN_SCOPE) {
+        if ($result->status() === StartDeviceFlowEndpointResult::STATUS_FORBIDDEN_SCOPE) {
             return new JsonResponse(
                 ['code' => 'FORBIDDEN_SCOPE', 'message' => $this->translator->trans('auth.error.forbidden_scope')],
                 Response::HTTP_FORBIDDEN
@@ -610,17 +595,14 @@ final class AuthController
     #[Route('/clients/device/poll', name: 'api_auth_clients_device_poll', methods: ['POST'])]
     public function pollDeviceFlow(Request $request): JsonResponse
     {
-        $payload = $this->payload($request);
-        $deviceCode = trim((string) ($payload['device_code'] ?? ''));
-        if ($deviceCode === '') {
+        $result = $this->authClientDeviceFlowEndpointsHandler->poll($this->payload($request));
+        if ($result->status() === PollDeviceFlowEndpointResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.device_code_required')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
-
-        $result = $this->pollDeviceFlowHandler->handle($deviceCode);
-        if ($result->status() === PollDeviceFlowResult::STATUS_INVALID_DEVICE_CODE) {
+        if ($result->status() === PollDeviceFlowEndpointResult::STATUS_INVALID_DEVICE_CODE) {
             $this->metrics->record('auth.device.poll.invalid_device_code');
 
             return new JsonResponse(
@@ -630,14 +612,14 @@ final class AuthController
         }
 
         $status = $result->payload();
-        if ($result->status() === PollDeviceFlowResult::STATUS_THROTTLED && is_array($status)) {
+        if ($result->status() === PollDeviceFlowEndpointResult::STATUS_THROTTLED && is_array($status)) {
             $this->metrics->record('auth.device.poll.throttled');
 
             return new JsonResponse(
                 [
                     'code' => 'SLOW_DOWN',
                     'message' => $this->translator->trans('auth.error.slow_down'),
-                    'retry_in_seconds' => $status['retry_in_seconds'],
+                    'retry_in_seconds' => $result->retryInSeconds() ?? (int) ($status['retry_in_seconds'] ?? 0),
                 ],
                 Response::HTTP_TOO_MANY_REQUESTS
             );
@@ -667,23 +649,20 @@ final class AuthController
     #[Route('/clients/device/cancel', name: 'api_auth_clients_device_cancel', methods: ['POST'])]
     public function cancelDeviceFlow(Request $request): JsonResponse
     {
-        $payload = $this->payload($request);
-        $deviceCode = trim((string) ($payload['device_code'] ?? ''));
-        if ($deviceCode === '') {
+        $result = $this->authClientDeviceFlowEndpointsHandler->cancel($this->payload($request));
+        if ($result->status() === CancelDeviceFlowEndpointResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.device_code_required')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
-
-        $result = $this->cancelDeviceFlowHandler->handle($deviceCode);
-        if ($result->status() === CancelDeviceFlowResult::STATUS_INVALID_DEVICE_CODE) {
+        if ($result->status() === CancelDeviceFlowEndpointResult::STATUS_INVALID_DEVICE_CODE) {
             return new JsonResponse(
                 ['code' => 'INVALID_DEVICE_CODE', 'message' => $this->translator->trans('auth.error.invalid_device_code')],
                 Response::HTTP_BAD_REQUEST
             );
         }
-        if ($result->status() === CancelDeviceFlowResult::STATUS_EXPIRED_DEVICE_CODE) {
+        if ($result->status() === CancelDeviceFlowEndpointResult::STATUS_EXPIRED_DEVICE_CODE) {
             return new JsonResponse(
                 ['code' => 'EXPIRED_DEVICE_CODE', 'message' => $this->translator->trans('auth.error.expired_device_code')],
                 Response::HTTP_BAD_REQUEST
