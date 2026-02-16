@@ -58,6 +58,8 @@ Détail :
   - gates coverage bloquants :
     - `Unit` >= 80% (scope coverage: `src/Application` + `src/Domain`)
     - `Functional` >= 80% (scope coverage: `src/Controller`)
+  - coverage Behat genere en Clover : `var/coverage/clover-behat.xml` (scope : `src/Asset` + `src/Feature` + `src/User`)
+  - check optionnel Behat disponible : `composer check:coverage:behat`
   - inclut des non-régressions token auth (token expiré/invalide, payload/signature altérés)
   - inclut des tests contractuels OpenAPI automatiques (schéma `ErrorResponse`, runtime request/response/error model sur endpoints critiques)
 

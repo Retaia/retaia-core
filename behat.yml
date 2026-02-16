@@ -5,4 +5,14 @@ default:
         - features
       contexts:
         - FeatureContext
-
+  extensions:
+    DVDoug\Behat\CodeCoverage\Extension:
+      filter:
+        include:
+          directories:
+            '%paths.base%/src/Asset': {}
+            '%paths.base%/src/Feature': {}
+            '%paths.base%/src/User': {}
+      reports:
+        clover:
+          target: '%paths.base%/var/coverage/clover-behat.xml'
