@@ -9,6 +9,7 @@ Avant tout changement contractuel: modifier/valider `retaia-docs` puis implémen
 - Commits atomiques, PR atomiques.
 - Rebase sur `master` avant merge.
 - Aucun merge commit de synchronisation dans la PR.
+- Le hook `pre-commit` DOIT bloquer tout commit direct sur `master`.
 
 ## Exigences de PR
 - Décrire clairement l'impact contrat/runtime.

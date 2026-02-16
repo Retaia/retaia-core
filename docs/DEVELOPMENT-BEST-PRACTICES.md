@@ -32,6 +32,7 @@ Selon le scope :
 
 - Suivre les best practices Symfony dans tous les cas (composants natifs avant implémentation custom).
 - Ne jamais modifier manuellement des fichiers générés (Symfony/Composer/console).
+- Le hook local `pre-commit` doit interdire les commits directs sur `master`.
 - Garder le serveur comme source de vérité. L’agent exécute, ne décide pas.
 - Ne jamais automatiser `KEEP/REJECT`.
 - Utiliser l’UUID comme identité. Le path est mutable.
