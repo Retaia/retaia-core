@@ -1,31 +1,54 @@
 # Retaia Core
 
-Core API repository for the Retaia project.
+Retaia Core is the backend API for the Retaia platform.
+It manages authentication, policy/runtime feature governance, asset lifecycle, job orchestration, ingest polling, and operational safety checks.
 
-## Source Of Truth
+## Table of Contents
 
-- Product rules and behavior are defined in `/specs` (submodule).
-- Any normative contract/process change must be proposed first in `/specs/CONTRIBUTING.md`.
-- Local docs in `/docs` are implementation guides only.
+- [What This Repo Contains](#what-this-repo-contains)
+- [Source of Truth](#source-of-truth)
+- [Tech Stack](#tech-stack)
+- [Requirements](#requirements)
+- [Quick Start](#quick-start)
+- [Docker](#docker)
+- [Testing](#testing)
+- [Authentication API](#authentication-api)
+- [CI](#ci)
+- [Contributing](#contributing)
+- [Documentation](#documentation)
+
+## What This Repo Contains
+
+- Versioned API under `/api/v1`
+- Asset workflow orchestration (state machine + jobs)
+- Ingest polling pipeline (`poll`, `enqueue-stable`, `apply-outbox`, `cron-tick`)
+- Auth flows (login/logout, reset password, verify email, 2FA)
+- Runtime operational commands (readiness, sentry probe, alerts, lock watchdog)
+- OpenAPI contract drift checks against specs SSOT
+
+## Source of Truth
+
+- Product and behavior rules live in `specs/` (git submodule: `retaia-docs`)
+- Any normative behavior change must be made in specs first
+- Local `docs/` are implementation and operations guides (non-normative)
 
 ## Tech Stack
 
 - PHP 8.4+
 - Symfony 7.4
 - Doctrine ORM + Migrations
-- PostgreSQL (dev/prod)
+- PostgreSQL
 - PHPUnit + Behat
-- Faker + AliceBundle (test fixtures)
+
+## Requirements
+
+- PHP (>= 8.4 recommended)
+- Composer 2
+- PostgreSQL (for local/runtime DB)
+- Node.js + npm (for Husky hooks)
+- Optional: `pcov` for local coverage gates
 
 ## Quick Start
-
-0. Coverage driver for dev hooks/tests (`pcov`):
-
-```bash
-pecl install pcov
-echo "extension=pcov.so" >> /opt/homebrew/etc/php/8.5/php.ini
-php -m | grep pcov
-```
 
 1. Install dependencies:
 
@@ -33,17 +56,13 @@ php -m | grep pcov
 composer install --no-interaction --prefer-dist --optimize-autoloader
 ```
 
-2. Configure env:
+2. Configure environment:
 
-- Copy `.env` values as needed (especially `DATABASE_URL`).
-- For reverse proxy / auth hardening, configure:
+- Copy/update `.env` values as needed (especially `DATABASE_URL`)
+- Configure security/reverse proxy variables when relevant:
   - `SYMFONY_TRUSTED_PROXIES`
   - `APP_AUTH_LOST_PASSWORD_LIMIT`, `APP_AUTH_LOST_PASSWORD_INTERVAL`
   - `APP_AUTH_VERIFY_EMAIL_LIMIT`, `APP_AUTH_VERIFY_EMAIL_INTERVAL`
-- Feature flags (default `0`, required for `v1.1+` behavior):
-  - `APP_FEATURE_AI_SUGGEST_TAGS`
-  - `APP_FEATURE_AI_SUGGESTED_TAGS_FILTERS`
-  - `APP_FEATURE_DECISIONS_BULK`
 
 3. Run migrations:
 
@@ -51,142 +70,32 @@ composer install --no-interaction --prefer-dist --optimize-autoloader
 php bin/console doctrine:migrations:migrate --no-interaction
 ```
 
-4. Start app (example):
+4. Start the app (example):
 
 ```bash
 symfony server:start
 ```
 
-## Ingest Polling (Bootstrap)
+## Docker
 
-- Config path via env: `APP_INGEST_WATCH_PATH` (default: `./docker/RETAIA/INBOX` in local env).
-- Pipeline commands:
+### Development
 
-```bash
-php bin/console app:ingest:poll --limit=100
-php bin/console app:ingest:poll --json
-php bin/console app:ingest:enqueue-stable --limit=100
-php bin/console app:ingest:apply-outbox --limit=100
-php bin/console app:ingest:cron-tick --poll-limit=100 --enqueue-limit=100 --apply-limit=200
-```
+Use the dev setup documented in `docs/DOCKER-DEVELOPMENT.md`.
 
-- Recommended scheduler: cron runs a single tick every minute.
+### Production (example)
 
-```bash
-* * * * * cd /var/www/html && php bin/console app:ingest:cron-tick --no-interaction >> var/log/ingest-cron.log 2>&1
-```
+- Example files:
+  - `Dockerfile.prod`
+  - `docker-compose.prod.yaml`
+- Full guide: `docs/DOCKER-PROD-EXAMPLE.md`
 
-In Docker dev, run the dedicated `ingest-cron` service so file polling/moves stay isolated from API/UI workers.
-
-## Tests
-
-Run full test suite:
-
-```bash
-composer test
-```
-
-Run coverage and enforce threshold (80%):
-
-```bash
-composer test:quality
-```
-
-Run full V1 pre-release preflight:
-
-```bash
-composer release:check
-```
-
-Prerequisites: database/service dependencies must be reachable for `app:ops:readiness-check`.
-
-Useful checks:
-
-```bash
-php bin/console lint:yaml config
-php bin/console lint:container
-composer audit --no-interaction
-php bin/console app:sentry:probe
-php bin/console app:alerts:state-conflicts --window-minutes=15 --state-conflicts-threshold=20 --lock-failed-threshold=10
-php bin/console app:locks:watchdog-recover --stale-lock-minutes=30
-php bin/console app:ops:readiness-check
-```
-
-`app:alerts:state-conflicts` also supports lock pressure/staleness thresholds:
-`--active-locks-threshold`, `--stale-locks-threshold`, `--stale-lock-minutes`.
-
-DX shortcuts:
-
-```bash
-make test
-make qa
-make ci-local
-```
-
-## V1 Safety Rules (Implemented)
-
-- `Idempotency-Key` is enforced on critical endpoints, including:
-  - `POST /api/v1/assets/{uuid}/decision`
-  - `POST /api/v1/assets/{uuid}/reprocess`
-  - `POST /api/v1/batches/moves`
-  - `POST /api/v1/decisions/apply`
-  - `POST /api/v1/assets/{uuid}/purge`
-  - `POST /api/v1/jobs/{job_id}/submit`
-  - `POST /api/v1/jobs/{job_id}/fail`
-- Operation locks are enforced for move/purge concurrency safety (`asset_operation_lock` table).
-- Job claimability is blocked when an asset is `MOVE_QUEUED`, `PURGED`, or under active operation lock.
-- Ingest polling ignores symlinks and unsafe paths.
-- Ingest polling tolerates transient file races (rename/delete during scan), permission issues, and large filename collisions on outbox moves.
-- API localization supports `Accept-Language` (`en`, `fr`) with fallback to `en`.
-
-## Git Hooks (Husky)
-
-This repository supports Husky hooks for local commit quality gates:
-
-- `pre-commit`: runs `composer test:quality` (PHPUnit with coverage + Behat + 80% gate)
-  - and blocks commits when current branch is `master`
-- `commit-msg`: enforces Conventional Commits via `commitlint`
-
-Coverage prerequisite for `pre-commit`:
-
-- install/enable a PHP coverage driver locally (`xdebug` or `pcov`)
-- recommended on this project: `pcov`
-
-Setup once locally:
-
-```bash
-npm install
-npm run prepare
-```
-
-## Docker Dev
-
-Use docker-compose setup documented in:
-
-- `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/DOCKER-DEVELOPMENT.md`
-
-## Docker Prod (Example)
-
-Production Docker deployment example is documented in:
-
-- `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/DOCKER-PROD-EXAMPLE.md`
-
-Example compose file:
-
-- `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docker-compose.prod.yaml`
-- UI static dist mount (served by Caddy): `${RETAIA_UI_DIST_DIR:-./ui/dist}` (override env if needed)
-- UI updater manifest generator: `php bin/console app:release:write-ui-manifest --ui-version=... --asset-url=... --sha256=...`
-- Auto-update scripts:
-  - `bash scripts/auto-update-docker-base-image.sh`
-  - `bash scripts/auto-update-ui-release-manifest.sh`
-
-Build is intentionally gated and requires V1 flag:
+Build is intentionally gated and requires:
 
 ```bash
 RETAIA_BUILD_V1_READY=1 composer prod:image:build
 ```
 
-Local staging API for client tests:
+### Staging helpers
 
 ```bash
 composer staging:up
@@ -194,7 +103,73 @@ composer staging:migrate
 composer staging:health
 ```
 
-## Authentication Endpoints
+## Ingest Polling
+
+Main commands:
+
+```bash
+php bin/console app:ingest:poll --limit=100
+php bin/console app:ingest:enqueue-stable --limit=100
+php bin/console app:ingest:apply-outbox --limit=100
+php bin/console app:ingest:cron-tick --poll-limit=100 --enqueue-limit=100 --apply-limit=200
+```
+
+Recommended scheduler:
+
+```cron
+* * * * * cd /var/www/html && php bin/console app:ingest:cron-tick --no-interaction >> var/log/ingest-cron.log 2>&1
+```
+
+## Testing
+
+Run unit + Behat:
+
+```bash
+composer test
+```
+
+Run quality gate (coverage + Behat + threshold):
+
+```bash
+composer test:quality
+```
+
+Run release preflight:
+
+```bash
+composer release:check
+```
+
+Useful commands:
+
+```bash
+php bin/console lint:yaml config
+php bin/console lint:container
+composer audit --no-interaction
+php bin/console app:ops:readiness-check
+php bin/console app:sentry:probe
+```
+
+## Git Hooks
+
+Husky hooks are enabled for local quality controls:
+
+- `pre-commit`
+  - blocks commits on `master`
+  - runs `composer test:quality`
+- `commit-msg`
+  - enforces Conventional Commits
+
+Setup:
+
+```bash
+npm install
+npm run prepare
+```
+
+## Authentication API
+
+Main endpoints:
 
 - `POST /api/v1/auth/login`
 - `POST /api/v1/auth/logout`
@@ -205,44 +180,50 @@ composer staging:health
 - `POST /api/v1/auth/verify-email/confirm`
 - `POST /api/v1/auth/verify-email/admin-confirm`
 
+See specs for full contracts and status/error semantics.
+
 ## CI
 
-GitHub Actions workflow:
+GitHub Actions includes:
 
 - `lint`
 - `test`
 - `security-audit`
-- `docker-base-image-auto-update` (schedule + manual dispatch, auto-commit)
-- `ui-release-auto-update` (schedule + manual dispatch, auto-commit)
+- `docker-base-image-auto-update`
+- `ui-release-auto-update`
 
-See details in:
+Details:
 
-- `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/GITHUB-WORKFLOWS.md`
-- `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/RELEASE-OPS-RUNBOOK.md`
+- `docs/GITHUB-WORKFLOWS.md`
+- `docs/RELEASE-OPS-RUNBOOK.md`
 
-## Sentry (Prod Probe)
+## Contributing
 
-- Configure `SENTRY_DSN` in production with host `sentry.fullfrontend.be`.
-- Probe command:
+- No direct commits to `master`
+- Work on dedicated branches (recommended: `codex/<feature>`)
+- Open a PR for every change
+- Use Conventional Commits
 
-```bash
-php bin/console app:sentry:probe
-```
+Start here:
 
-- Non-prod is skipped by default (use `--allow-non-prod` only for explicit checks).
+- `CONTRIBUTING.md`
+- `docs/DEVELOPMENT-BEST-PRACTICES.md`
 
-## Branching & PR Policy
+## Documentation
 
-- Never commit or push directly to `master`.
-- Always work from a dedicated feature branch (recommended: `codex/<feature>`).
-- All changes must go through a Pull Request.
-- Conventional Commit messages are required.
+Core docs:
 
-## Additional Docs
+- `docs/AUTH-OPS-RUNBOOK.md`
+- `docs/OBSERVABILITY-RUNBOOK.md`
+- `docs/OPS-READINESS-CHECKLIST.md`
+- `docs/BOOTSTRAP-TECHNIQUE.md`
 
-- `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/AGENT.md`
-- `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/DEVELOPMENT-BEST-PRACTICES.md`
-- `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/BOOTSTRAP-TECHNIQUE.md`
-- `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/AUTH-OPS-RUNBOOK.md`
-- `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/OBSERVABILITY-RUNBOOK.md`
-- `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docs/OPS-READINESS-CHECKLIST.md`
+Normative specs:
+
+- `specs/README.md`
+- `specs/api/API-CONTRACTS.md`
+- `specs/tests/TEST-PLAN.md`
+
+## License
+
+Current project license in this repository is marked as `proprietary` (`composer.json`).
