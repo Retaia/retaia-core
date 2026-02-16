@@ -2,6 +2,8 @@
 
 namespace App\Auth;
 
+use App\Domain\AuthClient\ClientKind;
+
 final class AuthClientProvisioningService
 {
     public function __construct(
@@ -14,7 +16,7 @@ final class AuthClientProvisioningService
      */
     public function provisionClient(string $clientKind): ?array
     {
-        if (!in_array($clientKind, ['AGENT', 'MCP'], true)) {
+        if (!ClientKind::isTechnical($clientKind)) {
             return null;
         }
 

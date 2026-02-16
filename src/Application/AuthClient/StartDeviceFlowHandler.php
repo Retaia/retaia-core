@@ -3,6 +3,7 @@
 namespace App\Application\AuthClient;
 
 use App\Application\AuthClient\Port\DeviceFlowGateway;
+use App\Domain\AuthClient\ClientKind;
 use App\Domain\AuthClient\TechnicalClientTokenPolicy;
 
 final class StartDeviceFlowHandler
@@ -15,7 +16,7 @@ final class StartDeviceFlowHandler
 
     public function handle(string $clientKind): StartDeviceFlowResult
     {
-        if (!in_array($clientKind, ['AGENT', 'MCP'], true)) {
+        if (!ClientKind::isTechnical($clientKind)) {
             return new StartDeviceFlowResult(StartDeviceFlowResult::STATUS_FORBIDDEN_ACTOR);
         }
 

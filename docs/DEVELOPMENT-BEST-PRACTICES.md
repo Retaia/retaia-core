@@ -115,13 +115,8 @@ Règle SSOT (obligatoire pour l'équipe) :
 
 ## Checklist PR
 
-- Objectif unique et clair.
-- Pas de mélange feature + refactor + formatage massif.
-- Specs impactées identifiées.
-- Si changement de comportement: specs mises à jour dans `retaia-docs` avant code.
-- Tests de non-régression ajoutés pour tout bug corrigé.
-- Risques et rollback documentés.
-- Commit messages en Conventional Commits.
+- Utiliser la structure PR imposée par `.github/pull_request_template.md`.
+- Référentiel unique des exigences PR: `CONTRIBUTING.md` + `specs/change-management/CODE-QUALITY.md`.
 
 ## Usage de l’IA (assistant/agent)
 

@@ -2,6 +2,7 @@
 
 namespace App\Security;
 
+use App\Domain\AuthClient\ClientKind;
 use Symfony\Component\Security\Core\User\UserInterface;
 
 final class ApiClientPrincipal implements UserInterface
@@ -23,8 +24,8 @@ final class ApiClientPrincipal implements UserInterface
     public function getRoles(): array
     {
         return match ($this->clientKind) {
-            'AGENT' => ['ROLE_AGENT'],
-            'MCP' => ['ROLE_MCP'],
+            ClientKind::AGENT => ['ROLE_AGENT'],
+            ClientKind::MCP => ['ROLE_MCP'],
             default => [],
         };
     }

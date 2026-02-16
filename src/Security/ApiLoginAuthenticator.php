@@ -3,6 +3,7 @@
 namespace App\Security;
 
 use App\Auth\UserAccessTokenService;
+use App\Domain\AuthClient\ClientKind;
 use App\Entity\User;
 use App\User\Service\TwoFactorService;
 use Psr\Log\LoggerInterface;
@@ -117,8 +118,8 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
         if ($clientId === '') {
             $clientId = 'interactive-default';
         }
-        $clientKind = trim((string) ($payload['client_kind'] ?? 'UI_WEB'));
-        if (!\in_array($clientKind, ['UI_WEB', 'UI_MOBILE', 'AGENT'], true)) {
+        $clientKind = trim((string) ($payload['client_kind'] ?? ClientKind::UI_WEB));
+        if (!ClientKind::isInteractive($clientKind)) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.client_kind_required')],
                 Response::HTTP_UNPROCESSABLE_ENTITY
