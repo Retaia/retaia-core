@@ -82,6 +82,27 @@ final class ApiLoginAuthenticatorTest extends TestCase
         self::assertSame('user@example.test', $payload['user']['email']);
     }
 
+    public function testOnAuthenticationSuccessAcceptsUiMobileClientKind(): void
+    {
+        $authenticator = $this->authenticator();
+        $token = $this->createStub(TokenInterface::class);
+        $token->method('getUser')->willReturn(new User('u-1', 'user@example.test', 'hash', ['ROLE_USER'], true));
+
+        $request = Request::create(
+            '/api/v1/auth/login',
+            Request::METHOD_POST,
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: '{"email":"user@example.test","password":"change-me","client_kind":"UI_MOBILE"}'
+        );
+
+        $response = $authenticator->onAuthenticationSuccess($request, $token, 'api');
+
+        self::assertNotNull($response);
+        self::assertSame(Response::HTTP_OK, $response->getStatusCode());
+        $payload = json_decode((string) $response->getContent(), true);
+        self::assertSame('UI_MOBILE', $payload['client_kind'] ?? null);
+    }
+
     public function testOnAuthenticationSuccessRejectsInvalidUserType(): void
     {
         $authenticator = $this->authenticator();

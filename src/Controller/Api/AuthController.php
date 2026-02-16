@@ -438,7 +438,7 @@ final class AuthController
             );
         }
         if ($result->status() === MintClientTokenEndpointResult::STATUS_FORBIDDEN_ACTOR) {
-            $this->metrics->record('auth.client.token.forbidden_actor.ui_rust');
+            $this->metrics->record('auth.client.token.forbidden_actor.ui_web');
 
             return new JsonResponse(
                 ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],

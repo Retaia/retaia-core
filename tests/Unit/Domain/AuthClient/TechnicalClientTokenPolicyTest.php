@@ -7,11 +7,11 @@ use PHPUnit\Framework\TestCase;
 
 final class TechnicalClientTokenPolicyTest extends TestCase
 {
-    public function testUiRustIsForbiddenActorForTechnicalTokenMint(): void
+    public function testUiWebIsForbiddenActorForTechnicalTokenMint(): void
     {
         $policy = new TechnicalClientTokenPolicy();
 
-        self::assertTrue($policy->isForbiddenActor('UI_RUST'));
+        self::assertTrue($policy->isForbiddenActor('UI_WEB'));
         self::assertFalse($policy->isForbiddenActor('AGENT'));
         self::assertFalse($policy->isForbiddenActor('MCP'));
     }

@@ -6,7 +6,7 @@ final class TechnicalClientTokenPolicy
 {
     public function isForbiddenActor(string $clientKind): bool
     {
-        return $clientKind === 'UI_RUST';
+        return $clientKind === 'UI_WEB';
     }
 
     public function isForbiddenScope(string $clientKind, bool $mcpDisabled): bool

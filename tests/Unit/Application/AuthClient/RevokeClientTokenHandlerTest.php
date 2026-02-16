@@ -21,11 +21,11 @@ final class RevokeClientTokenHandlerTest extends TestCase
         self::assertSame(RevokeClientTokenResult::STATUS_VALIDATION_FAILED, $result->status());
     }
 
-    public function testReturnsForbiddenScopeForUiRustClient(): void
+    public function testReturnsForbiddenScopeForUiWebClient(): void
     {
         $gateway = $this->createMock(AuthClientGateway::class);
         $gateway->method('hasClient')->willReturn(true);
-        $gateway->method('clientKind')->willReturn('UI_RUST');
+        $gateway->method('clientKind')->willReturn('UI_WEB');
 
         $handler = new RevokeClientTokenHandler(new TechnicalClientAdminPolicy(), $gateway);
         $result = $handler->handle('rust-ui');

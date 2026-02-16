@@ -13,7 +13,7 @@ final class AuthClientProvisioningServiceTest extends TestCase
     {
         $service = $this->service();
 
-        self::assertNull($service->provisionClient('UI_RUST'));
+        self::assertNull($service->provisionClient('UI_WEB'));
     }
 
     public function testProvisionClientCreatesAndPersistsAgentClient(): void

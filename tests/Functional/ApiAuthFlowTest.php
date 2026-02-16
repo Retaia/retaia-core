@@ -779,13 +779,13 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('Bearer', $payload['token_type'] ?? null);
     }
 
-    public function testClientTokenMintRejectsUiRustClientKind(): void
+    public function testClientTokenMintRejectsUiWebClientKind(): void
     {
         $client = $this->createIsolatedClient('10.0.0.60');
 
         $client->jsonRequest('POST', '/api/v1/auth/clients/token', [
             'client_id' => 'agent-default',
-            'client_kind' => 'UI_RUST',
+            'client_kind' => 'UI_WEB',
             'secret_key' => 'agent-secret',
         ]);
 
@@ -794,13 +794,13 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('FORBIDDEN_ACTOR', $payload['code'] ?? null);
     }
 
-    public function testClientTokenMintRejectsUiRustClientKindWithUnknownClient(): void
+    public function testClientTokenMintRejectsUiWebClientKindWithUnknownClient(): void
     {
         $client = $this->createIsolatedClient('10.0.0.600');
 
         $client->jsonRequest('POST', '/api/v1/auth/clients/token', [
             'client_id' => 'unknown-client',
-            'client_kind' => 'UI_RUST',
+            'client_kind' => 'UI_WEB',
             'secret_key' => 'wrong-secret',
         ]);
 
@@ -897,12 +897,12 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame(true, $cancelPayload['canceled'] ?? null);
     }
 
-    public function testDeviceFlowStartRejectsUiRustClientKind(): void
+    public function testDeviceFlowStartRejectsUiWebClientKind(): void
     {
         $client = $this->createIsolatedClient('10.0.0.641');
 
         $client->jsonRequest('POST', '/api/v1/auth/clients/device/start', [
-            'client_kind' => 'UI_RUST',
+            'client_kind' => 'UI_WEB',
         ]);
 
         self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
@@ -1333,21 +1333,21 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame(1, $this->countMetricEvents('auth.device.poll.throttled'));
     }
 
-    public function testClientTokenUiRustForbiddenMetricIsRecorded(): void
+    public function testClientTokenUiWebForbiddenMetricIsRecorded(): void
     {
         $client = $this->createIsolatedClient('10.0.0.71');
         $this->ensureMetricTable();
 
         $client->jsonRequest('POST', '/api/v1/auth/clients/token', [
             'client_id' => 'agent-default',
-            'client_kind' => 'UI_RUST',
+            'client_kind' => 'UI_WEB',
             'secret_key' => 'agent-secret',
         ]);
 
         self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
         $payload = json_decode($client->getResponse()->getContent(), true);
         self::assertSame('FORBIDDEN_ACTOR', $payload['code'] ?? null);
-        self::assertSame(1, $this->countMetricEvents('auth.client.token.forbidden_actor.ui_rust'));
+        self::assertSame(1, $this->countMetricEvents('auth.client.token.forbidden_actor.ui_web'));
     }
 
     public function testUnsupportedLocaleFallsBackToEnglishAuthenticationRequiredMessage(): void

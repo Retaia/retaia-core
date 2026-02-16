@@ -439,16 +439,16 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
         }
     }
 
-    public function testSpecRevokeClientTokenForbidsUiRustScope(): void
+    public function testSpecRevokeClientTokenForbidsUiWebScope(): void
     {
         $client = $this->createGuzzleClient();
-        $this->seedClientRegistryEntry('ui-rust-protected', 'UI_RUST', 'ui-rust-secret');
+        $this->seedClientRegistryEntry('ui-web-protected', 'UI_WEB', 'ui-web-secret');
         $adminToken = $this->loginAdminAndGetBearerToken($client);
 
         $response = $this->requestJson(
             $client,
             'POST',
-            '/api/v1/auth/clients/ui-rust-protected/revoke-token',
+            '/api/v1/auth/clients/ui-web-protected/revoke-token',
             null,
             ['Authorization' => 'Bearer '.$adminToken]
         );
@@ -456,13 +456,13 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
         self::assertSame('FORBIDDEN_SCOPE', $response['json']['code'] ?? null);
     }
 
-    public function testSpecClientTokenRejectsUiRust(): void
+    public function testSpecClientTokenRejectsUiWeb(): void
     {
         $client = $this->createGuzzleClient();
 
         $response = $this->requestJson($client, 'POST', '/api/v1/auth/clients/token', [
             'client_id' => 'agent-default',
-            'client_kind' => 'UI_RUST',
+            'client_kind' => 'UI_WEB',
             'secret_key' => 'agent-secret',
         ]);
 
