@@ -131,6 +131,36 @@ final class OpenApiContractTest extends WebTestCase
         self::assertNotContains('waveform_url', $required);
     }
 
+    public function testRuntimeContractKeepsPollingAsSourceOfTruth(): void
+    {
+        $openApi = $this->openApi();
+        $paths = $openApi['paths'] ?? [];
+        self::assertIsArray($paths);
+        self::assertArrayHasKey('/app/policy', $paths);
+        self::assertArrayHasKey('/auth/clients/device/poll', $paths);
+
+        $methods = [];
+        foreach ($paths as $operations) {
+            if (!is_array($operations)) {
+                continue;
+            }
+
+            foreach (array_keys($operations) as $method) {
+                if (!is_string($method)) {
+                    continue;
+                }
+
+                $normalized = strtolower($method);
+                if (in_array($normalized, ['get', 'post', 'patch', 'put', 'delete'], true)) {
+                    $methods[$normalized] = true;
+                }
+            }
+        }
+
+        self::assertArrayHasKey('post', $methods, 'Mutating REST operations must remain available by contract.');
+        self::assertArrayHasKey('patch', $methods, 'Mutating REST operations must remain available by contract.');
+    }
+
     public function testDecisionRequestWithoutIdempotencyKeyIsRejected(): void
     {
         $openApi = $this->openApi();
