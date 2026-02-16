@@ -131,7 +131,7 @@ final class OpenApiContractTest extends WebTestCase
         self::assertNotContains('waveform_url', $required);
     }
 
-    public function testRuntimeContractIsPullOnlyWithoutPushChannels(): void
+    public function testRuntimeContractIsPullOnlyWithoutServerInitiatedPushChannels(): void
     {
         $openApi = $this->openApi();
         $paths = $openApi['paths'] ?? [];
@@ -143,8 +143,7 @@ final class OpenApiContractTest extends WebTestCase
             '/ws',
             'websocket',
             '/sse',
-            '/events',
-            '/webhooks/client',
+            '/webhook',
         ];
 
         foreach (array_keys($paths) as $path) {
