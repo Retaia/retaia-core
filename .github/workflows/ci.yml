@@ -22,6 +22,16 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
         run: bash scripts/check-branch-up-to-date.sh
 
+  pr-metadata:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate PR description structure
+        run: bash scripts/check-pr-metadata.sh
+
   no-black-magic:
     runs-on: ubuntu-latest
     steps:

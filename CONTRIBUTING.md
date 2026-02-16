@@ -13,6 +13,7 @@ Avant tout changement contractuel: modifier/valider `retaia-docs` puis implémen
 
 ## Exigences de PR
 - Décrire clairement l'impact contrat/runtime.
+- Utiliser la structure de `.github/pull_request_template.md` (sections Summary, Out Of Scope, Specs Impact, Risks, Rollback, Tests).
 - Ajouter/mettre à jour les tests d'intégration et non-régression.
 - Conserver l'alignement avec la spec OpenAPI v1.
 - Respecter Bearer-only, authz matrix, error model, feature governance.
