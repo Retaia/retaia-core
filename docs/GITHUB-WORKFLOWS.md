@@ -54,7 +54,10 @@ Détail :
     - placeholders interdits (`TODO`, `FIXME`, `TRANSLATE_ME`)
 
 - `test` :
-  - `composer test:quality` (PHPUnit avec coverage + Behat + gate coverage 80%)
+  - `composer test:quality` (PHPUnit avec coverage + Behat)
+  - gates coverage bloquants :
+    - `Unit` >= 80% (scope coverage: `src/Application` + `src/Domain`)
+    - `Functional` >= 80% (scope coverage: `src/Controller`)
   - inclut des non-régressions token auth (token expiré/invalide, payload/signature altérés)
   - inclut des tests contractuels OpenAPI automatiques (schéma `ErrorResponse`, runtime request/response/error model sur endpoints critiques)
 
