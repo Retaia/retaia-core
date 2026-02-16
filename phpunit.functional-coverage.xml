@@ -1,6 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
-
-<!-- https://phpunit.readthedocs.io/en/latest/configuration.html -->
 <phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
          colors="true"
@@ -18,9 +16,6 @@
     </php>
 
     <testsuites>
-        <testsuite name="Unit">
-            <directory>tests/Unit</directory>
-        </testsuite>
         <testsuite name="Functional">
             <directory>tests/Functional</directory>
         </testsuite>
@@ -32,7 +27,7 @@
             restrictWarnings="true"
     >
         <include>
-            <directory>src</directory>
+            <directory>src/Controller</directory>
         </include>
 
         <deprecationTrigger>
