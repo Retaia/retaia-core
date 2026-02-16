@@ -15,6 +15,8 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/api/v1/app')]
 final class AppController
 {
+    use ApiErrorResponderTrait;
+
     public function __construct(
         private TranslatorInterface $translator,
         private AppPolicyEndpointsHandler $appPolicyEndpointsHandler,
@@ -72,16 +74,10 @@ final class AppController
     {
         $result = $this->appPolicyEndpointsHandler->features();
         if ($result->status() === GetAppFeaturesEndpointResult::STATUS_UNAUTHORIZED) {
-            return new JsonResponse(
-                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
-                Response::HTTP_UNAUTHORIZED
-            );
+            return $this->errorResponse('UNAUTHORIZED', $this->translator->trans('auth.error.authentication_required'), Response::HTTP_UNAUTHORIZED);
         }
         if ($result->status() === GetAppFeaturesEndpointResult::STATUS_FORBIDDEN_ACTOR) {
-            return new JsonResponse(
-                ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
-                Response::HTTP_FORBIDDEN
-            );
+            return $this->errorResponse('FORBIDDEN_ACTOR', $this->translator->trans('auth.error.forbidden_actor'), Response::HTTP_FORBIDDEN);
         }
         $features = $result->features();
 
@@ -100,31 +96,20 @@ final class AppController
     {
         $result = $this->appPolicyEndpointsHandler->patchFeatures($this->payload($request));
         if ($result->status() === PatchAppFeaturesEndpointResult::STATUS_UNAUTHORIZED) {
-            return new JsonResponse(
-                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
-                Response::HTTP_UNAUTHORIZED
-            );
+            return $this->errorResponse('UNAUTHORIZED', $this->translator->trans('auth.error.authentication_required'), Response::HTTP_UNAUTHORIZED);
         }
         if ($result->status() === PatchAppFeaturesEndpointResult::STATUS_FORBIDDEN_ACTOR) {
-            return new JsonResponse(
-                ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
-                Response::HTTP_FORBIDDEN
-            );
+            return $this->errorResponse('FORBIDDEN_ACTOR', $this->translator->trans('auth.error.forbidden_actor'), Response::HTTP_FORBIDDEN);
         }
         if ($result->status() === PatchAppFeaturesEndpointResult::STATUS_VALIDATION_FAILED_PAYLOAD) {
-            return new JsonResponse(
-                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.invalid_app_feature_payload')],
-                Response::HTTP_UNPROCESSABLE_ENTITY
-            );
+            return $this->errorResponse('VALIDATION_FAILED', $this->translator->trans('auth.error.invalid_app_feature_payload'), Response::HTTP_UNPROCESSABLE_ENTITY);
         }
         if ($result->status() === PatchAppFeaturesEndpointResult::STATUS_VALIDATION_FAILED) {
-            return new JsonResponse(
-                [
-                    'code' => 'VALIDATION_FAILED',
-                    'message' => $this->translator->trans('auth.error.invalid_app_feature_payload'),
-                    'details' => $result->validationDetails(),
-                ],
-                Response::HTTP_UNPROCESSABLE_ENTITY
+            return $this->errorResponse(
+                'VALIDATION_FAILED',
+                $this->translator->trans('auth.error.invalid_app_feature_payload'),
+                Response::HTTP_UNPROCESSABLE_ENTITY,
+                $result->validationDetails()
             );
         }
 

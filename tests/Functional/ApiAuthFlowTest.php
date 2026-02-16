@@ -2,17 +2,18 @@
 
 namespace App\Tests\Functional;
 
+use App\Tests\Functional\Support\AuthDeviceFlowCacheTrait;
 use App\Tests\Support\FixtureUsers;
 use Doctrine\DBAL\Connection;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
 use OTPHP\TOTP;
-use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\HttpFoundation\Response;
 
 final class ApiAuthFlowTest extends WebTestCase
 {
     use RecreateDatabaseTrait;
+    use AuthDeviceFlowCacheTrait;
 
     public function testLoginAndMeFlowWithSession(): void
     {
@@ -1577,40 +1578,6 @@ final class ApiAuthFlowTest extends WebTestCase
             'roles' => json_encode($roles, JSON_THROW_ON_ERROR),
             'email_verified' => $emailVerified ? 1 : 0,
         ]);
-    }
-
-    private function forceDeviceFlowExpiration(string $deviceCode): void
-    {
-        /** @var CacheItemPoolInterface $cache */
-        $cache = static::getContainer()->get('cache.app');
-        $item = $cache->getItem('auth_device_flows');
-        $flows = $item->get();
-        if (!is_array($flows) || !isset($flows[$deviceCode]) || !is_array($flows[$deviceCode])) {
-            self::fail('Device flow not found in cache for expiration fixture.');
-        }
-
-        $flow = $flows[$deviceCode];
-        $flow['expires_at'] = time() - 1;
-        $flows[$deviceCode] = $flow;
-        $item->set($flows);
-        $cache->save($item);
-    }
-
-    private function forceDeviceFlowLastPolledAt(string $deviceCode, int $lastPolledAt): void
-    {
-        /** @var CacheItemPoolInterface $cache */
-        $cache = static::getContainer()->get('cache.app');
-        $item = $cache->getItem('auth_device_flows');
-        $flows = $item->get();
-        if (!is_array($flows) || !isset($flows[$deviceCode]) || !is_array($flows[$deviceCode])) {
-            self::fail('Device flow not found in cache for last_polled_at fixture.');
-        }
-
-        $flow = $flows[$deviceCode];
-        $flow['last_polled_at'] = $lastPolledAt;
-        $flows[$deviceCode] = $flow;
-        $item->set($flows);
-        $cache->save($item);
     }
 
     private function generateOtpCode(string $secret): string

@@ -13,6 +13,8 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/api/v1/assets/{uuid}/derived')]
 final class DerivedController
 {
+    use ApiErrorResponderTrait;
+
     public function __construct(
         private DerivedEndpointsHandler $derivedEndpointsHandler,
         private TranslatorInterface $translator,
@@ -132,17 +134,11 @@ final class DerivedController
 
     private function notFound(): JsonResponse
     {
-        return new JsonResponse([
-            'code' => 'NOT_FOUND',
-            'message' => $this->translator->trans('asset.error.not_found'),
-        ], Response::HTTP_NOT_FOUND);
+        return $this->errorResponse('NOT_FOUND', $this->translator->trans('asset.error.not_found'), Response::HTTP_NOT_FOUND);
     }
 
     private function forbiddenActor(): JsonResponse
     {
-        return new JsonResponse([
-            'code' => 'FORBIDDEN_ACTOR',
-            'message' => $this->translator->trans('auth.error.forbidden_actor'),
-        ], Response::HTTP_FORBIDDEN);
+        return $this->errorResponse('FORBIDDEN_ACTOR', $this->translator->trans('auth.error.forbidden_actor'), Response::HTTP_FORBIDDEN);
     }
 }

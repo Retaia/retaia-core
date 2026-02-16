@@ -3,6 +3,7 @@
 namespace App\Lock\Repository;
 
 use App\Lock\OperationLockType;
+use App\Observability\MetricName;
 use App\Observability\Repository\MetricEventRepository;
 use Doctrine\DBAL\Connection;
 
@@ -22,7 +23,7 @@ class OperationLockRepository
         );
 
         if ($count > 0) {
-            $this->metrics->record('lock.active.detected');
+            $this->metrics->record(MetricName::LOCK_ACTIVE_DETECTED);
         }
 
         return $count > 0;
@@ -31,7 +32,7 @@ class OperationLockRepository
     public function acquire(string $assetUuid, OperationLockType $type, string $actorId): bool
     {
         if ($this->hasTypeLock($assetUuid, $type)) {
-            $this->metrics->record(sprintf('lock.acquire.failed.%s', $type->value));
+            $this->metrics->record(MetricName::lockAcquireFailed($type->value));
             return false;
         }
 
@@ -45,10 +46,10 @@ class OperationLockRepository
                 'released_at' => null,
             ]);
 
-            $this->metrics->record(sprintf('lock.acquire.success.%s', $type->value));
+            $this->metrics->record(MetricName::lockAcquireSuccess($type->value));
             return true;
         } catch (\Throwable) {
-            $this->metrics->record(sprintf('lock.acquire.failed.%s', $type->value));
+            $this->metrics->record(MetricName::lockAcquireFailed($type->value));
             return false;
         }
     }
@@ -67,7 +68,7 @@ class OperationLockRepository
                 'lockType' => $type->value,
             ]
         );
-        $this->metrics->record(sprintf('lock.release.%s', $type->value));
+        $this->metrics->record(MetricName::lockRelease($type->value));
     }
 
     private function hasTypeLock(string $assetUuid, OperationLockType $type): bool
@@ -84,7 +85,7 @@ class OperationLockRepository
         );
 
         if ($count > 0) {
-            $this->metrics->record(sprintf('lock.active.detected.%s', $type->value));
+            $this->metrics->record(MetricName::lockActiveDetectedByType($type->value));
         }
 
         return $count > 0;
@@ -141,7 +142,7 @@ class OperationLockRepository
         );
 
         if ($released > 0) {
-            $this->metrics->record(sprintf('lock.watchdog.released.%s', $type->value));
+            $this->metrics->record(MetricName::lockWatchdogReleased($type->value));
         }
 
         return $released;

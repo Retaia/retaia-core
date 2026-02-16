@@ -3,6 +3,7 @@
 namespace App\Application\AuthClient;
 
 use App\Application\AuthClient\Port\DeviceFlowGateway;
+use App\Domain\AuthClient\DeviceFlowStatus;
 
 final class ApproveDeviceFlowHandler
 {
@@ -18,11 +19,11 @@ final class ApproveDeviceFlowHandler
             return new ApproveDeviceFlowResult(ApproveDeviceFlowResult::STATUS_INVALID_DEVICE_CODE);
         }
 
-        if (($status['status'] ?? null) === 'EXPIRED') {
+        if (($status['status'] ?? null) === DeviceFlowStatus::EXPIRED) {
             return new ApproveDeviceFlowResult(ApproveDeviceFlowResult::STATUS_EXPIRED_DEVICE_CODE);
         }
 
-        if (($status['status'] ?? null) !== 'APPROVED') {
+        if (($status['status'] ?? null) !== DeviceFlowStatus::APPROVED) {
             return new ApproveDeviceFlowResult(ApproveDeviceFlowResult::STATUS_STATE_CONFLICT);
         }
 

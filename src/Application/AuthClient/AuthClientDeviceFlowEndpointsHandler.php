@@ -2,6 +2,9 @@
 
 namespace App\Application\AuthClient;
 
+use App\Application\AuthClient\Input\DeviceCodeInput;
+use App\Application\AuthClient\Input\StartDeviceFlowInput;
+
 final class AuthClientDeviceFlowEndpointsHandler
 {
     public function __construct(
@@ -17,10 +20,11 @@ final class AuthClientDeviceFlowEndpointsHandler
      */
     public function start(array $payload, string $remoteAddress): StartDeviceFlowEndpointResult
     {
-        $clientKind = trim((string) ($payload['client_kind'] ?? ''));
-        if ($clientKind === '') {
+        $input = StartDeviceFlowInput::fromPayload($payload);
+        if (!$input->isValid()) {
             return new StartDeviceFlowEndpointResult(StartDeviceFlowEndpointResult::STATUS_VALIDATION_FAILED);
         }
+        $clientKind = $input->clientKind();
 
         $retryInSeconds = $this->startRateLimiter->retryInSecondsOrNull($clientKind, $remoteAddress);
         if ($retryInSeconds !== null) {
@@ -48,10 +52,11 @@ final class AuthClientDeviceFlowEndpointsHandler
      */
     public function poll(array $payload): PollDeviceFlowEndpointResult
     {
-        $deviceCode = trim((string) ($payload['device_code'] ?? ''));
-        if ($deviceCode === '') {
+        $input = DeviceCodeInput::fromPayload($payload);
+        if (!$input->isValid()) {
             return new PollDeviceFlowEndpointResult(PollDeviceFlowEndpointResult::STATUS_VALIDATION_FAILED);
         }
+        $deviceCode = $input->deviceCode();
 
         $result = $this->pollDeviceFlowHandler->handle($deviceCode);
         if ($result->status() === PollDeviceFlowResult::STATUS_INVALID_DEVICE_CODE) {
@@ -74,10 +79,11 @@ final class AuthClientDeviceFlowEndpointsHandler
      */
     public function cancel(array $payload): CancelDeviceFlowEndpointResult
     {
-        $deviceCode = trim((string) ($payload['device_code'] ?? ''));
-        if ($deviceCode === '') {
+        $input = DeviceCodeInput::fromPayload($payload);
+        if (!$input->isValid()) {
             return new CancelDeviceFlowEndpointResult(CancelDeviceFlowEndpointResult::STATUS_VALIDATION_FAILED);
         }
+        $deviceCode = $input->deviceCode();
 
         $result = $this->cancelDeviceFlowHandler->handle($deviceCode);
         if ($result->status() === CancelDeviceFlowResult::STATUS_INVALID_DEVICE_CODE) {

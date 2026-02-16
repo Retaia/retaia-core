@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Functional;
 
 use App\Auth\AuthClientProvisioningService;
+use App\Tests\Functional\Support\AuthDeviceFlowCacheTrait;
 use App\Tests\Support\FixtureUsers;
 use Doctrine\DBAL\Connection;
 use GuzzleHttp\Client;
@@ -24,6 +25,7 @@ use Symfony\Component\HttpKernel\HttpKernelInterface;
 final class AuthProcessGuzzleE2ETest extends WebTestCase
 {
     use RecreateDatabaseTrait;
+    use AuthDeviceFlowCacheTrait;
 
     public function testSpecLoginMeLogoutBearerProcess(): void
     {
@@ -1376,38 +1378,6 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
     private function generateOtpCode(string $secret): string
     {
         return TOTP::createFromSecret($secret)->now();
-    }
-
-    private function forceDeviceFlowExpiration(string $deviceCode): void
-    {
-        /** @var CacheItemPoolInterface $cache */
-        $cache = static::getContainer()->get('cache.app');
-        $item = $cache->getItem('auth_device_flows');
-        $flows = $item->get();
-        self::assertIsArray($flows);
-        self::assertIsArray($flows[$deviceCode] ?? null);
-
-        $flow = $flows[$deviceCode];
-        $flow['expires_at'] = time() - 1;
-        $flows[$deviceCode] = $flow;
-        $item->set($flows);
-        $cache->save($item);
-    }
-
-    private function forceDeviceFlowLastPolledAt(string $deviceCode, int $lastPolledAt): void
-    {
-        /** @var CacheItemPoolInterface $cache */
-        $cache = static::getContainer()->get('cache.app');
-        $item = $cache->getItem('auth_device_flows');
-        $flows = $item->get();
-        self::assertIsArray($flows);
-        self::assertIsArray($flows[$deviceCode] ?? null);
-
-        $flow = $flows[$deviceCode];
-        $flow['last_polled_at'] = $lastPolledAt;
-        $flows[$deviceCode] = $flow;
-        $item->set($flows);
-        $cache->save($item);
     }
 
     private function seedClientRegistryEntry(string $clientId, string $clientKind, string $secretKey): void
