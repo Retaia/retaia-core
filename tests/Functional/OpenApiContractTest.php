@@ -131,6 +131,69 @@ final class OpenApiContractTest extends WebTestCase
         self::assertNotContains('waveform_url', $required);
     }
 
+    public function testRuntimeContractIsPullOnlyWithoutPushChannels(): void
+    {
+        $openApi = $this->openApi();
+        $paths = $openApi['paths'] ?? [];
+        self::assertIsArray($paths);
+        self::assertArrayHasKey('/app/policy', $paths);
+        self::assertArrayHasKey('/auth/clients/device/poll', $paths);
+
+        $forbiddenPathFragments = [
+            '/ws',
+            'websocket',
+            '/sse',
+            '/events',
+            '/webhooks/client',
+        ];
+
+        foreach (array_keys($paths) as $path) {
+            self::assertIsString($path);
+            $normalizedPath = strtolower($path);
+            foreach ($forbiddenPathFragments as $fragment) {
+                self::assertStringNotContainsString(
+                    $fragment,
+                    $normalizedPath,
+                    sprintf('OpenAPI runtime must remain pull-only; forbidden push path detected: %s', $path)
+                );
+            }
+        }
+
+        foreach ($paths as $path => $operations) {
+            if (!is_array($operations)) {
+                continue;
+            }
+
+            foreach ($operations as $operation) {
+                if (!is_array($operation)) {
+                    continue;
+                }
+
+                $responses = $operation['responses'] ?? [];
+                if (!is_array($responses)) {
+                    continue;
+                }
+
+                foreach ($responses as $response) {
+                    if (!is_array($response)) {
+                        continue;
+                    }
+
+                    $content = $response['content'] ?? [];
+                    if (!is_array($content)) {
+                        continue;
+                    }
+
+                    self::assertArrayNotHasKey(
+                        'text/event-stream',
+                        $content,
+                        sprintf('OpenAPI runtime must remain pull-only; SSE response content type detected on path %s', (string) $path)
+                    );
+                }
+            }
+        }
+    }
+
     public function testDecisionRequestWithoutIdempotencyKeyIsRejected(): void
     {
         $openApi = $this->openApi();
