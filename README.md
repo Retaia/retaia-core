@@ -16,6 +16,7 @@ It manages authentication, policy/runtime feature governance, asset lifecycle, j
 - [CI](#ci)
 - [Contributing](#contributing)
 - [Documentation](#documentation)
+- [License](#license)
 
 ## What This Repo Contains
 
@@ -217,6 +218,11 @@ Core docs:
 - `docs/OBSERVABILITY-RUNBOOK.md`
 - `docs/OPS-READINESS-CHECKLIST.md`
 - `docs/BOOTSTRAP-TECHNIQUE.md`
+
+## License
+
+Licensed under the GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later).
+See `LICENSE`.
 
 Normative specs:
 

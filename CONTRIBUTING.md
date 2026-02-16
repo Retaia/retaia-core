@@ -26,3 +26,7 @@ Avant tout changement contractuel: modifier/valider `retaia-docs` puis implémen
 - Aucun secret/token en clair dans logs, traces, dumps.
 - Approche préférée : DDD (Domain-Driven Design).
 - Validation recommandée par défaut : TDD (tests unitaires/intégration) et BDD (scénarios métier).
+
+## Licence des contributions
+- Toute contribution est publiée sous `AGPL-3.0-or-later`.
+- En soumettant une PR, vous acceptez que votre contribution soit distribuée sous cette licence.
