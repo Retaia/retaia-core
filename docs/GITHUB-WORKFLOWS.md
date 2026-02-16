@@ -11,6 +11,7 @@ Le pipeline CI est défini dans :
 Il exécute quatre jobs :
 
 0. `branch-up-to-date` (PR uniquement)
+0bis. `pr-metadata` (PR uniquement)
 1. `no-black-magic`
 2. `lint`
 3. `test`
@@ -22,6 +23,16 @@ Détail supplémentaire :
   - `scripts/check-branch-up-to-date.sh`
   - échoue si la branche PR n’est pas rebased sur la base (`master`)
   - échoue si des merge commits de synchronisation sont présents dans l’historique PR
+- `pr-metadata` (sur `pull_request`) :
+  - `scripts/check-pr-metadata.sh`
+  - échoue si la description PR ne contient pas les sections obligatoires :
+    - `## Summary`
+    - `## Out Of Scope`
+    - `## Specs Impact`
+    - `## Risks`
+    - `## Rollback`
+    - `## Tests`
+  - source de format : `.github/pull_request_template.md`
 
 Détail :
 
