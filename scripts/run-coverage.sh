@@ -3,15 +3,26 @@ set -euo pipefail
 
 mkdir -p var/coverage
 
-if php -r 'exit((int) !(extension_loaded("xdebug") || extension_loaded("pcov")));'; then
-  vendor/bin/phpunit --coverage-clover var/coverage/clover.xml
-  exit 0
-fi
+run_phpunit_with_coverage() {
+  local out="$1"
+  shift
+  local cmd=(vendor/bin/phpunit "$@" --coverage-clover "$out")
 
-if command -v phpdbg >/dev/null 2>&1; then
-  phpdbg -qrr vendor/bin/phpunit --coverage-clover var/coverage/clover.xml
-  exit 0
-fi
+  if php -r 'exit((int) !(extension_loaded("xdebug") || extension_loaded("pcov")));'; then
+    "${cmd[@]}"
+    return 0
+  fi
 
-echo "No coverage driver available. Install/enable xdebug or pcov, or install phpdbg." >&2
-exit 1
+  if command -v phpdbg >/dev/null 2>&1; then
+    phpdbg -qrr "${cmd[@]}"
+    return 0
+  fi
+
+  echo "No coverage driver available. Install/enable xdebug or pcov, or install phpdbg." >&2
+  exit 1
+}
+
+# Unit suite: business/application layers covered by unit tests.
+run_phpunit_with_coverage "var/coverage/clover-unit.xml" --configuration phpunit.unit-coverage.xml --testsuite Unit
+# Functional suite: HTTP/API integration quality on controller layer.
+run_phpunit_with_coverage "var/coverage/clover-functional.xml" --configuration phpunit.functional-coverage.xml --testsuite Functional
