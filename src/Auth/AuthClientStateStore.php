@@ -2,6 +2,7 @@
 
 namespace App\Auth;
 
+use App\Domain\AuthClient\ClientKind;
 use Psr\Cache\CacheItemPoolInterface;
 
 final class AuthClientStateStore
@@ -24,11 +25,11 @@ final class AuthClientStateStore
 
         $registry = [
             'agent-default' => [
-                'client_kind' => 'AGENT',
+                'client_kind' => ClientKind::AGENT,
                 'secret_key' => 'agent-secret',
             ],
             'mcp-default' => [
-                'client_kind' => 'MCP',
+                'client_kind' => ClientKind::MCP,
                 'secret_key' => 'mcp-secret',
             ],
         ];

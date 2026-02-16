@@ -219,11 +219,6 @@ Core docs:
 - `docs/OPS-READINESS-CHECKLIST.md`
 - `docs/BOOTSTRAP-TECHNIQUE.md`
 
-## License
-
-Licensed under the GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later).
-See `LICENSE`.
-
 Normative specs:
 
 - `specs/README.md`
@@ -232,4 +227,4 @@ Normative specs:
 
 ## License
 
-Current project license in this repository is marked as `proprietary` (`composer.json`).
+Current project license metadata is `proprietary` (see `composer.json`).

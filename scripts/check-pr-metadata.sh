@@ -37,7 +37,9 @@ for section in "${required_sections[@]}"; do
 done
 
 if [ "${missing}" -ne 0 ]; then
-  echo "PR metadata check failed. Use .github/pull_request_template.md." >&2
+  echo "PR metadata check failed." >&2
+  echo "Required template: .github/pull_request_template.md" >&2
+  echo "Tip: gh pr edit <number> --body-file .github/pull_request_template.md (then fill each section)." >&2
   exit 1
 fi
 
