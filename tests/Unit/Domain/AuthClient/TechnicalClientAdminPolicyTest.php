@@ -7,11 +7,11 @@ use PHPUnit\Framework\TestCase;
 
 final class TechnicalClientAdminPolicyTest extends TestCase
 {
-    public function testUiRustIsProtectedFromAdminRevoke(): void
+    public function testUiWebIsProtectedFromAdminRevoke(): void
     {
         $policy = new TechnicalClientAdminPolicy();
 
-        self::assertTrue($policy->isRevokeForbiddenScope('UI_RUST'));
+        self::assertTrue($policy->isRevokeForbiddenScope('UI_WEB'));
         self::assertFalse($policy->isRevokeForbiddenScope('AGENT'));
         self::assertFalse($policy->isRevokeForbiddenScope('MCP'));
         self::assertFalse($policy->isRevokeForbiddenScope(null));

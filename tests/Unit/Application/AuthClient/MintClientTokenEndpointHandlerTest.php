@@ -68,8 +68,8 @@ final class MintClientTokenEndpointHandlerTest extends TestCase
         );
 
         $result = $handler->handle([
-            'client_id' => 'ui-rust',
-            'client_kind' => 'UI_RUST',
+            'client_id' => 'ui-web',
+            'client_kind' => 'UI_WEB',
             'secret_key' => 'secret',
         ], '10.0.0.3');
 

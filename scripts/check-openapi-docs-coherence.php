@@ -71,6 +71,8 @@ exit(0);
  */
 function documentedEndpoints(string $markdown): array
 {
+    $markdown = stripPlannedSections($markdown);
+
     preg_match_all('/`(\/[a-z0-9\/._{}-]+)`/i', $markdown, $matches);
     $endpoints = [];
     foreach (($matches[1] ?? []) as $endpoint) {
@@ -90,6 +92,11 @@ function documentedEndpoints(string $markdown): array
     }
 
     return array_keys($endpoints);
+}
+
+function stripPlannedSections(string $markdown): string
+{
+    return (string) preg_replace('/^### .*?\(planned[^\\n]*\\)\\R.*?(?=^## |^### |\\z)/ims', '', $markdown);
 }
 
 /**

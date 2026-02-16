@@ -107,7 +107,7 @@ Changements actés côté Core:
   - les états métier device flow (`PENDING`, `APPROVED`, `DENIED`, `EXPIRED`) sont pilotés via `200` + `status`
   - les anciens signaux `401 AUTHORIZATION_PENDING` et `403 ACCESS_DENIED` ne sont plus utilisés pour ce pilotage
 - `POST /api/v1/auth/clients/token`:
-  - `client_kind=UI_RUST` est refusé en `403 FORBIDDEN_ACTOR` (et non `422`)
+  - `client_kind=UI_WEB` est refusé en `403 FORBIDDEN_ACTOR` (et non `422`)
 
 Impact migration client:
 

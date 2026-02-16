@@ -117,8 +117,8 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
         if ($clientId === '') {
             $clientId = 'interactive-default';
         }
-        $clientKind = trim((string) ($payload['client_kind'] ?? 'UI_RUST'));
-        if (!\in_array($clientKind, ['UI_RUST', 'AGENT'], true)) {
+        $clientKind = trim((string) ($payload['client_kind'] ?? 'UI_WEB'));
+        if (!\in_array($clientKind, ['UI_WEB', 'UI_MOBILE', 'AGENT'], true)) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.client_kind_required')],
                 Response::HTTP_UNPROCESSABLE_ENTITY

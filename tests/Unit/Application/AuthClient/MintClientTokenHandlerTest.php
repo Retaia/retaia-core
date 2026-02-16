@@ -10,12 +10,12 @@ use PHPUnit\Framework\TestCase;
 
 final class MintClientTokenHandlerTest extends TestCase
 {
-    public function testReturnsForbiddenActorForUiRust(): void
+    public function testReturnsForbiddenActorForUiWeb(): void
     {
         $gateway = $this->createStub(AuthClientGateway::class);
         $handler = new MintClientTokenHandler(new TechnicalClientTokenPolicy(), $gateway);
 
-        $result = $handler->handle('agent-default', 'UI_RUST', 'secret');
+        $result = $handler->handle('agent-default', 'UI_WEB', 'secret');
 
         self::assertSame(MintClientTokenResult::STATUS_FORBIDDEN_ACTOR, $result->status());
     }

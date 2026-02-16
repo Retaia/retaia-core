@@ -6,6 +6,6 @@ final class TechnicalClientAdminPolicy
 {
     public function isRevokeForbiddenScope(?string $clientKind): bool
     {
-        return $clientKind === 'UI_RUST';
+        return $clientKind === 'UI_WEB';
     }
 }
