@@ -3,6 +3,7 @@
 namespace App\Application\AuthClient;
 
 use App\Application\AuthClient\Port\DeviceFlowGateway;
+use App\Domain\AuthClient\DeviceFlowStatus;
 
 final class CancelDeviceFlowHandler
 {
@@ -18,7 +19,7 @@ final class CancelDeviceFlowHandler
             return new CancelDeviceFlowResult(CancelDeviceFlowResult::STATUS_INVALID_DEVICE_CODE);
         }
 
-        if (($status['status'] ?? null) === 'EXPIRED') {
+        if (($status['status'] ?? null) === DeviceFlowStatus::EXPIRED) {
             return new CancelDeviceFlowResult(CancelDeviceFlowResult::STATUS_EXPIRED_DEVICE_CODE);
         }
 

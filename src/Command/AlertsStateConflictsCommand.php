@@ -3,6 +3,7 @@
 namespace App\Command;
 
 use App\Lock\Repository\OperationLockRepository;
+use App\Observability\MetricName;
 use App\Observability\Repository\MetricEventRepository;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -44,18 +45,22 @@ final class AlertsStateConflictsCommand extends Command
         $since = new \DateTimeImmutable(sprintf('-%d minutes', $windowMinutes));
         $staleBefore = new \DateTimeImmutable(sprintf('-%d minutes', $staleLockMinutes));
 
-        $stateConflicts = $this->metrics->countSince('api.error.STATE_CONFLICT', $since);
-        $moveLockFails = $this->metrics->countSince('lock.acquire.failed.asset_move_lock', $since);
-        $purgeLockFails = $this->metrics->countSince('lock.acquire.failed.asset_purge_lock', $since);
+        $stateConflictMetric = MetricName::apiError('STATE_CONFLICT');
+        $moveLockMetric = MetricName::lockAcquireFailed('asset_move_lock');
+        $purgeLockMetric = MetricName::lockAcquireFailed('asset_purge_lock');
+
+        $stateConflicts = $this->metrics->countSince($stateConflictMetric, $since);
+        $moveLockFails = $this->metrics->countSince($moveLockMetric, $since);
+        $purgeLockFails = $this->metrics->countSince($purgeLockMetric, $since);
         $activeLocks = $this->locks->countActiveLocks();
         $staleLocks = $this->locks->countStaleActiveLocks($staleBefore);
 
         $io->table(
             ['Metric', 'Count', 'Threshold'],
             [
-                ['api.error.STATE_CONFLICT', (string) $stateConflicts, (string) $stateThreshold],
-                ['lock.acquire.failed.asset_move_lock', (string) $moveLockFails, (string) $lockThreshold],
-                ['lock.acquire.failed.asset_purge_lock', (string) $purgeLockFails, (string) $lockThreshold],
+                [$stateConflictMetric, (string) $stateConflicts, (string) $stateThreshold],
+                [$moveLockMetric, (string) $moveLockFails, (string) $lockThreshold],
+                [$purgeLockMetric, (string) $purgeLockFails, (string) $lockThreshold],
                 ['asset_operation_lock.active', (string) $activeLocks, (string) $activeLocksThreshold],
                 [sprintf('asset_operation_lock.stale(>%dm)', $staleLockMinutes), (string) $staleLocks, (string) $staleLocksThreshold],
             ]

@@ -29,6 +29,8 @@ use App\Application\AuthClient\RevokeClientTokenEndpointResult;
 use App\Application\AuthClient\RotateClientSecretEndpointResult;
 use App\Application\AuthClient\StartDeviceFlowEndpointResult;
 use App\Auth\UserAccessTokenService;
+use App\Domain\AuthClient\DeviceFlowStatus;
+use App\Observability\MetricName;
 use App\Observability\Repository\MetricEventRepository;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -40,11 +42,6 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/api/v1/auth')]
 final class AuthController
 {
-    private const METRIC_AUTH_CLIENT_TOKEN_FORBIDDEN_ACTOR_UI_WEB = 'auth.client.token.forbidden_actor.ui_web';
-    private const METRIC_AUTH_DEVICE_POLL_INVALID_DEVICE_CODE = 'auth.device.poll.invalid_device_code';
-    private const METRIC_AUTH_DEVICE_POLL_THROTTLED = 'auth.device.poll.throttled';
-    private const METRIC_AUTH_DEVICE_POLL_STATUS_PREFIX = 'auth.device.poll.status.';
-
     public function __construct(
         private RequestPasswordResetEndpointHandler $requestPasswordResetEndpointHandler,
         private ResetPasswordEndpointHandler $resetPasswordEndpointHandler,
@@ -443,7 +440,7 @@ final class AuthController
             );
         }
         if ($result->status() === MintClientTokenEndpointResult::STATUS_FORBIDDEN_ACTOR) {
-            $this->metrics->record(self::METRIC_AUTH_CLIENT_TOKEN_FORBIDDEN_ACTOR_UI_WEB);
+            $this->metrics->record(MetricName::AUTH_CLIENT_TOKEN_FORBIDDEN_ACTOR_UI_WEB);
 
             return new JsonResponse(
                 ['code' => 'FORBIDDEN_ACTOR', 'message' => $this->translator->trans('auth.error.forbidden_actor')],
@@ -605,7 +602,7 @@ final class AuthController
             );
         }
         if ($result->status() === PollDeviceFlowEndpointResult::STATUS_INVALID_DEVICE_CODE) {
-            $this->metrics->record(self::METRIC_AUTH_DEVICE_POLL_INVALID_DEVICE_CODE);
+            $this->metrics->record(MetricName::AUTH_DEVICE_POLL_INVALID_DEVICE_CODE);
 
             return new JsonResponse(
                 ['code' => 'INVALID_DEVICE_CODE', 'message' => $this->translator->trans('auth.error.invalid_device_code')],
@@ -615,7 +612,7 @@ final class AuthController
 
         $status = $result->payload();
         if ($result->status() === PollDeviceFlowEndpointResult::STATUS_THROTTLED && is_array($status)) {
-            $this->metrics->record(self::METRIC_AUTH_DEVICE_POLL_THROTTLED);
+            $this->metrics->record(MetricName::AUTH_DEVICE_POLL_THROTTLED);
 
             return new JsonResponse(
                 [
@@ -635,12 +632,12 @@ final class AuthController
         }
 
         $flowStatus = strtoupper((string) ($status['status'] ?? ''));
-        if (in_array($flowStatus, ['PENDING', 'APPROVED', 'DENIED', 'EXPIRED'], true)) {
-            $this->metrics->record(self::METRIC_AUTH_DEVICE_POLL_STATUS_PREFIX.$flowStatus);
-            if ($flowStatus === 'APPROVED') {
+        if (DeviceFlowStatus::isKnown($flowStatus)) {
+            $this->metrics->record(MetricName::authDevicePollStatus($flowStatus));
+            if ($flowStatus === DeviceFlowStatus::APPROVED) {
                 $this->logger->info('auth.device.approved');
             }
-            if ($flowStatus === 'DENIED') {
+            if ($flowStatus === DeviceFlowStatus::DENIED) {
                 $this->logger->warning('auth.device.denied');
             }
         }

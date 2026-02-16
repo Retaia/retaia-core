@@ -13,6 +13,8 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class WorkflowController
 {
+    use ApiErrorResponderTrait;
+
     public function __construct(
         private IdempotencyService $idempotency,
         private WorkflowEndpointsHandler $workflowEndpointsHandler,
@@ -182,17 +184,11 @@ final class WorkflowController
 
     private function forbiddenActor(): JsonResponse
     {
-        return new JsonResponse([
-            'code' => 'FORBIDDEN_ACTOR',
-            'message' => $this->translator->trans('auth.error.forbidden_actor'),
-        ], Response::HTTP_FORBIDDEN);
+        return $this->errorResponse('FORBIDDEN_ACTOR', $this->translator->trans('auth.error.forbidden_actor'), Response::HTTP_FORBIDDEN);
     }
 
     private function forbiddenScope(): JsonResponse
     {
-        return new JsonResponse([
-            'code' => 'FORBIDDEN_SCOPE',
-            'message' => $this->translator->trans('auth.error.forbidden_scope'),
-        ], Response::HTTP_FORBIDDEN);
+        return $this->errorResponse('FORBIDDEN_SCOPE', $this->translator->trans('auth.error.forbidden_scope'), Response::HTTP_FORBIDDEN);
     }
 }

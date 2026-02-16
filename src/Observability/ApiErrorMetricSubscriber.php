@@ -43,7 +43,6 @@ final class ApiErrorMetricSubscriber implements EventSubscriberInterface
             return;
         }
 
-        $this->metrics->record(sprintf('api.error.%s', $code));
+        $this->metrics->record(MetricName::apiError($code));
     }
 }
-

@@ -2,6 +2,7 @@
 
 namespace App\Application\AuthClient;
 
+use App\Application\AuthClient\Input\MintClientTokenInput;
 use App\Application\AuthClient\Port\ClientTokenMintRateLimiterGateway;
 
 final class MintClientTokenEndpointHandler
@@ -17,11 +18,11 @@ final class MintClientTokenEndpointHandler
      */
     public function handle(array $payload, string $remoteAddress): MintClientTokenEndpointResult
     {
-        $clientId = trim((string) ($payload['client_id'] ?? ''));
-        $clientKind = trim((string) ($payload['client_kind'] ?? ''));
-        $secretKey = trim((string) ($payload['secret_key'] ?? ''));
+        $input = MintClientTokenInput::fromPayload($payload);
+        $clientId = $input->clientId();
+        $clientKind = $input->clientKind();
 
-        if ($clientId === '' || $clientKind === '' || $secretKey === '') {
+        if (!$input->isValid()) {
             return new MintClientTokenEndpointResult(MintClientTokenEndpointResult::STATUS_VALIDATION_FAILED);
         }
 
@@ -36,7 +37,7 @@ final class MintClientTokenEndpointHandler
             );
         }
 
-        $result = $this->mintClientTokenHandler->handle($clientId, $clientKind, $secretKey);
+        $result = $this->mintClientTokenHandler->handle($clientId, $clientKind, $input->secretKey());
         if ($result->status() === MintClientTokenResult::STATUS_FORBIDDEN_ACTOR) {
             return new MintClientTokenEndpointResult(MintClientTokenEndpointResult::STATUS_FORBIDDEN_ACTOR, null, null, $clientId, $clientKind);
         }
