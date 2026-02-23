@@ -1,8 +1,8 @@
 {
-  "version": "master-84b08aaa225c",
+  "version": "master-a5468efd37dc",
   "channel": "stable",
   "asset_url": "https://api.github.com/repos/Retaia/retaia-ui/zipball/master",
-  "sha256": "df68a6297c60ee6c76bc8e028356dc89cef121be9deeb39b5fa3aa5229533ee2",
-  "notes_url": "https://github.com/Retaia/retaia-ui/commit/84b08aaa225cd381c7a1410a1ad341b1f77b2062",
-  "generated_at": "2026-02-16T04:51:25Z"
+  "sha256": "b41872259ba7f39cdf037a4f2f88425cd52f9aedca317d3b7fdd982aeb20804c",
+  "notes_url": "https://github.com/Retaia/retaia-ui/commit/a5468efd37dcfc2f5b5654fb24d2d3bbcb9edabb",
+  "generated_at": "2026-02-16T23:09:17Z"
 }
