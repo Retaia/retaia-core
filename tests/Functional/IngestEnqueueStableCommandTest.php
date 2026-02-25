@@ -59,6 +59,8 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         $asset = $entityManager->find(Asset::class, $assetUuid);
         self::assertInstanceOf(Asset::class, $asset);
         self::assertSame('new-rush.mov', $asset->getFilename());
+        self::assertSame('nas-main', $asset->getFields()['paths']['storage_id'] ?? null);
+        self::assertSame('INBOX/new-rush.mov', $asset->getFields()['paths']['original_relative'] ?? null);
     }
 
     public function testMissingStableFileIsMarkedMissingAndNotQueued(): void

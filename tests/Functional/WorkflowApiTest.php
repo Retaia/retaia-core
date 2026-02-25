@@ -44,11 +44,54 @@ final class WorkflowApiTest extends WebTestCase
 
         $client->request('GET', '/api/v1/assets/11111111-aaaa-4aaa-8aaa-111111111111');
         $keepAsset = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('ARCHIVED', $keepAsset['state'] ?? null);
+        self::assertSame('ARCHIVED', $keepAsset['summary']['state'] ?? null);
 
         $client->request('GET', '/api/v1/assets/22222222-bbbb-4bbb-8bbb-222222222222');
         $rejectAsset = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('REJECTED', $rejectAsset['state'] ?? null);
+        self::assertSame('REJECTED', $rejectAsset['summary']['state'] ?? null);
+    }
+
+    public function testGetAssetReturnsSpecDetailStructure(): void
+    {
+        $client = $this->createAuthenticatedClient('admin@retaia.local');
+        $uuid = '77777777-1111-4111-8111-777777777777';
+        $this->seedAsset($uuid, AssetState::DECISION_PENDING, 'detail.mov');
+
+        $client->request('GET', '/api/v1/assets/'.$uuid);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+
+        self::assertIsArray($payload['summary'] ?? null);
+        self::assertSame($uuid, $payload['summary']['uuid'] ?? null);
+        self::assertSame('DECISION_PENDING', $payload['summary']['state'] ?? null);
+        self::assertArrayHasKey('created_at', $payload['summary']);
+
+        self::assertIsArray($payload['paths'] ?? null);
+        self::assertSame('nas-main', $payload['paths']['storage_id'] ?? null);
+        self::assertSame('INBOX/detail.mov', $payload['paths']['original_relative'] ?? null);
+        self::assertIsArray($payload['paths']['sidecars_relative'] ?? null);
+
+        self::assertIsArray($payload['processing'] ?? null);
+        self::assertArrayHasKey('facts_done', $payload['processing']);
+        self::assertArrayHasKey('proxy_done', $payload['processing']);
+        self::assertArrayHasKey('thumbs_done', $payload['processing']);
+        self::assertArrayHasKey('waveform_done', $payload['processing']);
+
+        self::assertIsArray($payload['derived'] ?? null);
+        self::assertArrayHasKey('thumbs', $payload['derived']);
+        self::assertIsArray($payload['derived']['thumbs'] ?? null);
+
+        self::assertIsArray($payload['transcript'] ?? null);
+        self::assertSame('NONE', $payload['transcript']['status'] ?? null);
+
+        self::assertIsArray($payload['decisions'] ?? null);
+        self::assertArrayHasKey('history', $payload['decisions']);
+        self::assertIsArray($payload['decisions']['history'] ?? null);
+
+        self::assertIsArray($payload['audit'] ?? null);
+        self::assertArrayHasKey('path_history', $payload['audit']);
+        self::assertIsArray($payload['audit']['path_history'] ?? null);
     }
 
     public function testBulkDecisionsEndpointsAreForbiddenWhenFeatureIsDisabled(): void

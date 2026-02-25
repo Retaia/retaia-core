@@ -23,6 +23,7 @@ final class IngestEnqueueStableCommand extends Command
         private WatchPathResolver $watchPathResolver,
         private AssetRepositoryInterface $assets,
         private JobRepository $jobs,
+        private string $defaultStorageId = 'nas-main',
     ) {
         parent::__construct();
     }
@@ -66,7 +67,15 @@ final class IngestEnqueueStableCommand extends Command
                     AssetState::DISCOVERED,
                     [],
                     null,
-                    ['source_path' => $sourcePath]
+                    [
+                        'storage_id' => $this->defaultStorageId,
+                        'source_path' => $sourcePath,
+                        'paths' => [
+                            'storage_id' => $this->defaultStorageId,
+                            'original_relative' => $sourcePath,
+                            'sidecars_relative' => [],
+                        ],
+                    ]
                 );
                 $this->assets->save($asset);
             }

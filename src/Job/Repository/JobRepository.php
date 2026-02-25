@@ -11,6 +11,7 @@ final class JobRepository
 {
     public function __construct(
         private Connection $connection,
+        private string $defaultStorageId = 'nas-main',
     ) {
     }
 
@@ -20,7 +21,7 @@ final class JobRepository
     public function listClaimable(int $limit): array
     {
         $rows = $this->connection->fetchAllAssociative(
-            'SELECT j.id, j.asset_uuid, j.job_type, j.status, j.claimed_by, j.lock_token, j.locked_until, j.result_payload
+            'SELECT j.id, j.asset_uuid, j.job_type, j.status, j.claimed_by, j.lock_token, j.locked_until, j.result_payload, a.fields AS asset_fields, a.filename AS asset_filename
             FROM processing_job j
             INNER JOIN asset a ON a.uuid = j.asset_uuid
             WHERE (j.status = :pending OR (j.status = :claimed AND j.locked_until < :now))
@@ -54,9 +55,10 @@ final class JobRepository
     public function find(string $id): ?Job
     {
         $row = $this->connection->fetchAssociative(
-            'SELECT id, asset_uuid, job_type, status, claimed_by, lock_token, locked_until, result_payload
-             FROM processing_job
-             WHERE id = :id',
+            'SELECT j.id, j.asset_uuid, j.job_type, j.status, j.claimed_by, j.lock_token, j.locked_until, j.result_payload, a.fields AS asset_fields, a.filename AS asset_filename
+             FROM processing_job j
+             LEFT JOIN asset a ON a.uuid = j.asset_uuid
+             WHERE j.id = :id',
             ['id' => $id]
         );
 
@@ -257,6 +259,73 @@ final class JobRepository
             isset($row['lock_token']) ? (string) $row['lock_token'] : null,
             $lockedUntil,
             $result,
+            $this->sourceFromAssetFields($row['asset_fields'] ?? null, (string) ($row['asset_filename'] ?? '')),
         );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function sourceFromAssetFields(mixed $assetFieldsRaw, string $assetFilename): array
+    {
+        $fields = [];
+        if (is_array($assetFieldsRaw)) {
+            $fields = $assetFieldsRaw;
+        } elseif (is_string($assetFieldsRaw) && $assetFieldsRaw !== '') {
+            $decoded = json_decode($assetFieldsRaw, true);
+            if (is_array($decoded)) {
+                $fields = $decoded;
+            }
+        }
+
+        $paths = is_array($fields['paths'] ?? null) ? $fields['paths'] : [];
+        $storageId = trim((string) ($paths['storage_id'] ?? $fields['storage_id'] ?? $this->defaultStorageId));
+        if ($storageId === '') {
+            $storageId = $this->defaultStorageId;
+        }
+
+        $fallbackOriginal = $this->sanitizeRelativePath('INBOX/'.$assetFilename);
+        $original = $this->sanitizeRelativePath((string) ($paths['original_relative'] ?? $fields['current_path'] ?? $fields['source_path'] ?? ''));
+        if ($original === '') {
+            $original = $fallbackOriginal;
+        }
+        $sidecars = $this->sanitizeRelativePaths(is_array($paths['sidecars_relative'] ?? null) ? $paths['sidecars_relative'] : ($fields['sidecars_relative'] ?? []));
+
+        return [
+            'storage_id' => $storageId,
+            'original_relative' => $original,
+            'sidecars_relative' => $sidecars,
+        ];
+    }
+
+    private function sanitizeRelativePath(string $path): string
+    {
+        $trimmed = ltrim(trim($path), '/');
+        if ($trimmed === '' || str_contains($trimmed, "\0") || str_contains($trimmed, '../') || str_contains($trimmed, '..\\')) {
+            return '';
+        }
+
+        return $trimmed;
+    }
+
+    /**
+     * @param mixed $paths
+     * @return array<int, string>
+     */
+    private function sanitizeRelativePaths(mixed $paths): array
+    {
+        if (!is_array($paths)) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($paths as $path) {
+            $normalized = $this->sanitizeRelativePath((string) $path);
+            if ($normalized !== '') {
+                $result[] = $normalized;
+            }
+        }
+
+        return array_values(array_unique($result));
     }
 }

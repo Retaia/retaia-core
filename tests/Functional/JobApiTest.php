@@ -20,6 +20,11 @@ final class JobApiTest extends WebTestCase
 
         $clientA->jsonRequest('POST', '/api/v1/jobs/job-1/claim');
         $firstStatus = $clientA->getResponse()->getStatusCode();
+        if ($firstStatus === Response::HTTP_OK) {
+            $firstPayload = json_decode((string) $clientA->getResponse()->getContent(), true);
+            self::assertSame('nas-main', $firstPayload['source']['storage_id'] ?? null);
+            self::assertSame('INBOX/job-1.mov', $firstPayload['source']['original_relative'] ?? null);
+        }
         $clientA->jsonRequest('POST', '/api/v1/jobs/job-1/claim');
         $secondStatus = $clientA->getResponse()->getStatusCode();
 
@@ -145,6 +150,15 @@ final class JobApiTest extends WebTestCase
         $payload = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertIsArray($payload);
         self::assertCount(1, $payload['items'] ?? []);
+        $job = $payload['items'][0] ?? null;
+        self::assertIsArray($job);
+        self::assertSame('job-list-1', $job['job_id'] ?? null);
+        self::assertArrayHasKey('source', $job);
+        self::assertSame('nas-main', $job['source']['storage_id'] ?? null);
+        self::assertNotSame('', (string) ($job['source']['original_relative'] ?? ''));
+        self::assertFalse(str_starts_with((string) ($job['source']['original_relative'] ?? ''), '/'));
+        self::assertArrayHasKey('required_capabilities', $job);
+        self::assertIsArray($job['required_capabilities'] ?? null);
     }
 
     public function testSubmitRejectsMissingIdempotencyKeyAndMissingLockToken(): void
@@ -411,7 +425,15 @@ final class JobApiTest extends WebTestCase
                 'state' => 'READY',
                 'tags' => '[]',
                 'notes' => null,
-                'fields' => '{}',
+                'fields' => json_encode([
+                    'storage_id' => 'nas-main',
+                    'source_path' => 'INBOX/'.$jobId.'.mov',
+                    'paths' => [
+                        'storage_id' => 'nas-main',
+                        'original_relative' => 'INBOX/'.$jobId.'.mov',
+                        'sidecars_relative' => [],
+                    ],
+                ], JSON_THROW_ON_ERROR),
                 'created_at' => $now,
                 'updated_at' => $now,
             ]);

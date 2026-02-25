@@ -11,6 +11,7 @@ final class AssetReadGateway implements AssetReadGatewayPort
     public function __construct(
         private AssetRepositoryInterface $assets,
         private bool $featureSuggestedTagsFiltersEnabled,
+        private string $defaultStorageId = 'nas-main',
     ) {
     }
 
@@ -52,16 +53,43 @@ final class AssetReadGateway implements AssetReadGatewayPort
      */
     private function detail(Asset $asset): array
     {
+        $fields = $asset->getFields();
+        $source = $this->sourceFromFields($fields, $asset->getFilename());
+        $derived = $this->derivedFromFields($fields);
+        $summary = $this->summary($asset);
+
         return [
-            'uuid' => $asset->getUuid(),
-            'media_type' => $asset->getMediaType(),
-            'filename' => $asset->getFilename(),
-            'state' => $asset->getState()->value,
-            'tags' => $asset->getTags(),
-            'notes' => $asset->getNotes(),
-            'fields' => $asset->getFields(),
-            'created_at' => $asset->getCreatedAt()->format(DATE_ATOM),
-            'updated_at' => $asset->getUpdatedAt()->format(DATE_ATOM),
+            'summary' => $summary,
+            'paths' => $source,
+            'processing' => [
+                'facts_done' => (bool) ($fields['facts_done'] ?? false),
+                'thumbs_done' => (bool) ($fields['thumbs_done'] ?? !empty($derived['thumbs'])),
+                'proxy_done' => (bool) ($fields['proxy_done'] ?? ($derived['proxy_video_url'] !== null || $derived['proxy_audio_url'] !== null || $derived['proxy_photo_url'] !== null)),
+                'waveform_done' => (bool) ($fields['waveform_done'] ?? $derived['waveform_url'] !== null),
+                'processing_profile' => is_string($fields['processing_profile'] ?? null) ? $fields['processing_profile'] : null,
+                'review_processing_version' => is_string($fields['review_processing_version'] ?? null) ? $fields['review_processing_version'] : null,
+            ],
+            'derived' => $derived,
+            'transcript' => [
+                'status' => $this->transcriptStatus($fields['transcript']['status'] ?? $fields['transcript_status'] ?? null),
+                'text_preview' => is_string($fields['transcript']['text_preview'] ?? null)
+                    ? $fields['transcript']['text_preview']
+                    : (is_string($fields['transcript_text_preview'] ?? null) ? $fields['transcript_text_preview'] : null),
+                'updated_at' => is_string($fields['transcript']['updated_at'] ?? null)
+                    ? $fields['transcript']['updated_at']
+                    : (is_string($fields['transcript_updated_at'] ?? null) ? $fields['transcript_updated_at'] : null),
+            ],
+            'decisions' => [
+                'current' => is_array($fields['decisions']['current'] ?? null)
+                    ? $fields['decisions']['current']
+                    : (is_array($fields['decision_current'] ?? null) ? $fields['decision_current'] : null),
+                'history' => is_array($fields['decisions']['history'] ?? null)
+                    ? $fields['decisions']['history']
+                    : (is_array($fields['decision_history'] ?? null) ? $fields['decision_history'] : []),
+            ],
+            'audit' => [
+                'path_history' => $this->normalizePathHistory($fields['path_history'] ?? []),
+            ],
         ];
     }
 
@@ -70,12 +98,20 @@ final class AssetReadGateway implements AssetReadGatewayPort
      */
     private function summary(Asset $asset): array
     {
+        $fields = $asset->getFields();
+        $derived = $this->derivedFromFields($fields);
+
         return [
             'uuid' => $asset->getUuid(),
             'media_type' => $asset->getMediaType(),
             'filename' => $asset->getFilename(),
             'state' => $asset->getState()->value,
+            'created_at' => $asset->getCreatedAt()->format(DATE_ATOM),
+            'captured_at' => is_string($fields['captured_at'] ?? null) ? $fields['captured_at'] : null,
+            'duration' => is_numeric($fields['duration'] ?? null) ? (float) $fields['duration'] : null,
             'tags' => $asset->getTags(),
+            'has_proxy' => $derived['proxy_video_url'] !== null || $derived['proxy_audio_url'] !== null || $derived['proxy_photo_url'] !== null,
+            'thumb_url' => $derived['thumbs'][0] ?? null,
         ];
     }
 
@@ -114,5 +150,131 @@ final class AssetReadGateway implements AssetReadGatewayPort
         }
 
         return true;
+    }
+
+    /**
+     * @param array<string, mixed> $fields
+     * @return array<string, mixed>
+     */
+    private function sourceFromFields(array $fields, string $filename): array
+    {
+        $paths = is_array($fields['paths'] ?? null) ? $fields['paths'] : [];
+        $storageId = trim((string) ($paths['storage_id'] ?? $fields['storage_id'] ?? $this->defaultStorageId));
+        if ($storageId === '') {
+            $storageId = $this->defaultStorageId;
+        }
+
+        $fallbackOriginal = $this->sanitizeRelativePath('INBOX/'.$filename);
+        $original = $this->sanitizeRelativePath((string) ($paths['original_relative'] ?? $fields['current_path'] ?? $fields['source_path'] ?? ''));
+        if ($original === '') {
+            $original = $fallbackOriginal;
+        }
+
+        return [
+            'storage_id' => $storageId,
+            'original_relative' => $original,
+            'sidecars_relative' => $this->sanitizeRelativePaths(is_array($paths['sidecars_relative'] ?? null) ? $paths['sidecars_relative'] : ($fields['sidecars_relative'] ?? [])),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $fields
+     * @return array<string, mixed>
+     */
+    private function derivedFromFields(array $fields): array
+    {
+        $derived = is_array($fields['derived'] ?? null) ? $fields['derived'] : [];
+
+        $thumbs = $derived['thumbs'] ?? $fields['thumbs'] ?? [];
+        if (!is_array($thumbs)) {
+            $thumbs = [];
+        }
+
+        return [
+            'proxy_video_url' => $this->optionalString($derived['proxy_video_url'] ?? $fields['proxy_video_url'] ?? null),
+            'proxy_audio_url' => $this->optionalString($derived['proxy_audio_url'] ?? $fields['proxy_audio_url'] ?? null),
+            'proxy_photo_url' => $this->optionalString($derived['proxy_photo_url'] ?? $fields['proxy_photo_url'] ?? null),
+            'waveform_url' => $this->optionalString($derived['waveform_url'] ?? $fields['waveform_url'] ?? null),
+            'thumbs' => array_values(array_filter(
+                array_map(fn (mixed $thumb): string => (string) $thumb, $thumbs),
+                static fn (string $thumb): bool => $thumb !== ''
+            )),
+        ];
+    }
+
+    private function transcriptStatus(mixed $value): string
+    {
+        $status = strtoupper(trim((string) $value));
+        if (!in_array($status, ['NONE', 'RUNNING', 'DONE', 'FAILED'], true)) {
+            return 'NONE';
+        }
+
+        return $status;
+    }
+
+    /**
+     * @param mixed $history
+     * @return array<int, string>
+     */
+    private function normalizePathHistory(mixed $history): array
+    {
+        if (!is_array($history)) {
+            return [];
+        }
+
+        $items = [];
+        foreach ($history as $entry) {
+            if (is_array($entry) && is_string($entry['to'] ?? null)) {
+                $items[] = (string) $entry['to'];
+                continue;
+            }
+            if (is_string($entry)) {
+                $items[] = $entry;
+            }
+        }
+
+        return array_values(array_filter($items, static fn (string $item): bool => $item !== ''));
+    }
+
+    private function sanitizeRelativePath(string $path): string
+    {
+        $trimmed = ltrim(trim($path), '/');
+        if ($trimmed === '' || str_contains($trimmed, "\0") || str_contains($trimmed, '../') || str_contains($trimmed, '..\\')) {
+            return '';
+        }
+
+        return $trimmed;
+    }
+
+    /**
+     * @param mixed $paths
+     * @return array<int, string>
+     */
+    private function sanitizeRelativePaths(mixed $paths): array
+    {
+        if (!is_array($paths)) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($paths as $path) {
+            $normalized = $this->sanitizeRelativePath((string) $path);
+            if ($normalized !== '') {
+                $result[] = $normalized;
+            }
+        }
+
+        return array_values(array_unique($result));
+    }
+
+    private function optionalString(mixed $value): ?string
+    {
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $trimmed = trim($value);
+
+        return $trimmed === '' ? null : $trimmed;
     }
 }

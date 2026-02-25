@@ -17,6 +17,7 @@ parameters:
     app.client_token_ttl_seconds: 3600
     app.user_token_ttl_seconds: 3600
     app.ingest.watch_path: '%env(string:APP_INGEST_WATCH_PATH)%'
+    app.storage.id: '%env(string:APP_STORAGE_ID)%'
     app.features.ai.suggest_tags: '%env(bool:APP_FEATURE_AI_SUGGEST_TAGS)%'
     app.features.ai.suggested_tags_filters: '%env(bool:APP_FEATURE_AI_SUGGESTED_TAGS_FILTERS)%'
     app.features.decisions.bulk: '%env(bool:APP_FEATURE_DECISIONS_BULK)%'
@@ -78,6 +79,15 @@ services:
     App\Infrastructure\Asset\AssetReadGateway:
         bind:
             bool $featureSuggestedTagsFiltersEnabled: '%app.features.ai.suggested_tags_filters%'
+            string $defaultStorageId: '%app.storage.id%'
+
+    App\Job\Repository\JobRepository:
+        bind:
+            string $defaultStorageId: '%app.storage.id%'
+
+    App\Command\IngestEnqueueStableCommand:
+        bind:
+            string $defaultStorageId: '%app.storage.id%'
 
     App\Infrastructure\Auth\PasswordResetRequestRateLimiterGateway:
         bind:
