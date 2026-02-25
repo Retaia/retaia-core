@@ -5,6 +5,11 @@
 Ce document montre un premier moyen de deploiement via image Docker pour Retaia Core.
 Le fichier `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docker-compose.prod.yaml` est un exemple de base a adapter.
 
+Variables importantes pour un deploiement NAS:
+
+- `RETAIA_INGEST_HOST_DIR`: chemin hote (NAS/local) monte dans le conteneur sur `/var/local/RETAIA`
+- `DEFAULT_URI`: URL publique canonique de l'API (utilisee pour generation d'URLs hors contexte HTTP)
+
 ## Fichiers ajoutes
 
 - `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/Dockerfile.prod`
@@ -52,6 +57,20 @@ La stack exemple inclut:
 - `ingest-cron-prod` (polling ingest toutes les 60s)
 - `caddy-prod` (sert API + UI statique)
 - `database-prod` (PostgreSQL)
+
+Exemple NAS (bind mount explicite):
+
+```bash
+export RETAIA_INGEST_HOST_DIR=/volume1/retaia/ingest
+export DEFAULT_URI=https://api.retaia.example
+docker compose -f docker-compose.prod.yaml up -d app-prod ingest-cron-prod caddy-prod database-prod
+```
+
+Structure attendue cote hote dans `RETAIA_INGEST_HOST_DIR`:
+
+- `INBOX/`
+- `ARCHIVE/`
+- `REJECTS/`
 
 ## Delivery UI (compatible CI)
 

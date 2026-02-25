@@ -191,6 +191,7 @@ GitHub Actions includes:
 - `test`
 - `security-audit`
 - `release`
+- `docker-image-build`
 - `docker-base-image-auto-update`
 - `ui-release-auto-update`
 
