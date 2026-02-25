@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-release-assets:
+    name: Build Release Assets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build release archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          OUT_DIR="release-assets"
+          PACKAGE="retaia-core-${TAG}"
+
+          mkdir -p "${OUT_DIR}/${PACKAGE}"
+          rsync -a ./ "${OUT_DIR}/${PACKAGE}/" \
+            --exclude ".git" \
+            --exclude "vendor" \
+            --exclude "node_modules" \
+            --exclude "var/cache" \
+            --exclude "var/log" \
+            --exclude "release-assets" \
+            --exclude ".idea"
+
+          tar -C "${OUT_DIR}" -czf "${OUT_DIR}/${PACKAGE}.tar.gz" "${PACKAGE}"
+          shasum -a 256 "${OUT_DIR}/${PACKAGE}.tar.gz" > "${OUT_DIR}/${PACKAGE}.tar.gz.sha256"
+
+      - name: Upload release assets artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          retention-days: 14
+          path: |
+            release-assets/*.tar.gz
+            release-assets/*.sha256
+
+  create-github-release:
+    name: Publish GitHub Release
+    needs: build-release-assets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            release-assets/*.tar.gz
+            release-assets/*.sha256

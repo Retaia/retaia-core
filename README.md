@@ -190,6 +190,7 @@ GitHub Actions includes:
 - `lint`
 - `test`
 - `security-audit`
+- `release`
 - `docker-base-image-auto-update`
 - `ui-release-auto-update`
 
