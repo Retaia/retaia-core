@@ -2,6 +2,8 @@
 
 namespace App\Tests\Unit\Application\Job;
 
+use App\Asset\Repository\AssetRepositoryInterface;
+use App\Asset\Service\AssetStateMachine;
 use App\Application\Auth\Port\AuthenticatedUserGateway;
 use App\Application\Auth\ResolveAuthenticatedUserHandler;
 use App\Application\Job\ClaimJobHandler;
@@ -117,6 +119,8 @@ final class JobEndpointsHandlerTest extends TestCase
             new HeartbeatJobHandler($gateway, new ResolveJobLockConflictCodeHandler($gateway)),
             new SubmitJobHandler(
                 $gateway,
+                $this->createMock(AssetRepositoryInterface::class),
+                new AssetStateMachine(),
                 new CheckSuggestTagsSubmitScopeHandler(true),
                 new ResolveJobLockConflictCodeHandler($gateway)
             ),
