@@ -89,7 +89,7 @@ Use the dev setup documented in `docs/DOCKER-DEVELOPMENT.md`.
   - `Dockerfile.prod`
   - `docker-compose.prod.yaml`
 - Full guide: `docs/DOCKER-PROD-EXAMPLE.md`
-- NAS + workstations profile: expose one LAN entrypoint (example `http://192.168.0.14:8080`) and route API under `/api/v1` through Caddy.
+- Normative deployment profile (NAS + workstations): `specs/architecture/DEPLOYMENT-TOPOLOGY.md`.
 
 Build is intentionally gated and requires:
 
