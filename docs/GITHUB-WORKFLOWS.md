@@ -76,6 +76,23 @@ Détail :
 - `push` sur `master`
 - `pull_request`
 
+## GitHub Release (tag-driven)
+
+Workflow:
+
+- `.github/workflows/release.yml`
+
+Declenchement:
+
+- `push` d'un tag `v*` (ex: `v1.0.0`, `v1.0.0-rc1`)
+
+Comportement:
+
+- cree une archive release `retaia-core-<tag>.tar.gz`
+- cree un checksum SHA-256 associe (`.sha256`)
+- publie une GitHub Release avec notes auto-generees
+- marque automatiquement la release en pre-release si le tag contient un suffixe (ex: `-rc1`)
+
 ## Auto-update (sans gate de validation)
 
 Deux workflows dedies executent une mise a jour automatique puis commit/push sur `master`:
