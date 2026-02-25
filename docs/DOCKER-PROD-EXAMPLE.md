@@ -2,85 +2,35 @@
 
 > Statut: exemple non normatif.
 
-Ce document montre un premier moyen de deploiement via image Docker pour Retaia Core.
-Le fichier `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docker-compose.prod.yaml` est un exemple de base a adapter.
-
-Variables importantes pour un deploiement NAS:
-
-- `RETAIA_INGEST_HOST_DIR`: chemin hote (NAS/local) monte dans le conteneur sur `/var/local/RETAIA`
-- `DEFAULT_URI`: URL publique canonique de l'API (utilisee pour generation d'URLs hors contexte HTTP)
+Ce document decrit le deploiement recommande en production: images GHCR (`core` + `ui`) derriere `caddy`.
+Le fichier `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docker-compose.prod.yaml` est la base de deploiement.
 
 ## Profile recommande: NAS + agents workstations
 
 Quand les agents tournent sur des workstations (hors reseau Docker du NAS):
 
 - exposer une seule entree LAN (ex: `http://192.168.0.14:8080`)
-- conserver `app-prod` non expose directement sur host ports
-- router `/api/*` via Caddy vers `app-prod:9000`
+- conserver `core` non expose directement sur host ports
+- router `/api/*` via Caddy vers `core:9000` (`php_fastcgi`)
+- router le reste vers `ui:80`
 - configurer les agents workstations vers:
   - `http://192.168.0.14:8080/api/v1`
 
-Pourquoi:
+## Services du compose prod
 
-- `app-prod` reste prive au reseau Docker
-- UI navigateur et agents utilisent une URL routable unique sur le LAN
-- pas de dependance a des hostnames Docker internes (`app-prod`, `core`, etc.) cote workstation/browser
+- `core`: API PHP-FPM (image GHCR `ghcr.io/retaia/retaia-core:<tag>`)
+- `ingest-cron`: polling ingest toutes les 60s (meme image que `core`)
+- `ui`: frontend (image GHCR `ghcr.io/retaia/retaia-ui:<tag>`)
+- `caddy`: reverse proxy LAN unique (API + UI)
+- `db`: PostgreSQL
 
-## Fichiers ajoutes
+## Variables importantes
 
-- `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/Dockerfile.prod`
-- `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docker-compose.prod.yaml`
-- `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/docker/Caddyfile.prod.example`
-
-## Base image
-
-Le build prod part de la meme base que le dev:
-
-- `fullfrontend/php-fpm:latest`
-
-Tu peux la surcharger avec `RETAIA_BASE_IMAGE`.
-
-## Flag V1 obligatoire pour build
-
-Le build d'image prod est bloque tant que le flag V1 n'est pas positionne:
-
-- `RETAIA_BUILD_V1_READY=1`
-
-Sans ce flag, `Dockerfile.prod` echoue volontairement.
-
-Build standard:
-
-```bash
-RETAIA_BUILD_V1_READY=1 composer prod:image:build
-```
-
-Build manuel equivalent:
-
-```bash
-RETAIA_BUILD_V1_READY=1 docker compose -f docker-compose.prod.yaml build app-prod
-```
-
-## Lancement exemple
-
-```bash
-RETAIA_BUILD_V1_READY=1 docker compose -f docker-compose.prod.yaml build app-prod
-docker compose -f docker-compose.prod.yaml up -d app-prod ingest-cron-prod caddy-prod database-prod
-```
-
-La stack exemple inclut:
-
-- `app-prod` (PHP-FPM)
-- `ingest-cron-prod` (polling ingest toutes les 60s)
-- `caddy-prod` (sert API + UI statique)
-- `database-prod` (PostgreSQL)
-
-Exemple NAS (bind mount explicite):
-
-```bash
-export RETAIA_INGEST_HOST_DIR=/volume1/retaia/ingest
-export DEFAULT_URI=https://api.retaia.example
-docker compose -f docker-compose.prod.yaml up -d app-prod ingest-cron-prod caddy-prod database-prod
-```
+- `RETAIA_CORE_IMAGE`: tag image Core (ex: `ghcr.io/retaia/retaia-core:v1.0.0`)
+- `RETAIA_UI_IMAGE`: tag image UI (ex: `ghcr.io/retaia/retaia-ui:v1.0.0`)
+- `RETAIA_INGEST_HOST_DIR`: chemin hote (NAS/local) monte dans le conteneur sur `/var/local/RETAIA`
+- `DEFAULT_URI`: URL publique canonique de l'API (generation d'URLs hors contexte HTTP)
+- `RETAIA_PROD_HTTP_PORT`: port expose par Caddy (defaut `8080`)
 
 Structure attendue cote hote dans `RETAIA_INGEST_HOST_DIR`:
 
@@ -88,54 +38,48 @@ Structure attendue cote hote dans `RETAIA_INGEST_HOST_DIR`:
 - `ARCHIVE/`
 - `REJECTS/`
 
-## Delivery UI (compatible CI)
-
-Le compose prod sert l'UI statique depuis:
-
-- `${RETAIA_UI_DIST_DIR:-./ui/dist}`
-
-Par defaut, le dossier attendu est donc `./ui/dist` dans ce repository.
-Cela evite la dependance a un dossier parent (`../...`) qui n'existe pas en CI.
-
-### CI (exemple)
-
-1. checkout du repo UI dans `./ui`
-2. build UI pour produire `./ui/dist`
-3. lancer le build/deploiement compose prod
-
-Exemple GitHub Actions (principe):
-
-```yaml
-- uses: actions/checkout@v4
-- uses: actions/checkout@v4
-  with:
-    repository: Retaia/retaia-ui
-    path: ui
-- run: npm ci && npm run build
-  working-directory: ui
-- run: RETAIA_BUILD_V1_READY=1 docker compose -f docker-compose.prod.yaml up -d --build
-```
-
-### Local avec UI voisine
-
-Si ton UI est dans un dossier voisin, tu peux garder ce layout en overridant:
+## Deploiement GHCR (recommande)
 
 ```bash
-export RETAIA_UI_DIST_DIR=../retaia-ui/dist
-docker compose -f docker-compose.prod.yaml up -d caddy-prod
+export RETAIA_CORE_IMAGE=ghcr.io/retaia/retaia-core:v1.0.0
+export RETAIA_UI_IMAGE=ghcr.io/retaia/retaia-ui:v1.0.0
+export RETAIA_INGEST_HOST_DIR=/volume1/retaia/ingest
+export DEFAULT_URI=http://192.168.0.14:8080
+
+docker compose -f docker-compose.prod.yaml pull
+docker compose -f docker-compose.prod.yaml up -d core ingest-cron ui caddy db
 ```
 
-## Mise a jour UI (sans URL de ping)
+Migration DB:
 
-Si aucune URL de ping/version n'est encore disponible, utiliser un mode simple et deterministe:
+```bash
+docker compose -f docker-compose.prod.yaml exec core php bin/console doctrine:migrations:migrate --no-interaction
+```
+
+## Build local de l'image Core (optionnel)
+
+Pour pre-build localement (debug, validation, image privee):
+
+```bash
+RETAIA_BUILD_V1_READY=1 RETAIA_PROD_IMAGE=retaia-core:prod composer prod:image:build
+```
+
+Puis deploiement avec image locale:
+
+```bash
+export RETAIA_CORE_IMAGE=retaia-core:prod
+docker compose -f docker-compose.prod.yaml up -d core ingest-cron ui caddy db
+```
+
+## UI updater (hors scope compose)
+
+Si pas d'URL de ping applicative:
 
 1. l'UI ne suit jamais `master` directement
-2. l'UI telecharge la derniere release taggee (artefact officiel)
+2. l'UI telecharge la derniere release taggee
 3. verification checksum/signature avant activation
 
-## Manifeste de ping UI (option implementee)
-
-Le Core fournit une commande pour generer un manifeste statique JSON (servi ensuite par Caddy/CDN):
+Option disponible cote Core:
 
 ```bash
 php bin/console app:release:write-ui-manifest \
@@ -145,35 +89,10 @@ php bin/console app:release:write-ui-manifest \
   --notes-url=https://example.com/releases/1.0.0
 ```
 
-Sortie par defaut:
-
-- `public/releases/latest.json`
-
-Tu peux surcharger le chemin:
-
-```bash
-php bin/console app:release:write-ui-manifest ... --output=public/releases/latest.json
-```
-
-Pattern recommande:
-
-1. pipeline release UI publie l'artefact
-2. pipeline ecrit/maj `public/releases/latest.json`
-3. client UI ping ce manifeste et telecharge l'asset reference
-
-Auto-update CI disponible:
-
-- `scripts/auto-update-ui-release-manifest.sh`
-- workflow: `.github/workflows/ui-release-auto-update.yml`
-
-Quand une URL de ping applicative dediee sera disponible, ce mode pourra evoluer vers:
-
-- ping version/manifeste
-- comparaison de version locale
-- download de la derniere release stable uniquement
+Sortie par defaut: `public/releases/latest.json`.
 
 ## Important
 
 - Ce compose prod est un exemple redistribuable pour demarrage rapide.
 - Adapte secrets, hostnames, ports, volumes et politique de backup avant usage reel.
-- Pour un deploiement NAS + agents workstations, preferer une URL LAN unique (`http://192.168.0.14:8080`) pour UI et API (`/api/v1`).
+- Pour un deploiement NAS + agents workstations, utiliser une URL LAN unique (`http://192.168.0.14:8080`) pour UI et API (`/api/v1`).

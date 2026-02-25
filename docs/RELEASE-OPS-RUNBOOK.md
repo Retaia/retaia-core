@@ -28,24 +28,26 @@ Resultat attendu:
 - couverture au-dessus du seuil
 - aucune vulnerabilite composer
 
-## 2) Build & deploiement prod (exemple Docker)
+## 2) Deploiement prod (Docker + GHCR)
 
-Build image API:
+Configurer les tags d'images publies:
 
 ```bash
-RETAIA_BUILD_V1_READY=1 composer prod:image:build
+export RETAIA_CORE_IMAGE=ghcr.io/retaia/retaia-core:v1.0.0
+export RETAIA_UI_IMAGE=ghcr.io/retaia/retaia-ui:v1.0.0
 ```
 
 Demarrage stack:
 
 ```bash
-docker compose -f docker-compose.prod.yaml up -d app-prod ingest-cron-prod caddy-prod database-prod
+docker compose -f docker-compose.prod.yaml pull
+docker compose -f docker-compose.prod.yaml up -d core ingest-cron ui caddy db
 ```
 
 Migration DB:
 
 ```bash
-docker compose -f docker-compose.prod.yaml exec app-prod php bin/console doctrine:migrations:migrate --no-interaction
+docker compose -f docker-compose.prod.yaml exec core php bin/console doctrine:migrations:migrate --no-interaction
 ```
 
 ## 3) Verification post-deploiement
@@ -54,14 +56,14 @@ Verifier disponibilite et preconditions runtime:
 
 ```bash
 curl -sS http://localhost:${RETAIA_PROD_HTTP_PORT:-8080}/api/v1/health
-docker compose -f docker-compose.prod.yaml exec app-prod php bin/console app:ops:readiness-check
-docker compose -f docker-compose.prod.yaml exec app-prod php bin/console app:sentry:probe
+docker compose -f docker-compose.prod.yaml exec core php bin/console app:ops:readiness-check
+docker compose -f docker-compose.prod.yaml exec core php bin/console app:sentry:probe
 ```
 
 Verifier polling ingest:
 
 ```bash
-docker compose -f docker-compose.prod.yaml logs --tail=200 ingest-cron-prod
+docker compose -f docker-compose.prod.yaml logs --tail=200 ingest-cron
 ```
 
 ## 4) Exploitation quotidienne
@@ -94,12 +96,21 @@ Conditions de rollback:
 
 Procedure:
 
-1. redeployer l'image precedente stable
+1. redeployer les images precedentes stables (`RETAIA_CORE_IMAGE`, `RETAIA_UI_IMAGE`)
 2. verifier migrations impliquees avant rollback DB
 3. restaurer backup DB uniquement si necessaire et valide
 4. relancer checks section post-deploiement
 
-## 6) UI updater
+## 6) Build local image Core (optionnel)
+
+Si besoin d'une image locale (debug/pre-validation):
+
+```bash
+RETAIA_BUILD_V1_READY=1 RETAIA_PROD_IMAGE=retaia-core:prod composer prod:image:build
+export RETAIA_CORE_IMAGE=retaia-core:prod
+```
+
+## 7) UI updater
 
 Si pas d'URL de ping applicative:
 
@@ -115,7 +126,7 @@ php bin/console app:release:write-ui-manifest --ui-version=<v> --asset-url=<url>
 
 Cette commande genere `public/releases/latest.json` (par defaut) pour un flow de ping manifeste.
 
-## 7) Liens utiles
+## 8) Liens utiles
 
 - `docs/DOCKER-PROD-EXAMPLE.md`
 - `docs/OPS-READINESS-CHECKLIST.md`

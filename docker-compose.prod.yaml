@@ -1,41 +1,37 @@
 services:
-  app-prod:
-    build:
-      context: .
-      dockerfile: Dockerfile.prod
-      args:
-        BASE_IMAGE: ${RETAIA_BASE_IMAGE:-fullfrontend/php-fpm:latest@sha256:6cee40b509710376fc9aa7d78b91f711afb6c4ba4a138b9e0e35a55114263647}
-        RETAIA_BUILD_V1_READY: ${RETAIA_BUILD_V1_READY:-0}
-    image: ${RETAIA_PROD_IMAGE:-retaia-core:prod}
-    container_name: retaia-core-app-prod
+  core:
+    image: ${RETAIA_CORE_IMAGE:-ghcr.io/retaia/retaia-core:v1.0.0}
+    container_name: retaia-core-core
     restart: unless-stopped
     environment:
       APP_ENV: prod
       APP_DEBUG: "0"
-      DATABASE_URL: ${DATABASE_URL:-postgresql://app:app@database-prod:5432/app_prod?serverVersion=16&charset=utf8}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://app:app@db:5432/app_prod?serverVersion=16&charset=utf8}
       APP_INGEST_WATCH_PATH: /var/local/RETAIA/INBOX
-      DEFAULT_URI: ${DEFAULT_URI:-https://app.retaia.local}
+      DEFAULT_URI: ${DEFAULT_URI:-http://localhost:${RETAIA_PROD_HTTP_PORT:-8080}}
       APP_SECRET: ${APP_SECRET:-change-me}
       SYMFONY_TRUSTED_PROXIES: ${SYMFONY_TRUSTED_PROXIES:-127.0.0.1/32}
+      APP_STORAGE_ID: ${APP_STORAGE_ID:-nas-main}
     depends_on:
-      database-prod:
+      db:
         condition: service_healthy
     volumes:
       - retaia_var:/var/www/html/var
       - ${RETAIA_INGEST_HOST_DIR:-./docker/RETAIA}:/var/local/RETAIA
 
-  ingest-cron-prod:
-    image: ${RETAIA_PROD_IMAGE:-retaia-core:prod}
-    container_name: retaia-core-ingest-cron-prod
+  ingest-cron:
+    image: ${RETAIA_CORE_IMAGE:-ghcr.io/retaia/retaia-core:v1.0.0}
+    container_name: retaia-core-ingest-cron
     restart: unless-stopped
     environment:
       APP_ENV: prod
       APP_DEBUG: "0"
-      DATABASE_URL: ${DATABASE_URL:-postgresql://app:app@database-prod:5432/app_prod?serverVersion=16&charset=utf8}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://app:app@db:5432/app_prod?serverVersion=16&charset=utf8}
       APP_INGEST_WATCH_PATH: /var/local/RETAIA/INBOX
-      DEFAULT_URI: ${DEFAULT_URI:-https://app.retaia.local}
+      DEFAULT_URI: ${DEFAULT_URI:-http://localhost:${RETAIA_PROD_HTTP_PORT:-8080}}
+      APP_STORAGE_ID: ${APP_STORAGE_ID:-nas-main}
     depends_on:
-      database-prod:
+      db:
         condition: service_healthy
     volumes:
       - retaia_var:/var/www/html/var
@@ -49,25 +45,35 @@ services:
           sleep 60
         done
 
-  caddy-prod:
+  ui:
+    image: ${RETAIA_UI_IMAGE:-ghcr.io/retaia/retaia-ui:v1.0.0}
+    container_name: retaia-core-ui
+    restart: unless-stopped
+    environment:
+      API_BASE_URL: ${RETAIA_UI_API_BASE_URL:-/api/v1}
+      API_UPSTREAM: ${RETAIA_UI_API_UPSTREAM:-core:9000}
+    depends_on:
+      core:
+        condition: service_started
+
+  caddy:
     image: caddy:2-alpine
-    container_name: retaia-core-caddy-prod
+    container_name: retaia-core-caddy
     restart: unless-stopped
     depends_on:
-      app-prod:
+      core:
+        condition: service_started
+      ui:
         condition: service_started
     ports:
       - "${RETAIA_PROD_HTTP_PORT:-8080}:80"
-    environment:
-      RETAIA_PROD_API_HOST: ${RETAIA_PROD_API_HOST:-app.retaia.local}
     volumes:
       - ./docker/Caddyfile.prod.example:/etc/caddy/Caddyfile:ro
       - ./public:/var/www/html/public:ro
-      - ${RETAIA_UI_DIST_DIR:-./ui/dist}:/srv/ui:ro
 
-  database-prod:
+  db:
     image: postgres:16-alpine
-    container_name: retaia-core-db-prod
+    container_name: retaia-core-db
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-app_prod}

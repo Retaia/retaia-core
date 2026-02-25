@@ -2,7 +2,7 @@
 	auto_https off
 }
 
-{$RETAIA_PROD_API_HOST:app.retaia.local} {
+:80 {
 	request_body {
 		max_size 10GB
 	}
@@ -12,13 +12,11 @@
 	@api path /api/* /device*
 	handle @api {
 		root * /var/www/html/public
-		php_fastcgi app-prod:9000
+		php_fastcgi core:9000
 		file_server
 	}
 
 	handle {
-		root * /srv/ui
-		try_files {path} /index.html
-		file_server
+		reverse_proxy ui:80
 	}
 }
