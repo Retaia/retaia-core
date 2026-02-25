@@ -361,60 +361,16 @@ final class JobApiTest extends WebTestCase
         self::assertSame('LOCK_INVALID', $invalidPayload['code'] ?? null);
     }
 
-    public function testSuggestTagsSubmitRequiresFeatureFlagAndSuggestionsScope(): void
+    public function testNonV1JobTypeIsNotClaimable(): void
     {
         $client = $this->bootClient();
         $this->seedJob('job-suggest-disabled', 'suggest_tags');
         $this->loginAgent($client);
 
         $client->jsonRequest('POST', '/api/v1/jobs/job-suggest-disabled/claim');
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
-        $claimPayload = json_decode((string) $client->getResponse()->getContent(), true);
-        $lockToken = (string) ($claimPayload['lock_token'] ?? '');
-        self::assertNotSame('', $lockToken);
-
-        $client->jsonRequest('POST', '/api/v1/jobs/job-suggest-disabled/submit', [
-            'lock_token' => $lockToken,
-            'job_type' => 'suggest_tags',
-            'result' => ['suggestions_patch' => ['suggested_tags' => ['archive']]],
-        ], [
-            'HTTP_IDEMPOTENCY_KEY' => 'job-suggest-disabled-submit',
-        ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
-        $disabledPayload = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('FORBIDDEN_SCOPE', $disabledPayload['code'] ?? null);
-
-        putenv('APP_FEATURE_AI_SUGGEST_TAGS=1');
-        $_ENV['APP_FEATURE_AI_SUGGEST_TAGS'] = '1';
-        $_SERVER['APP_FEATURE_AI_SUGGEST_TAGS'] = '1';
-        static::ensureKernelShutdown();
-
-        try {
-            $clientEnabled = $this->bootClient();
-            $this->seedJob('job-suggest-enabled', 'suggest_tags');
-            $this->insertAgent('agent-suggest@retaia.local', ['ROLE_AGENT', 'ROLE_SUGGESTIONS_WRITE']);
-            $this->loginAs($clientEnabled, 'agent-suggest@retaia.local');
-
-            $clientEnabled->jsonRequest('POST', '/api/v1/jobs/job-suggest-enabled/claim');
-            self::assertResponseStatusCodeSame(Response::HTTP_OK);
-            $enabledClaimPayload = json_decode((string) $clientEnabled->getResponse()->getContent(), true);
-            $enabledLockToken = (string) ($enabledClaimPayload['lock_token'] ?? '');
-            self::assertNotSame('', $enabledLockToken);
-
-            $clientEnabled->jsonRequest('POST', '/api/v1/jobs/job-suggest-enabled/submit', [
-                'lock_token' => $enabledLockToken,
-                'job_type' => 'suggest_tags',
-                'result' => ['suggestions_patch' => ['suggested_tags' => ['archive']]],
-            ], [
-                'HTTP_IDEMPOTENCY_KEY' => 'job-suggest-enabled-submit',
-            ]);
-            self::assertResponseStatusCodeSame(Response::HTTP_OK);
-        } finally {
-            putenv('APP_FEATURE_AI_SUGGEST_TAGS=0');
-            $_ENV['APP_FEATURE_AI_SUGGEST_TAGS'] = '0';
-            $_SERVER['APP_FEATURE_AI_SUGGEST_TAGS'] = '0';
-            static::ensureKernelShutdown();
-        }
+        self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('STATE_CONFLICT', $payload['code'] ?? null);
     }
 
     public function testSubmitRejectsMissingAndMismatchedJobType(): void

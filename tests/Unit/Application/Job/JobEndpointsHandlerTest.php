@@ -9,6 +9,7 @@ use App\Application\Auth\ResolveAuthenticatedUserHandler;
 use App\Application\Job\ClaimJobHandler;
 use App\Application\Job\FailJobHandler;
 use App\Application\Job\HeartbeatJobHandler;
+use App\Application\Job\JobContractPolicy;
 use App\Application\Job\JobEndpointResult;
 use App\Application\Job\JobEndpointsHandler;
 use App\Application\Job\ListClaimableJobsHandler;
@@ -25,6 +26,9 @@ final class JobEndpointsHandlerTest extends TestCase
     public function testClaimReturnsStateConflictWhenGatewayCannotClaim(): void
     {
         $gateway = $this->createMock(JobGateway::class);
+        $gateway->expects(self::once())->method('find')->with('job-1')->willReturn(
+            new Job('job-1', 'asset-1', 'extract_facts', JobStatus::PENDING, null, null, null, [])
+        );
         $gateway->expects(self::once())->method('claim')->with('job-1', 'agent-1', 300)->willReturn(null);
 
         $handler = $this->buildHandler($gateway, ['id' => 'agent-1', 'email' => 'a@b.c', 'roles' => ['ROLE_AGENT']]);
@@ -45,11 +49,10 @@ final class JobEndpointsHandlerTest extends TestCase
         self::assertSame(JobEndpointResult::STATUS_LOCK_REQUIRED, $result->status());
     }
 
-    public function testSubmitReturnsForbiddenScope(): void
+    public function testSubmitReturnsValidationFailedForNonV1JobType(): void
     {
-        $job = new Job('job-1', 'asset-1', 'suggest_tags', JobStatus::CLAIMED, 'agent-1', 'token', new \DateTimeImmutable('+5 minutes'), []);
         $gateway = $this->createMock(JobGateway::class);
-        $gateway->expects(self::once())->method('find')->with('job-1')->willReturn($job);
+        $gateway->expects(self::never())->method('find');
         $gateway->expects(self::never())->method('submit');
 
         $handler = $this->buildHandler($gateway, ['id' => 'agent-1', 'email' => 'a@b.c', 'roles' => ['ROLE_AGENT']]);
@@ -59,7 +62,7 @@ final class JobEndpointsHandlerTest extends TestCase
             'result' => ['ok' => true],
         ]);
 
-        self::assertSame(JobEndpointResult::STATUS_FORBIDDEN_SCOPE, $result->status());
+        self::assertSame(JobEndpointResult::STATUS_VALIDATION_FAILED, $result->status());
     }
 
     public function testSubmitReturnsValidationFailedWhenJobTypeIsMissing(): void
@@ -105,6 +108,36 @@ final class JobEndpointsHandlerTest extends TestCase
         self::assertSame(['items' => []], $result->payload());
     }
 
+    public function testListFiltersOutNonV1JobTypes(): void
+    {
+        $gateway = $this->createMock(JobGateway::class);
+        $gateway->expects(self::once())->method('listClaimable')->with(10)->willReturn([
+            new Job('job-1', 'asset-1', 'extract_facts', JobStatus::PENDING, null, null, null, []),
+            new Job('job-2', 'asset-2', 'suggest_tags', JobStatus::PENDING, null, null, null, []),
+        ]);
+
+        $handler = $this->buildHandler($gateway, ['id' => 'agent-1', 'email' => 'a@b.c', 'roles' => ['ROLE_AGENT']]);
+        $result = $handler->list(10);
+
+        self::assertSame(JobEndpointResult::STATUS_SUCCESS, $result->status());
+        self::assertCount(1, $result->payload()['items'] ?? []);
+        self::assertSame('job-1', $result->payload()['items'][0]['job_id'] ?? null);
+    }
+
+    public function testClaimReturnsStateConflictForNonV1JobType(): void
+    {
+        $gateway = $this->createMock(JobGateway::class);
+        $gateway->expects(self::once())->method('find')->with('job-1')->willReturn(
+            new Job('job-1', 'asset-1', 'suggest_tags', JobStatus::PENDING, null, null, null, [])
+        );
+        $gateway->expects(self::never())->method('claim');
+
+        $handler = $this->buildHandler($gateway, ['id' => 'agent-1', 'email' => 'a@b.c', 'roles' => ['ROLE_AGENT']]);
+        $result = $handler->claim('job-1');
+
+        self::assertSame(JobEndpointResult::STATUS_STATE_CONFLICT, $result->status());
+    }
+
     /**
      * @param array{id: string, email: string, roles: array<int, string>}|null $currentUser
      */
@@ -114,8 +147,8 @@ final class JobEndpointsHandlerTest extends TestCase
         $authenticatedUserGateway->method('currentUser')->willReturn($currentUser);
 
         return new JobEndpointsHandler(
-            new ListClaimableJobsHandler($gateway),
-            new ClaimJobHandler($gateway),
+            new ListClaimableJobsHandler($gateway, new JobContractPolicy()),
+            new ClaimJobHandler($gateway, new JobContractPolicy()),
             new HeartbeatJobHandler($gateway, new ResolveJobLockConflictCodeHandler($gateway)),
             new SubmitJobHandler(
                 $gateway,
