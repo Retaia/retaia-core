@@ -89,7 +89,11 @@ Declenchement:
 Comportement:
 
 - cree une archive release `retaia-core-<tag>.tar.gz`
-- cree un checksum SHA-256 associe (`.sha256`)
+- genere une SBOM CycloneDX JSON (`retaia-core-<tag>.sbom.cdx.json`)
+- cree les checksums SHA-256 associes (`.sha256`)
+- signe archive + SBOM en keyless Sigstore (`.sig` + `.pem`)
+- verifie les signatures avant publication
+- atteste la provenance build des artefacts (archive + SBOM)
 - publie une GitHub Release avec notes auto-generees
 - marque automatiquement la release en pre-release si le tag contient un suffixe (ex: `-rc1`)
 
@@ -110,6 +114,8 @@ Comportement:
 
 - build `Dockerfile.prod` avec `RETAIA_BUILD_V1_READY=1`
 - push image uniquement sur tag `v*` (inclut RC, ex: `v1.0.0-rc1`)
+- en mode push tag: genere attestations OCI de provenance + SBOM
+- en mode push tag: signe chaque tag pousse avec Cosign keyless et verifie la signature
 - tags publies:
   - `sha-<commit>`
   - `<tag git>` (si push tag)

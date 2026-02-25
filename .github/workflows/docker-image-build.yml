@@ -12,6 +12,7 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 concurrency:
   group: docker-image-build-${{ github.ref }}
@@ -56,6 +57,7 @@ jobs:
             type=ref,event=tag
 
       - name: Build (and optionally push) Docker image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -64,5 +66,47 @@ jobs:
           push: ${{ env.SHOULD_PUSH == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          provenance: ${{ env.SHOULD_PUSH == 'true' }}
+          sbom: ${{ env.SHOULD_PUSH == 'true' }}
           build-args: |
             RETAIA_BUILD_V1_READY=1
+
+      - name: Install Cosign
+        if: env.SHOULD_PUSH == 'true'
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign pushed image tags (keyless)
+        if: env.SHOULD_PUSH == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIGEST="${{ steps.build.outputs.digest }}"
+
+          while IFS= read -r tag; do
+            if [[ -z "${tag}" ]]; then
+              continue
+            fi
+
+            REF="${tag}@${DIGEST}"
+            cosign sign --yes "${REF}"
+          done <<< "${{ steps.meta.outputs.tags }}"
+
+      - name: Verify signatures
+        if: env.SHOULD_PUSH == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIGEST="${{ steps.build.outputs.digest }}"
+          IDENTITY="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/docker-image-build.yml@refs/tags/${GITHUB_REF_NAME}"
+
+          while IFS= read -r tag; do
+            if [[ -z "${tag}" ]]; then
+              continue
+            fi
+
+            REF="${tag}@${DIGEST}"
+            cosign verify \
+              --certificate-identity-regexp "^${IDENTITY}$" \
+              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+              "${REF}" > /dev/null
+          done <<< "${{ steps.meta.outputs.tags }}"
