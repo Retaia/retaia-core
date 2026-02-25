@@ -111,7 +111,7 @@ final class JobApiTest extends WebTestCase
         $client->jsonRequest('POST', '/api/v1/jobs/job-4/submit', [
             'lock_token' => $lockToken,
             'job_type' => 'extract_facts',
-            'result' => ['processed' => true],
+            'result' => ['facts_patch' => ['duration_ms' => 4200]],
         ], [
             'HTTP_IDEMPOTENCY_KEY' => 'idempo-job-4',
         ]);
@@ -121,7 +121,7 @@ final class JobApiTest extends WebTestCase
         $client->jsonRequest('POST', '/api/v1/jobs/job-4/submit', [
             'lock_token' => $lockToken,
             'job_type' => 'extract_facts',
-            'result' => ['processed' => true],
+            'result' => ['facts_patch' => ['duration_ms' => 4200]],
         ], [
             'HTTP_IDEMPOTENCY_KEY' => 'idempo-job-4',
         ]);
@@ -132,7 +132,7 @@ final class JobApiTest extends WebTestCase
         $client->jsonRequest('POST', '/api/v1/jobs/job-4/submit', [
             'lock_token' => $lockToken,
             'job_type' => 'extract_facts',
-            'result' => ['processed' => false],
+            'result' => ['facts_patch' => ['duration_ms' => 4300]],
         ], [
             'HTTP_IDEMPOTENCY_KEY' => 'idempo-job-4',
         ]);
@@ -173,14 +173,14 @@ final class JobApiTest extends WebTestCase
         $client->jsonRequest('POST', '/api/v1/jobs/job-submit-validation/submit', [
             'lock_token' => 'any-lock',
             'job_type' => 'extract_facts',
-            'result' => ['ok' => true],
+            'result' => ['facts_patch' => ['duration_ms' => 10]],
         ]);
         self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
         $missingKey = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertSame('MISSING_IDEMPOTENCY_KEY', $missingKey['code'] ?? null);
 
         $client->jsonRequest('POST', '/api/v1/jobs/job-submit-validation/submit', [
-            'result' => ['ok' => true],
+            'result' => ['facts_patch' => ['duration_ms' => 10]],
         ], [
             'HTTP_IDEMPOTENCY_KEY' => 'submit-missing-lock',
         ]);
@@ -201,7 +201,7 @@ final class JobApiTest extends WebTestCase
         $client->jsonRequest('POST', '/api/v1/jobs/job-submit-stale/submit', [
             'lock_token' => 'wrong-lock-token',
             'job_type' => 'extract_facts',
-            'result' => ['ok' => true],
+            'result' => ['facts_patch' => ['duration_ms' => 10]],
         ], [
             'HTTP_IDEMPOTENCY_KEY' => 'submit-stale-lock',
         ]);
@@ -219,7 +219,7 @@ final class JobApiTest extends WebTestCase
         $client->jsonRequest('POST', '/api/v1/jobs/job-submit-lock-invalid/submit', [
             'lock_token' => 'no-active-claim',
             'job_type' => 'extract_facts',
-            'result' => ['ok' => true],
+            'result' => ['facts_patch' => ['duration_ms' => 10]],
         ], [
             'HTTP_IDEMPOTENCY_KEY' => 'submit-lock-invalid',
         ]);
@@ -431,7 +431,7 @@ final class JobApiTest extends WebTestCase
 
         $client->jsonRequest('POST', '/api/v1/jobs/job-submit-jobtype/submit', [
             'lock_token' => $lockToken,
-            'result' => ['ok' => true],
+            'result' => ['facts_patch' => ['duration_ms' => 10]],
         ], [
             'HTTP_IDEMPOTENCY_KEY' => 'submit-missing-job-type',
         ]);
@@ -442,13 +442,69 @@ final class JobApiTest extends WebTestCase
         $client->jsonRequest('POST', '/api/v1/jobs/job-submit-jobtype/submit', [
             'lock_token' => $lockToken,
             'job_type' => 'generate_proxy',
-            'result' => ['ok' => true],
+            'result' => ['derived_patch' => ['derived_manifest' => []]],
         ], [
             'HTTP_IDEMPOTENCY_KEY' => 'submit-mismatched-job-type',
         ]);
         self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
         $mismatchTypePayload = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertSame('VALIDATION_FAILED', $mismatchTypePayload['code'] ?? null);
+    }
+
+    public function testSubmitRejectsPatchDomainOwnershipViolation(): void
+    {
+        $client = $this->bootClient();
+        $this->seedJob('job-submit-ownership');
+        $this->loginAgent($client);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-submit-ownership/claim');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $claimPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        $lockToken = (string) ($claimPayload['lock_token'] ?? '');
+        self::assertNotSame('', $lockToken);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-submit-ownership/submit', [
+            'lock_token' => $lockToken,
+            'job_type' => 'extract_facts',
+            'result' => ['derived_patch' => ['derived_manifest' => []]],
+        ], [
+            'HTTP_IDEMPOTENCY_KEY' => 'submit-ownership-violation',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
+    }
+
+    public function testSubmitExtractFactsMovesAssetToProcessingReviewAndStoresFactsPatch(): void
+    {
+        $client = $this->bootClient();
+        $this->seedJob('job-submit-progression');
+        $this->loginAgent($client);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-submit-progression/claim');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $claimPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        $lockToken = (string) ($claimPayload['lock_token'] ?? '');
+        self::assertNotSame('', $lockToken);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-submit-progression/submit', [
+            'lock_token' => $lockToken,
+            'job_type' => 'extract_facts',
+            'result' => ['facts_patch' => ['duration_ms' => 1234]],
+        ], [
+            'HTTP_IDEMPOTENCY_KEY' => 'submit-progression-extract-facts',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        /** @var Connection $connection */
+        $connection = self::getContainer()->get(Connection::class);
+        $assetState = (string) $connection->fetchOne('SELECT state FROM asset WHERE uuid = :uuid', ['uuid' => 'asset-job-submit-progression']);
+        self::assertSame('PROCESSING_REVIEW', $assetState);
+        $fieldsRaw = (string) $connection->fetchOne('SELECT fields FROM asset WHERE uuid = :uuid', ['uuid' => 'asset-job-submit-progression']);
+        $fields = json_decode($fieldsRaw, true);
+        self::assertIsArray($fields);
+        self::assertSame(1234, $fields['facts']['duration_ms'] ?? null);
+        self::assertTrue((bool) ($fields['facts_done'] ?? false));
     }
 
     private function seedJob(string $jobId, string $jobType = 'extract_facts'): void
