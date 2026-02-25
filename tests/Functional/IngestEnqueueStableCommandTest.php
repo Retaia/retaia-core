@@ -102,6 +102,48 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         self::assertSame('missing', $scanStatus);
     }
 
+    public function testImageFileIsEnqueuedAsPhotoMediaType(): void
+    {
+        $root = sys_get_temp_dir().'/retaia-enqueue-photo-'.bin2hex(random_bytes(4));
+        mkdir($root.'/INBOX', 0777, true);
+        mkdir($root.'/ARCHIVE', 0777, true);
+        mkdir($root.'/REJECTS', 0777, true);
+        file_put_contents($root.'/INBOX/shot.jpg', 'ok');
+        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
+        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        static::ensureKernelShutdown();
+
+        static::bootKernel();
+        $container = static::getContainer();
+        /** @var Connection $connection */
+        $connection = $container->get(Connection::class);
+        $this->ensureTables($connection);
+
+        $connection->insert('ingest_scan_file', [
+            'path' => 'INBOX/shot.jpg',
+            'size_bytes' => 1234,
+            'mtime' => '2026-02-10 12:00:00',
+            'stable_count' => 2,
+            'status' => 'stable',
+            'first_seen_at' => '2026-02-10 12:00:00',
+            'last_seen_at' => '2026-02-10 12:01:00',
+        ]);
+
+        $application = new Application(static::$kernel);
+        $command = $application->find('app:ingest:enqueue-stable');
+        $tester = new CommandTester($command);
+        $tester->execute(['--limit' => 10]);
+        self::assertStringContainsString('Queued 1 stable file(s). Missing: 0.', $tester->getDisplay());
+
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = $container->get(EntityManagerInterface::class);
+        $assetUuid = $this->assetUuidFromPath('INBOX/shot.jpg');
+        $asset = $entityManager->find(Asset::class, $assetUuid);
+        self::assertInstanceOf(Asset::class, $asset);
+        self::assertSame('PHOTO', $asset->getMediaType());
+    }
+
     private function ensureTables(Connection $connection): void
     {
         $connection->executeStatement(

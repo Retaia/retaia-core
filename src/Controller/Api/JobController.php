@@ -106,6 +106,12 @@ final class JobController
             if ($submission->status() === JobEndpointResult::STATUS_FORBIDDEN_SCOPE) {
                 return $this->forbiddenScope();
             }
+            if ($submission->status() === JobEndpointResult::STATUS_VALIDATION_FAILED) {
+                return new JsonResponse([
+                    'code' => 'VALIDATION_FAILED',
+                    'message' => 'job_type is required and must match the claimed job type',
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
             if ($submission->status() === JobEndpointResult::STATUS_LOCK_CONFLICT) {
                 $conflictCode = $submission->conflictCode() ?? 'LOCK_INVALID';
                 $this->logger->warning('jobs.submit.conflict', [

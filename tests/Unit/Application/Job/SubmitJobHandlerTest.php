@@ -27,7 +27,7 @@ final class SubmitJobHandlerTest extends TestCase
             new ResolveJobLockConflictCodeHandler($gateway)
         );
 
-        $result = $handler->handle('job-1', 't', ['ok' => true], ['ROLE_AGENT']);
+        $result = $handler->handle('job-1', 't', 'suggest_tags', ['ok' => true], ['ROLE_AGENT']);
 
         self::assertSame(SubmitJobResult::STATUS_FORBIDDEN_SCOPE, $result->status());
     }
@@ -49,8 +49,8 @@ final class SubmitJobHandlerTest extends TestCase
             new ResolveJobLockConflictCodeHandler($gateway)
         );
 
-        self::assertSame(SubmitJobResult::STATUS_STALE_LOCK_TOKEN, $handler->handle('job-1', 'wrong-token', ['ok' => true], ['ROLE_AGENT'])->status());
-        self::assertSame(SubmitJobResult::STATUS_LOCK_INVALID, $handler->handle('job-1', 'wrong-token', ['ok' => true], ['ROLE_AGENT'])->status());
+        self::assertSame(SubmitJobResult::STATUS_STALE_LOCK_TOKEN, $handler->handle('job-1', 'wrong-token', 'extract_facts', ['ok' => true], ['ROLE_AGENT'])->status());
+        self::assertSame(SubmitJobResult::STATUS_LOCK_INVALID, $handler->handle('job-1', 'wrong-token', 'extract_facts', ['ok' => true], ['ROLE_AGENT'])->status());
     }
 
     public function testHandleReturnsSubmittedWhenGatewaySucceeds(): void
@@ -69,9 +69,28 @@ final class SubmitJobHandlerTest extends TestCase
             new ResolveJobLockConflictCodeHandler($gateway)
         );
 
-        $result = $handler->handle('job-1', 'token', ['ok' => true], ['ROLE_SUGGESTIONS_WRITE']);
+        $result = $handler->handle('job-1', 'token', 'extract_facts', ['ok' => true], ['ROLE_SUGGESTIONS_WRITE']);
 
         self::assertSame(SubmitJobResult::STATUS_SUBMITTED, $result->status());
         self::assertSame($job, $result->job());
+    }
+
+    public function testHandleReturnsValidationFailedWhenJobTypeDoesNotMatchJob(): void
+    {
+        $gateway = $this->createMock(JobGateway::class);
+        $gateway->expects(self::once())->method('find')->with('job-1')->willReturn(
+            new Job('job-1', 'asset-1', 'extract_facts', JobStatus::CLAIMED, 'agent-1', 'token', null, [])
+        );
+        $gateway->expects(self::never())->method('submit');
+
+        $handler = new SubmitJobHandler(
+            $gateway,
+            new CheckSuggestTagsSubmitScopeHandler(true),
+            new ResolveJobLockConflictCodeHandler($gateway)
+        );
+
+        $result = $handler->handle('job-1', 'token', 'generate_proxy', ['ok' => true], ['ROLE_AGENT']);
+
+        self::assertSame(SubmitJobResult::STATUS_VALIDATION_FAILED, $result->status());
     }
 }

@@ -66,6 +66,7 @@ final class WorkflowApiTest extends WebTestCase
         self::assertSame($uuid, $payload['summary']['uuid'] ?? null);
         self::assertSame('DECISION_PENDING', $payload['summary']['state'] ?? null);
         self::assertArrayHasKey('created_at', $payload['summary']);
+        self::assertArrayNotHasKey('filename', $payload['summary']);
 
         self::assertIsArray($payload['paths'] ?? null);
         self::assertSame('nas-main', $payload['paths']['storage_id'] ?? null);

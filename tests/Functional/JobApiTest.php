@@ -110,6 +110,7 @@ final class JobApiTest extends WebTestCase
 
         $client->jsonRequest('POST', '/api/v1/jobs/job-4/submit', [
             'lock_token' => $lockToken,
+            'job_type' => 'extract_facts',
             'result' => ['processed' => true],
         ], [
             'HTTP_IDEMPOTENCY_KEY' => 'idempo-job-4',
@@ -119,6 +120,7 @@ final class JobApiTest extends WebTestCase
 
         $client->jsonRequest('POST', '/api/v1/jobs/job-4/submit', [
             'lock_token' => $lockToken,
+            'job_type' => 'extract_facts',
             'result' => ['processed' => true],
         ], [
             'HTTP_IDEMPOTENCY_KEY' => 'idempo-job-4',
@@ -129,6 +131,7 @@ final class JobApiTest extends WebTestCase
 
         $client->jsonRequest('POST', '/api/v1/jobs/job-4/submit', [
             'lock_token' => $lockToken,
+            'job_type' => 'extract_facts',
             'result' => ['processed' => false],
         ], [
             'HTTP_IDEMPOTENCY_KEY' => 'idempo-job-4',
@@ -169,6 +172,7 @@ final class JobApiTest extends WebTestCase
 
         $client->jsonRequest('POST', '/api/v1/jobs/job-submit-validation/submit', [
             'lock_token' => 'any-lock',
+            'job_type' => 'extract_facts',
             'result' => ['ok' => true],
         ]);
         self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
@@ -196,6 +200,7 @@ final class JobApiTest extends WebTestCase
 
         $client->jsonRequest('POST', '/api/v1/jobs/job-submit-stale/submit', [
             'lock_token' => 'wrong-lock-token',
+            'job_type' => 'extract_facts',
             'result' => ['ok' => true],
         ], [
             'HTTP_IDEMPOTENCY_KEY' => 'submit-stale-lock',
@@ -213,6 +218,7 @@ final class JobApiTest extends WebTestCase
 
         $client->jsonRequest('POST', '/api/v1/jobs/job-submit-lock-invalid/submit', [
             'lock_token' => 'no-active-claim',
+            'job_type' => 'extract_facts',
             'result' => ['ok' => true],
         ], [
             'HTTP_IDEMPOTENCY_KEY' => 'submit-lock-invalid',
@@ -369,6 +375,7 @@ final class JobApiTest extends WebTestCase
 
         $client->jsonRequest('POST', '/api/v1/jobs/job-suggest-disabled/submit', [
             'lock_token' => $lockToken,
+            'job_type' => 'suggest_tags',
             'result' => ['suggestions_patch' => ['suggested_tags' => ['archive']]],
         ], [
             'HTTP_IDEMPOTENCY_KEY' => 'job-suggest-disabled-submit',
@@ -396,6 +403,7 @@ final class JobApiTest extends WebTestCase
 
             $clientEnabled->jsonRequest('POST', '/api/v1/jobs/job-suggest-enabled/submit', [
                 'lock_token' => $enabledLockToken,
+                'job_type' => 'suggest_tags',
                 'result' => ['suggestions_patch' => ['suggested_tags' => ['archive']]],
             ], [
                 'HTTP_IDEMPOTENCY_KEY' => 'job-suggest-enabled-submit',
@@ -407,6 +415,40 @@ final class JobApiTest extends WebTestCase
             $_SERVER['APP_FEATURE_AI_SUGGEST_TAGS'] = '0';
             static::ensureKernelShutdown();
         }
+    }
+
+    public function testSubmitRejectsMissingAndMismatchedJobType(): void
+    {
+        $client = $this->bootClient();
+        $this->seedJob('job-submit-jobtype');
+        $this->loginAgent($client);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-submit-jobtype/claim');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $claimPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        $lockToken = (string) ($claimPayload['lock_token'] ?? '');
+        self::assertNotSame('', $lockToken);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-submit-jobtype/submit', [
+            'lock_token' => $lockToken,
+            'result' => ['ok' => true],
+        ], [
+            'HTTP_IDEMPOTENCY_KEY' => 'submit-missing-job-type',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $missingTypePayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $missingTypePayload['code'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-submit-jobtype/submit', [
+            'lock_token' => $lockToken,
+            'job_type' => 'generate_proxy',
+            'result' => ['ok' => true],
+        ], [
+            'HTTP_IDEMPOTENCY_KEY' => 'submit-mismatched-job-type',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $mismatchTypePayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $mismatchTypePayload['code'] ?? null);
     }
 
     private function seedJob(string $jobId, string $jobType = 'extract_facts'): void

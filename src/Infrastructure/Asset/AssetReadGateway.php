@@ -104,7 +104,6 @@ final class AssetReadGateway implements AssetReadGatewayPort
         return [
             'uuid' => $asset->getUuid(),
             'media_type' => $asset->getMediaType(),
-            'filename' => $asset->getFilename(),
             'state' => $asset->getState()->value,
             'created_at' => $asset->getCreatedAt()->format(DATE_ATOM),
             'captured_at' => is_string($fields['captured_at'] ?? null) ? $fields['captured_at'] : null,

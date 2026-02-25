@@ -113,7 +113,7 @@ final class IngestEnqueueStableCommand extends Command
 
         return match ($ext) {
             'wav', 'mp3', 'aac' => 'AUDIO',
-            'jpg', 'jpeg', 'png' => 'IMAGE',
+            'jpg', 'jpeg', 'png' => 'PHOTO',
             default => 'VIDEO',
         };
     }
