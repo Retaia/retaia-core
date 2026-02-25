@@ -143,6 +143,12 @@ final class SubmitJobHandler
                 return false;
             }
         }
+        if (array_key_exists('warnings', $result) && !$this->isWarningsValid($result['warnings'])) {
+            return false;
+        }
+        if (array_key_exists('metrics', $result) && !is_array($result['metrics'])) {
+            return false;
+        }
 
         if ($jobType === 'extract_facts') {
             if (!is_array($result['facts_patch'] ?? null) || array_key_exists('derived_patch', $result)) {
@@ -202,6 +208,26 @@ final class SubmitJobHandler
                 return false;
             }
             if (!is_string($item['ref'] ?? null) || trim((string) $item['ref']) === '') {
+                return false;
+            }
+            if (array_key_exists('size_bytes', $item) && !is_int($item['size_bytes'])) {
+                return false;
+            }
+            if (array_key_exists('sha256', $item) && !is_string($item['sha256'])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function isWarningsValid(mixed $warnings): bool
+    {
+        if (!is_array($warnings)) {
+            return false;
+        }
+        foreach ($warnings as $warning) {
+            if (!is_string($warning)) {
                 return false;
             }
         }

@@ -56,7 +56,6 @@ final class Job
             'generate_proxy' => ['derived:write'],
             'generate_thumbnails' => ['derived:write'],
             'generate_audio_waveform' => ['derived:write'],
-            'suggest_tags' => ['suggestions:write'],
             default => [],
         };
     }

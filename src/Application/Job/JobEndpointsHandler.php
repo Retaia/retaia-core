@@ -20,9 +20,11 @@ final class JobEndpointsHandler
 
     public function list(int $limit): JobEndpointResult
     {
+        $actorRoles = $this->actorRoles();
+
         return new JobEndpointResult(
             JobEndpointResult::STATUS_SUCCESS,
-            ['items' => $this->listClaimableJobsHandler->handle($limit)],
+            ['items' => $this->listClaimableJobsHandler->handle($limit, $actorRoles)],
             null,
             $this->actorId()
         );
@@ -31,7 +33,7 @@ final class JobEndpointsHandler
     public function claim(string $jobId): JobEndpointResult
     {
         $actorId = $this->actorId();
-        $result = $this->claimJobHandler->handle($jobId, $actorId);
+        $result = $this->claimJobHandler->handle($jobId, $actorId, $this->actorRoles());
         if ($result->status() === ClaimJobResult::STATUS_STATE_CONFLICT || !$result->job() instanceof Job) {
             return new JobEndpointResult(JobEndpointResult::STATUS_STATE_CONFLICT, null, null, $actorId);
         }
@@ -84,6 +86,9 @@ final class JobEndpointsHandler
             return new JobEndpointResult(JobEndpointResult::STATUS_LOCK_REQUIRED, null, null, $actorId);
         }
         if ($jobType === '') {
+            return new JobEndpointResult(JobEndpointResult::STATUS_VALIDATION_FAILED, null, null, $actorId);
+        }
+        if (!in_array($jobType, ['extract_facts', 'generate_proxy', 'generate_thumbnails', 'generate_audio_waveform'], true)) {
             return new JobEndpointResult(JobEndpointResult::STATUS_VALIDATION_FAILED, null, null, $actorId);
         }
 
