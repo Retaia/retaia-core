@@ -123,7 +123,6 @@ Deux workflows dedies executent une mise a jour automatique puis commit/push sur
   - cadence: hebdomadaire + `workflow_dispatch`
   - met a jour:
     - `Dockerfile.prod`
-    - `docker-compose.prod.yaml`
 - `.github/workflows/ui-release-auto-update.yml`
   - script: `scripts/auto-update-ui-release-manifest.sh`
   - cadence: hebdomadaire + `workflow_dispatch`
