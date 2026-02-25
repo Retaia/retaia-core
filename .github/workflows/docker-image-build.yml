@@ -21,7 +21,7 @@ jobs:
   build-and-publish:
     runs-on: ubuntu-latest
     env:
-      SHOULD_PUSH: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')) }}
+      SHOULD_PUSH: ${{ startsWith(github.ref, 'refs/tags/v') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -53,7 +53,6 @@ jobs:
           images: ${{ env.IMAGE_NAME }}
           tags: |
             type=sha
-            type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=tag
 
       - name: Build (and optionally push) Docker image
