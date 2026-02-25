@@ -8,6 +8,7 @@ final class SubmitJobResult
 {
     public const STATUS_SUBMITTED = 'SUBMITTED';
     public const STATUS_FORBIDDEN_SCOPE = 'FORBIDDEN_SCOPE';
+    public const STATUS_VALIDATION_FAILED = 'VALIDATION_FAILED';
     public const STATUS_STALE_LOCK_TOKEN = 'STALE_LOCK_TOKEN';
     public const STATUS_LOCK_INVALID = 'LOCK_INVALID';
 

@@ -53,10 +53,25 @@ final class JobEndpointsHandlerTest extends TestCase
         $handler = $this->buildHandler($gateway, ['id' => 'agent-1', 'email' => 'a@b.c', 'roles' => ['ROLE_AGENT']]);
         $result = $handler->submit('job-1', [
             'lock_token' => 'token',
+            'job_type' => 'suggest_tags',
             'result' => ['ok' => true],
         ]);
 
         self::assertSame(JobEndpointResult::STATUS_FORBIDDEN_SCOPE, $result->status());
+    }
+
+    public function testSubmitReturnsValidationFailedWhenJobTypeIsMissing(): void
+    {
+        $gateway = $this->createMock(JobGateway::class);
+        $gateway->expects(self::never())->method('submit');
+
+        $handler = $this->buildHandler($gateway, ['id' => 'agent-1', 'email' => 'a@b.c', 'roles' => ['ROLE_AGENT']]);
+        $result = $handler->submit('job-1', [
+            'lock_token' => 'token',
+            'result' => ['ok' => true],
+        ]);
+
+        self::assertSame(JobEndpointResult::STATUS_VALIDATION_FAILED, $result->status());
     }
 
     public function testFailReturnsValidationFailedWhenErrorCodeMissing(): void

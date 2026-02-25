@@ -18,9 +18,13 @@ final class SubmitJobHandler
      * @param array<string, mixed> $result
      * @param array<int, string>   $actorRoles
      */
-    public function handle(string $jobId, string $lockToken, array $result, array $actorRoles): SubmitJobResult
+    public function handle(string $jobId, string $lockToken, string $jobType, array $result, array $actorRoles): SubmitJobResult
     {
         $current = $this->gateway->find($jobId);
+        if ($current instanceof Job && $current->jobType !== $jobType) {
+            return new SubmitJobResult(SubmitJobResult::STATUS_VALIDATION_FAILED);
+        }
+
         if ($current instanceof Job
             && $current->jobType === 'suggest_tags'
             && !$this->checkSuggestTagsSubmitScopeHandler->handle($actorRoles)

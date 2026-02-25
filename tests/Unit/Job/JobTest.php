@@ -20,17 +20,27 @@ final class JobTest extends TestCase
             lockToken: 'lock-123',
             lockedUntil: $lockedUntil,
             result: ['ok' => true],
+            source: [
+                'storage_id' => 'nas-main',
+                'original_relative' => 'INBOX/file.mov',
+                'sidecars_relative' => ['INBOX/file.srt'],
+            ],
         );
 
         self::assertSame([
-            'id' => 'job-1',
+            'job_id' => 'job-1',
             'asset_uuid' => 'asset-1',
             'job_type' => 'proxy',
             'status' => 'claimed',
+            'source' => [
+                'storage_id' => 'nas-main',
+                'original_relative' => 'INBOX/file.mov',
+                'sidecars_relative' => ['INBOX/file.srt'],
+            ],
+            'required_capabilities' => [],
             'claimed_by' => 'agent-1',
             'lock_token' => 'lock-123',
             'locked_until' => $lockedUntil->format(DATE_ATOM),
-            'result' => ['ok' => true],
         ], $job->toArray());
     }
 }

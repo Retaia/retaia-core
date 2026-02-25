@@ -79,8 +79,12 @@ final class JobEndpointsHandler
     {
         $actorId = $this->actorId();
         $lockToken = trim((string) ($payload['lock_token'] ?? ''));
+        $jobType = trim((string) ($payload['job_type'] ?? ''));
         if ($lockToken === '') {
             return new JobEndpointResult(JobEndpointResult::STATUS_LOCK_REQUIRED, null, null, $actorId);
+        }
+        if ($jobType === '') {
+            return new JobEndpointResult(JobEndpointResult::STATUS_VALIDATION_FAILED, null, null, $actorId);
         }
 
         $result = $payload['result'] ?? [];
@@ -88,9 +92,12 @@ final class JobEndpointsHandler
             $result = [];
         }
 
-        $submission = $this->submitJobHandler->handle($jobId, $lockToken, $result, $this->actorRoles());
+        $submission = $this->submitJobHandler->handle($jobId, $lockToken, $jobType, $result, $this->actorRoles());
         if ($submission->status() === SubmitJobResult::STATUS_FORBIDDEN_SCOPE) {
             return new JobEndpointResult(JobEndpointResult::STATUS_FORBIDDEN_SCOPE, null, null, $actorId);
+        }
+        if ($submission->status() === SubmitJobResult::STATUS_VALIDATION_FAILED) {
+            return new JobEndpointResult(JobEndpointResult::STATUS_VALIDATION_FAILED, null, null, $actorId);
         }
         if ($submission->status() !== SubmitJobResult::STATUS_SUBMITTED) {
             return new JobEndpointResult(
