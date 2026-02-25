@@ -10,6 +10,22 @@ Variables importantes pour un deploiement NAS:
 - `RETAIA_INGEST_HOST_DIR`: chemin hote (NAS/local) monte dans le conteneur sur `/var/local/RETAIA`
 - `DEFAULT_URI`: URL publique canonique de l'API (utilisee pour generation d'URLs hors contexte HTTP)
 
+## Profile recommande: NAS + agents workstations
+
+Quand les agents tournent sur des workstations (hors reseau Docker du NAS):
+
+- exposer une seule entree LAN (ex: `http://192.168.0.14:8080`)
+- conserver `app-prod` non expose directement sur host ports
+- router `/api/*` via Caddy vers `app-prod:9000`
+- configurer les agents workstations vers:
+  - `http://192.168.0.14:8080/api/v1`
+
+Pourquoi:
+
+- `app-prod` reste prive au reseau Docker
+- UI navigateur et agents utilisent une URL routable unique sur le LAN
+- pas de dependance a des hostnames Docker internes (`app-prod`, `core`, etc.) cote workstation/browser
+
 ## Fichiers ajoutes
 
 - `/Users/fullfrontend/Jobs/A - Full Front-End/retaia-workspace/retaia-core/Dockerfile.prod`
@@ -160,3 +176,4 @@ Quand une URL de ping applicative dediee sera disponible, ce mode pourra evoluer
 
 - Ce compose prod est un exemple redistribuable pour demarrage rapide.
 - Adapte secrets, hostnames, ports, volumes et politique de backup avant usage reel.
+- Pour un deploiement NAS + agents workstations, preferer une URL LAN unique (`http://192.168.0.14:8080`) pour UI et API (`/api/v1`).
