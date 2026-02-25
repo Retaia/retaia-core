@@ -14,6 +14,7 @@ services:
       APP_DEBUG: "0"
       DATABASE_URL: ${DATABASE_URL:-postgresql://app:app@database-prod:5432/app_prod?serverVersion=16&charset=utf8}
       APP_INGEST_WATCH_PATH: /var/local/RETAIA/INBOX
+      DEFAULT_URI: ${DEFAULT_URI:-https://app.retaia.local}
       APP_SECRET: ${APP_SECRET:-change-me}
       SYMFONY_TRUSTED_PROXIES: ${SYMFONY_TRUSTED_PROXIES:-127.0.0.1/32}
     depends_on:
@@ -21,7 +22,7 @@ services:
         condition: service_healthy
     volumes:
       - retaia_var:/var/www/html/var
-      - ./docker/RETAIA:/var/local/RETAIA
+      - ${RETAIA_INGEST_HOST_DIR:-./docker/RETAIA}:/var/local/RETAIA
 
   ingest-cron-prod:
     image: ${RETAIA_PROD_IMAGE:-retaia-core:prod}
@@ -32,12 +33,13 @@ services:
       APP_DEBUG: "0"
       DATABASE_URL: ${DATABASE_URL:-postgresql://app:app@database-prod:5432/app_prod?serverVersion=16&charset=utf8}
       APP_INGEST_WATCH_PATH: /var/local/RETAIA/INBOX
+      DEFAULT_URI: ${DEFAULT_URI:-https://app.retaia.local}
     depends_on:
       database-prod:
         condition: service_healthy
     volumes:
       - retaia_var:/var/www/html/var
-      - ./docker/RETAIA:/var/local/RETAIA
+      - ${RETAIA_INGEST_HOST_DIR:-./docker/RETAIA}:/var/local/RETAIA
     command:
       - /bin/sh
       - -lc

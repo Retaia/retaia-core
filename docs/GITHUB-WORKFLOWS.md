@@ -93,6 +93,28 @@ Comportement:
 - publie une GitHub Release avec notes auto-generees
 - marque automatiquement la release en pre-release si le tag contient un suffixe (ex: `-rc1`)
 
+## Docker image build (GHCR)
+
+Workflow:
+
+- `.github/workflows/docker-image-build.yml`
+
+Declenchement:
+
+- `pull_request` (build only, no push)
+- `push` sur `master` (build + push GHCR)
+- `push` d'un tag `v*` (build + push GHCR)
+- `workflow_dispatch`
+
+Comportement:
+
+- build `Dockerfile.prod` avec `RETAIA_BUILD_V1_READY=1`
+- push image uniquement sur `master`/`v*` (pas sur PR)
+- tags publies:
+  - `sha-<commit>`
+  - `latest` (branche par defaut)
+  - `<tag git>` (si push tag)
+
 ## Auto-update (sans gate de validation)
 
 Deux workflows dedies executent une mise a jour automatique puis commit/push sur `master`:
