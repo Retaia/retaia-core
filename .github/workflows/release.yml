@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 concurrency:
   group: release-${{ github.ref }}
@@ -22,13 +24,25 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Build release archive
+      - name: Compute release metadata
+        id: meta
         shell: bash
         run: |
           set -euo pipefail
           TAG="${GITHUB_REF_NAME}"
           OUT_DIR="release-assets"
           PACKAGE="retaia-core-${TAG}"
+
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+          echo "out_dir=${OUT_DIR}" >> "${GITHUB_OUTPUT}"
+          echo "package=${PACKAGE}" >> "${GITHUB_OUTPUT}"
+
+      - name: Build release archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT_DIR="${{ steps.meta.outputs.out_dir }}"
+          PACKAGE="${{ steps.meta.outputs.package }}"
 
           mkdir -p "${OUT_DIR}/${PACKAGE}"
           rsync -a ./ "${OUT_DIR}/${PACKAGE}/" \
@@ -41,7 +55,75 @@ jobs:
             --exclude ".idea"
 
           tar -C "${OUT_DIR}" -czf "${OUT_DIR}/${PACKAGE}.tar.gz" "${PACKAGE}"
+
+      - name: Generate SBOM (CycloneDX JSON)
+        uses: anchore/sbom-action@v0
+        with:
+          path: ${{ steps.meta.outputs.out_dir }}/${{ steps.meta.outputs.package }}
+          format: cyclonedx-json
+          output-file: ${{ steps.meta.outputs.out_dir }}/${{ steps.meta.outputs.package }}.sbom.cdx.json
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT_DIR="${{ steps.meta.outputs.out_dir }}"
+          PACKAGE="${{ steps.meta.outputs.package }}"
+
           shasum -a 256 "${OUT_DIR}/${PACKAGE}.tar.gz" > "${OUT_DIR}/${PACKAGE}.tar.gz.sha256"
+          shasum -a 256 "${OUT_DIR}/${PACKAGE}.sbom.cdx.json" > "${OUT_DIR}/${PACKAGE}.sbom.cdx.json.sha256"
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign release artifacts (keyless)
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT_DIR="${{ steps.meta.outputs.out_dir }}"
+          PACKAGE="${{ steps.meta.outputs.package }}"
+
+          cosign sign-blob --yes \
+            --output-signature "${OUT_DIR}/${PACKAGE}.tar.gz.sig" \
+            --output-certificate "${OUT_DIR}/${PACKAGE}.tar.gz.pem" \
+            "${OUT_DIR}/${PACKAGE}.tar.gz"
+
+          cosign sign-blob --yes \
+            --output-signature "${OUT_DIR}/${PACKAGE}.sbom.cdx.json.sig" \
+            --output-certificate "${OUT_DIR}/${PACKAGE}.sbom.cdx.json.pem" \
+            "${OUT_DIR}/${PACKAGE}.sbom.cdx.json"
+
+      - name: Verify signatures before publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT_DIR="${{ steps.meta.outputs.out_dir }}"
+          PACKAGE="${{ steps.meta.outputs.package }}"
+          IDENTITY="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/${GITHUB_REF_NAME}"
+
+          cosign verify-blob \
+            --certificate "${OUT_DIR}/${PACKAGE}.tar.gz.pem" \
+            --signature "${OUT_DIR}/${PACKAGE}.tar.gz.sig" \
+            --certificate-identity-regexp "^${IDENTITY}$" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${OUT_DIR}/${PACKAGE}.tar.gz"
+
+          cosign verify-blob \
+            --certificate "${OUT_DIR}/${PACKAGE}.sbom.cdx.json.pem" \
+            --signature "${OUT_DIR}/${PACKAGE}.sbom.cdx.json.sig" \
+            --certificate-identity-regexp "^${IDENTITY}$" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${OUT_DIR}/${PACKAGE}.sbom.cdx.json"
+
+      - name: Attest release archive provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: ${{ steps.meta.outputs.out_dir }}/${{ steps.meta.outputs.package }}.tar.gz
+
+      - name: Attest SBOM provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: ${{ steps.meta.outputs.out_dir }}/${{ steps.meta.outputs.package }}.sbom.cdx.json
 
       - name: Upload release assets artifact
         uses: actions/upload-artifact@v4
@@ -51,6 +133,9 @@ jobs:
           path: |
             release-assets/*.tar.gz
             release-assets/*.sha256
+            release-assets/*.sbom.cdx.json
+            release-assets/*.sig
+            release-assets/*.pem
 
   create-github-release:
     name: Publish GitHub Release
@@ -71,3 +156,6 @@ jobs:
           files: |
             release-assets/*.tar.gz
             release-assets/*.sha256
+            release-assets/*.sbom.cdx.json
+            release-assets/*.sig
+            release-assets/*.pem
