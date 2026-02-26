@@ -139,6 +139,43 @@ final class AssetStateMachineApiTest extends WebTestCase
         self::assertSame('22222222-2222-2222-2222-222222222222', $payload['items'][0]['uuid'] ?? null);
     }
 
+    public function testListAssetsSupportsCapturedAtRangeFilters(): void
+    {
+        $client = $this->createAuthenticatedClient(true);
+
+        $client->request('GET', '/api/v1/assets?captured_at_from=2026-01-15T00:00:00Z&captured_at_to=2026-01-31T23:59:59Z');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        self::assertCount(1, $payload['items'] ?? []);
+        self::assertSame('22222222-2222-2222-2222-222222222222', $payload['items'][0]['uuid'] ?? null);
+    }
+
+    public function testListAssetsSupportsSortingByDuration(): void
+    {
+        $client = $this->createAuthenticatedClient(true);
+
+        $client->request('GET', '/api/v1/assets?sort=duration&limit=10');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        self::assertSame('22222222-2222-2222-2222-222222222222', $payload['items'][0]['uuid'] ?? null);
+        self::assertSame('11111111-1111-1111-1111-111111111111', $payload['items'][1]['uuid'] ?? null);
+    }
+
+    public function testListAssetsReturnsValidationFailedForInvalidSort(): void
+    {
+        $client = $this->createAuthenticatedClient(true);
+
+        $client->request('GET', '/api/v1/assets?sort=oops');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
+    }
+
     public function testSuggestedTagsFilterIsForbiddenWhenFeatureDisabled(): void
     {
         $client = $this->createAuthenticatedClient(true);
@@ -217,6 +254,8 @@ final class AssetStateMachineApiTest extends WebTestCase
         $asset1->setNotes('first review');
         $asset1->setFields([
             'camera' => 'a7s',
+            'captured_at' => '2026-01-10T12:00:00Z',
+            'duration' => 120,
             'suggestions' => [
                 'suggested_tags' => ['wedding', 'ceremony'],
             ],
@@ -224,11 +263,16 @@ final class AssetStateMachineApiTest extends WebTestCase
 
         $asset2 = new Asset('22222222-2222-2222-2222-222222222222', 'AUDIO', 'voice-001.wav', AssetState::PROCESSED);
         $asset2->setFields([
+            'captured_at' => '2026-01-20T12:00:00Z',
+            'duration' => 30,
             'suggestions' => [
                 'suggested_tags' => ['interview'],
             ],
         ]);
         $asset3 = new Asset('33333333-3333-3333-3333-333333333333', 'PHOTO', 'archive-001.jpg', AssetState::ARCHIVED);
+        $asset3->setFields([
+            'captured_at' => '2026-02-15T12:00:00Z',
+        ]);
 
         $entityManager->persist($asset1);
         $entityManager->persist($asset2);

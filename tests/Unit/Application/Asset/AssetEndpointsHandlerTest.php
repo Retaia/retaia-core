@@ -27,7 +27,7 @@ final class AssetEndpointsHandlerTest extends TestCase
         $readGateway->expects(self::never())->method('list');
 
         $handler = $this->buildHandler(false, null, $readGateway);
-        $result = $handler->list(null, null, null, 50, [], 'INVALID');
+        $result = $handler->list(null, null, null, null, null, null, 50, [], 'INVALID');
 
         self::assertSame(AssetEndpointResult::STATUS_VALIDATION_FAILED, $result->status());
     }
@@ -38,7 +38,7 @@ final class AssetEndpointsHandlerTest extends TestCase
         $readGateway->expects(self::once())->method('list')->willReturn(null);
 
         $handler = $this->buildHandler(false, null, $readGateway);
-        $result = $handler->list(null, null, null, 50, ['wedding'], 'AND');
+        $result = $handler->list(null, null, null, null, null, null, 50, ['wedding'], 'AND');
 
         self::assertSame(AssetEndpointResult::STATUS_FORBIDDEN_SCOPE, $result->status());
     }

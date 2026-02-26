@@ -24,9 +24,19 @@ final class AssetEndpointsHandler
     /**
      * @param array<int, string> $suggestedTags
      */
-    public function list(?string $state, ?string $mediaType, ?string $query, int $limit, array $suggestedTags, string $suggestedTagsMode): AssetEndpointResult
+    public function list(
+        ?string $state,
+        ?string $mediaType,
+        ?string $query,
+        ?string $sort,
+        ?string $capturedAtFrom,
+        ?string $capturedAtTo,
+        int $limit,
+        array $suggestedTags,
+        string $suggestedTagsMode,
+    ): AssetEndpointResult
     {
-        $result = $this->listAssetsHandler->handle($state, $mediaType, $query, $limit, $suggestedTags, $suggestedTagsMode);
+        $result = $this->listAssetsHandler->handle($state, $mediaType, $query, $sort, $capturedAtFrom, $capturedAtTo, $limit, $suggestedTags, $suggestedTagsMode);
         if ($result->status() === ListAssetsResult::STATUS_VALIDATION_FAILED) {
             return new AssetEndpointResult(AssetEndpointResult::STATUS_VALIDATION_FAILED);
         }

@@ -29,6 +29,9 @@ final class AssetReadGateway implements AssetReadGatewayPort
         ?string $state,
         ?string $mediaType,
         ?string $query,
+        ?string $sort,
+        ?\DateTimeImmutable $capturedAtFrom,
+        ?\DateTimeImmutable $capturedAtTo,
         int $limit,
         array $suggestedTags,
         string $suggestedTagsMode,
@@ -37,13 +40,16 @@ final class AssetReadGateway implements AssetReadGatewayPort
             return null;
         }
 
-        $assets = $this->assets->listAssets($state, $mediaType, $query, $limit);
+        $assets = $this->assets->listAssets($state, $mediaType, $query, max(200, $limit));
+        $assets = $this->applyCapturedAtRange($assets, $capturedAtFrom, $capturedAtTo);
+        $assets = $this->applySort($assets, $sort ?? '-created_at');
         if ($suggestedTags !== []) {
             $assets = array_values(array_filter(
                 $assets,
                 fn (Asset $asset): bool => $this->matchesSuggestedTags($asset, $suggestedTags, $suggestedTagsMode)
             ));
         }
+        $assets = array_slice($assets, 0, max(1, min(200, $limit)));
 
         return array_map(fn (Asset $asset): array => $this->summary($asset), $assets);
     }
@@ -103,9 +109,11 @@ final class AssetReadGateway implements AssetReadGatewayPort
 
         return [
             'uuid' => $asset->getUuid(),
+            'name' => $asset->getFilename(),
             'media_type' => $asset->getMediaType(),
             'state' => $asset->getState()->value,
             'created_at' => $asset->getCreatedAt()->format(DATE_ATOM),
+            'updated_at' => $asset->getUpdatedAt()->format(DATE_ATOM),
             'captured_at' => is_string($fields['captured_at'] ?? null) ? $fields['captured_at'] : null,
             'duration' => is_numeric($fields['duration'] ?? null) ? (float) $fields['duration'] : null,
             'tags' => $asset->getTags(),
@@ -243,6 +251,110 @@ final class AssetReadGateway implements AssetReadGatewayPort
         }
 
         return $trimmed;
+    }
+
+    /**
+     * @param array<int, Asset> $assets
+     * @return array<int, Asset>
+     */
+    private function applyCapturedAtRange(array $assets, ?\DateTimeImmutable $from, ?\DateTimeImmutable $to): array
+    {
+        if (!$from instanceof \DateTimeImmutable && !$to instanceof \DateTimeImmutable) {
+            return $assets;
+        }
+
+        return array_values(array_filter($assets, function (Asset $asset) use ($from, $to): bool {
+            $capturedAt = $this->capturedAt($asset);
+            if (!$capturedAt instanceof \DateTimeImmutable) {
+                return false;
+            }
+
+            if ($from instanceof \DateTimeImmutable && $capturedAt < $from) {
+                return false;
+            }
+
+            if ($to instanceof \DateTimeImmutable && $capturedAt > $to) {
+                return false;
+            }
+
+            return true;
+        }));
+    }
+
+    /**
+     * @param array<int, Asset> $assets
+     * @return array<int, Asset>
+     */
+    private function applySort(array $assets, string $sort): array
+    {
+        $direction = str_starts_with($sort, '-') ? -1 : 1;
+        $field = ltrim($sort, '-');
+
+        usort($assets, function (Asset $left, Asset $right) use ($field, $direction): int {
+            $comparison = $this->compareByField($left, $right, $field);
+            if ($comparison !== 0) {
+                return $comparison * $direction;
+            }
+
+            return strcmp($left->getUuid(), $right->getUuid());
+        });
+
+        return $assets;
+    }
+
+    private function compareByField(Asset $left, Asset $right, string $field): int
+    {
+        $leftValue = $this->sortValue($left, $field);
+        $rightValue = $this->sortValue($right, $field);
+
+        if ($leftValue === $rightValue) {
+            return 0;
+        }
+
+        if ($leftValue === null) {
+            return 1;
+        }
+
+        if ($rightValue === null) {
+            return -1;
+        }
+
+        if (is_numeric($leftValue) && is_numeric($rightValue)) {
+            return $leftValue <=> $rightValue;
+        }
+
+        return strcmp((string) $leftValue, (string) $rightValue);
+    }
+
+    private function sortValue(Asset $asset, string $field): string|float|int|null
+    {
+        $fields = $asset->getFields();
+
+        return match ($field) {
+            'name' => mb_strtolower($asset->getFilename()),
+            'created_at' => $asset->getCreatedAt()->getTimestamp(),
+            'updated_at' => $asset->getUpdatedAt()->getTimestamp(),
+            'captured_at' => $this->capturedAt($asset)?->getTimestamp(),
+            'duration' => is_numeric($fields['duration'] ?? null) ? (float) $fields['duration'] : null,
+            'media_type' => mb_strtolower($asset->getMediaType()),
+            'state' => $asset->getState()->value,
+            default => $asset->getCreatedAt()->getTimestamp(),
+        };
+    }
+
+    private function capturedAt(Asset $asset): ?\DateTimeImmutable
+    {
+        $fields = $asset->getFields();
+        $value = $fields['captured_at'] ?? null;
+        if (!is_string($value) || trim($value) === '') {
+            return null;
+        }
+
+        try {
+            return new \DateTimeImmutable($value);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**

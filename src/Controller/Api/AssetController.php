@@ -27,6 +27,9 @@ final class AssetController
         $state = $request->query->get('state');
         $mediaType = $request->query->get('media_type');
         $query = $request->query->get('q');
+        $sort = $request->query->get('sort');
+        $capturedAtFrom = $request->query->get('captured_at_from');
+        $capturedAtTo = $request->query->get('captured_at_to');
         $suggestedTags = $this->csvList($request->query->get('suggested_tags'));
         $suggestedTagsMode = (string) $request->query->get('suggested_tags_mode', 'AND');
         $limit = max(1, (int) $request->query->get('limit', 50));
@@ -35,6 +38,9 @@ final class AssetController
             is_string($state) ? $state : null,
             is_string($mediaType) ? $mediaType : null,
             is_string($query) ? $query : null,
+            is_string($sort) ? $sort : null,
+            is_string($capturedAtFrom) ? $capturedAtFrom : null,
+            is_string($capturedAtTo) ? $capturedAtTo : null,
             $limit,
             $suggestedTags,
             $suggestedTagsMode,
@@ -42,7 +48,7 @@ final class AssetController
         if ($result->status() === AssetEndpointResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse([
                 'code' => 'VALIDATION_FAILED',
-                'message' => 'suggested_tags_mode must be AND or OR',
+                'message' => 'invalid assets list query parameters',
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
         if ($result->status() === AssetEndpointResult::STATUS_FORBIDDEN_SCOPE) {
