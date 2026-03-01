@@ -18,6 +18,7 @@ parameters:
     app.user_token_ttl_seconds: 3600
     app.ingest.watch_path: '%env(string:APP_INGEST_WATCH_PATH)%'
     app.storage.id: '%env(string:APP_STORAGE_ID)%'
+    app.ingest.sidecars.video_legacy_enabled: '%env(bool:APP_INGEST_VIDEO_LEGACY_SIDECARS_ENABLED)%'
     app.features.ai.suggest_tags: '%env(bool:APP_FEATURE_AI_SUGGEST_TAGS)%'
     app.features.ai.suggested_tags_filters: '%env(bool:APP_FEATURE_AI_SUGGESTED_TAGS_FILTERS)%'
     app.features.decisions.bulk: '%env(bool:APP_FEATURE_DECISIONS_BULK)%'
@@ -88,6 +89,10 @@ services:
     App\Command\IngestEnqueueStableCommand:
         bind:
             string $defaultStorageId: '%app.storage.id%'
+
+    App\Ingest\Service\SidecarFileDetector:
+        bind:
+            bool $videoLegacySidecarsEnabled: '%app.ingest.sidecars.video_legacy_enabled%'
 
     App\Infrastructure\Auth\PasswordResetRequestRateLimiterGateway:
         bind:
