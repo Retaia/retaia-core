@@ -22,7 +22,7 @@ final class JobRepository
     public function listClaimable(int $limit): array
     {
         $rows = $this->connection->fetchAllAssociative(
-            'SELECT j.id, j.asset_uuid, j.job_type, j.status, j.claimed_by, j.lock_token, j.locked_until, j.result_payload, a.fields AS asset_fields, a.filename AS asset_filename
+            'SELECT j.id, j.asset_uuid, j.job_type, j.status, j.claimed_by, j.lock_token, j.locked_until, j.result_payload, j.correlation_id, a.fields AS asset_fields, a.filename AS asset_filename
             FROM processing_job j
             INNER JOIN asset a ON a.uuid = j.asset_uuid
             WHERE (j.status = :pending OR (j.status = :claimed AND j.locked_until < :now))
@@ -56,7 +56,7 @@ final class JobRepository
     public function find(string $id): ?Job
     {
         $row = $this->connection->fetchAssociative(
-            'SELECT j.id, j.asset_uuid, j.job_type, j.status, j.claimed_by, j.lock_token, j.locked_until, j.result_payload, a.fields AS asset_fields, a.filename AS asset_filename
+            'SELECT j.id, j.asset_uuid, j.job_type, j.status, j.claimed_by, j.lock_token, j.locked_until, j.result_payload, j.correlation_id, a.fields AS asset_fields, a.filename AS asset_filename
              FROM processing_job j
              LEFT JOIN asset a ON a.uuid = j.asset_uuid
              WHERE j.id = :id',
@@ -100,6 +100,7 @@ final class JobRepository
             'job_type' => $jobType,
             'state_version' => $stateVersion,
             'status' => JobStatus::PENDING->value,
+            'correlation_id' => null,
             'claimed_by' => null,
             'lock_token' => null,
             'locked_until' => null,
@@ -111,7 +112,12 @@ final class JobRepository
         return $this->find($id) ?? throw new \RuntimeException('Unable to load queued job.');
     }
 
-    public function enqueuePendingIfMissing(string $assetUuid, string $jobType, string $stateVersion = '1'): bool
+    public function enqueuePendingIfMissing(
+        string $assetUuid,
+        string $jobType,
+        string $stateVersion = '1',
+        ?string $correlationId = null
+    ): bool {
     {
         $id = bin2hex(random_bytes(16));
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
@@ -123,6 +129,7 @@ final class JobRepository
                 'job_type' => $jobType,
                 'state_version' => $stateVersion,
                 'status' => JobStatus::PENDING->value,
+                'correlation_id' => $correlationId,
                 'claimed_by' => null,
                 'lock_token' => null,
                 'locked_until' => null,
@@ -406,6 +413,7 @@ final class JobRepository
             $lockedUntil,
             $result,
             $this->sourceFromAssetFields($row['asset_fields'] ?? null, (string) ($row['asset_filename'] ?? '')),
+            is_string($row['correlation_id'] ?? null) ? (string) $row['correlation_id'] : null,
         );
     }
 

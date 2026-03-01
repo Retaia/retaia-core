@@ -54,6 +54,8 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         self::assertSame(1, $distinctStateVersionCount);
         $stateVersion = (string) $connection->fetchOne('SELECT state_version FROM processing_job LIMIT 1');
         self::assertSame('1', $stateVersion);
+        $correlationCount = (int) $connection->fetchOne('SELECT COUNT(DISTINCT correlation_id) FROM processing_job WHERE correlation_id IS NOT NULL');
+        self::assertSame(1, $correlationCount);
         $scanStatus = (string) $connection->fetchOne('SELECT status FROM ingest_scan_file WHERE path = :path', ['path' => 'INBOX/new-rush.mov']);
         self::assertSame('queued', $scanStatus);
 
@@ -734,6 +736,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
                 job_type VARCHAR(64) NOT NULL,
                 state_version VARCHAR(64) NOT NULL DEFAULT \'1\',
                 status VARCHAR(16) NOT NULL,
+                correlation_id VARCHAR(64) DEFAULT NULL,
                 claimed_by VARCHAR(32) DEFAULT NULL,
                 lock_token VARCHAR(64) DEFAULT NULL,
                 locked_until DATETIME DEFAULT NULL,

@@ -220,6 +220,7 @@ final class JobController
             'agent_id' => $this->actorId(),
             'job_type' => $job->jobType,
             'status' => $job->status->value,
+            'correlation_id' => $job->correlationId,
         ];
     }
 }

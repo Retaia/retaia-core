@@ -68,6 +68,7 @@ final class IngestCronTickCommandTest extends KernelTestCase
                 job_type VARCHAR(64) NOT NULL,
                 state_version VARCHAR(64) NOT NULL DEFAULT \'1\',
                 status VARCHAR(16) NOT NULL,
+                correlation_id VARCHAR(64) DEFAULT NULL,
                 claimed_by VARCHAR(32) DEFAULT NULL,
                 lock_token VARCHAR(64) DEFAULT NULL,
                 locked_until DATETIME DEFAULT NULL,

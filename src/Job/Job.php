@@ -19,6 +19,7 @@ final class Job
         public readonly array $result = [],
         /** @var array<string, mixed> */
         public readonly array $source = [],
+        public readonly ?string $correlationId = null,
     ) {
     }
 

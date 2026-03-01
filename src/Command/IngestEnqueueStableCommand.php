@@ -11,6 +11,7 @@ use App\Ingest\Service\SidecarFileDetector;
 use App\Ingest\Service\WatchPathResolver;
 use App\Job\Repository\JobRepository;
 use Doctrine\DBAL\Connection;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -29,6 +30,7 @@ final class IngestEnqueueStableCommand extends Command
         private AssetRepositoryInterface $assets,
         private JobRepository $jobs,
         private Connection $connection,
+        private LoggerInterface $logger,
         private string $defaultStorageId = 'nas-main',
     ) {
         parent::__construct();
@@ -343,6 +345,7 @@ final class IngestEnqueueStableCommand extends Command
     {
         $queued = 0;
         $stateVersion = $this->ensureReviewProcessingVersion($asset);
+        $ingestCorrelationId = $this->newIngestCorrelationId($asset->getUuid());
         $jobs = ['extract_facts', 'generate_thumbnails'];
         if (!$hasExistingProxy) {
             $jobs[] = 'generate_proxy';
@@ -352,8 +355,19 @@ final class IngestEnqueueStableCommand extends Command
         }
 
         foreach ($jobs as $jobType) {
-            if ($this->jobs->enqueuePendingIfMissing($asset->getUuid(), $jobType, $stateVersion)) {
+            if ($this->jobs->enqueuePendingIfMissing($asset->getUuid(), $jobType, $stateVersion, $ingestCorrelationId)) {
                 ++$queued;
+                $this->logger->info('ingest.job.queued', [
+                    'correlation_id' => $ingestCorrelationId,
+                    'asset_uuid' => $asset->getUuid(),
+                    'job_type' => $jobType,
+                ]);
+            } else {
+                $this->logger->info('ingest.job.deduplicated', [
+                    'correlation_id' => $ingestCorrelationId,
+                    'asset_uuid' => $asset->getUuid(),
+                    'job_type' => $jobType,
+                ]);
             }
         }
 
@@ -373,6 +387,11 @@ final class IngestEnqueueStableCommand extends Command
         $this->assets->save($asset);
 
         return '1';
+    }
+
+    private function newIngestCorrelationId(string $assetUuid): string
+    {
+        return sprintf('ing-%s', substr(hash('sha256', $assetUuid.'|'.bin2hex(random_bytes(8))), 0, 24));
     }
 
     private function persistDerivedFile(Asset $asset, string $kind, string $proxyPath): string
