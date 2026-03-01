@@ -236,6 +236,86 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
         self::assertSame(0, $count);
     }
 
+    public function testArchivedMoveAlsoMovesDerivedAndUpdatesMetadata(): void
+    {
+        $root = sys_get_temp_dir().'/retaia-move-derived-'.bin2hex(random_bytes(4));
+        mkdir($root.'/INBOX', 0777, true);
+        mkdir($root.'/ARCHIVE', 0777, true);
+        mkdir($root.'/REJECTS', 0777, true);
+        mkdir($root.'/.derived/ffffffff-ffff-ffff-ffff-ffffffffffff', 0777, true);
+        file_put_contents($root.'/INBOX/clip.mov', 'data');
+        file_put_contents($root.'/.derived/ffffffff-ffff-ffff-ffff-ffffffffffff/proxy.mp4', 'proxy');
+
+        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+
+        static::bootKernel();
+        $container = static::getContainer();
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = $container->get(EntityManagerInterface::class);
+        /** @var Connection $connection */
+        $connection = $container->get(Connection::class);
+        $this->ensureAuditTable($connection);
+
+        $asset = new Asset(
+            'ffffffff-ffff-ffff-ffff-ffffffffffff',
+            'VIDEO',
+            'clip.mov',
+            AssetState::ARCHIVED,
+            [],
+            null,
+            [
+                'source_path' => 'INBOX/clip.mov',
+                'paths' => [
+                    'sidecars_relative' => ['.derived/ffffffff-ffff-ffff-ffff-ffffffffffff/proxy.mp4'],
+                ],
+                'derived' => [
+                    'derived_manifest' => [
+                        ['kind' => 'proxy_video', 'ref' => '.derived/ffffffff-ffff-ffff-ffff-ffffffffffff/proxy.mp4'],
+                    ],
+                ],
+            ]
+        );
+        $entityManager->persist($asset);
+        $entityManager->flush();
+
+        $connection->insert('asset_derived_file', [
+            'id' => bin2hex(random_bytes(8)),
+            'asset_uuid' => 'ffffffff-ffff-ffff-ffff-ffffffffffff',
+            'kind' => 'proxy_video',
+            'content_type' => 'video/mp4',
+            'size_bytes' => 5,
+            'sha256' => null,
+            'storage_path' => '.derived/ffffffff-ffff-ffff-ffff-ffffffffffff/proxy.mp4',
+            'created_at' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
+        ]);
+
+        $application = new Application(static::$kernel);
+        $command = $application->find('app:ingest:apply-outbox');
+        $tester = new CommandTester($command);
+        $tester->execute(['--limit' => 10]);
+
+        self::assertFileExists($root.'/ARCHIVE/clip.mov');
+        self::assertFileDoesNotExist($root.'/INBOX/clip.mov');
+        self::assertFileExists($root.'/ARCHIVE/.derived/ffffffff-ffff-ffff-ffff-ffffffffffff/proxy.mp4');
+        self::assertFileDoesNotExist($root.'/.derived/ffffffff-ffff-ffff-ffff-ffffffffffff/proxy.mp4');
+
+        $storagePath = (string) $connection->fetchOne(
+            'SELECT storage_path FROM asset_derived_file WHERE asset_uuid = :assetUuid LIMIT 1',
+            ['assetUuid' => 'ffffffff-ffff-ffff-ffff-ffffffffffff']
+        );
+        self::assertSame('ARCHIVE/.derived/ffffffff-ffff-ffff-ffff-ffffffffffff/proxy.mp4', $storagePath);
+
+        $assetReloaded = $entityManager->find(Asset::class, 'ffffffff-ffff-ffff-ffff-ffffffffffff');
+        self::assertInstanceOf(Asset::class, $assetReloaded);
+        $fields = $assetReloaded->getFields();
+        self::assertContains('ARCHIVE/.derived/ffffffff-ffff-ffff-ffff-ffffffffffff/proxy.mp4', $fields['paths']['sidecars_relative'] ?? []);
+        self::assertSame(
+            'ARCHIVE/.derived/ffffffff-ffff-ffff-ffff-ffffffffffff/proxy.mp4',
+            $fields['derived']['derived_manifest'][0]['ref'] ?? null
+        );
+    }
+
     public function testMoveFailureDoesNotBlockOtherAssets(): void
     {
         $root = sys_get_temp_dir().'/retaia-move-failure-'.bin2hex(random_bytes(4));
@@ -300,6 +380,18 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
                 from_path VARCHAR(1024) NOT NULL,
                 to_path VARCHAR(1024) NOT NULL,
                 reason VARCHAR(64) NOT NULL,
+                created_at DATETIME NOT NULL
+            )'
+        );
+        $connection->executeStatement(
+            'CREATE TABLE IF NOT EXISTS asset_derived_file (
+                id VARCHAR(16) PRIMARY KEY NOT NULL,
+                asset_uuid VARCHAR(36) NOT NULL,
+                kind VARCHAR(64) NOT NULL,
+                content_type VARCHAR(128) NOT NULL,
+                size_bytes INTEGER NOT NULL,
+                sha256 VARCHAR(64) DEFAULT NULL,
+                storage_path VARCHAR(255) NOT NULL,
                 created_at DATETIME NOT NULL
             )'
         );
