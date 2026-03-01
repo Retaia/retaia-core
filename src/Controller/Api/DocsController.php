@@ -3,6 +3,8 @@
 namespace App\Controller\Api;
 
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\HttpFoundation\RedirectResponse;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
@@ -12,6 +14,12 @@ final class DocsController
         #[Autowire('%kernel.project_dir%')]
         private string $projectDir,
     ) {
+    }
+
+    #[Route('/api/docs', name: 'api_docs_default', methods: ['GET'])]
+    public function docsDefault(): Response
+    {
+        return new RedirectResponse('/api/v1/docs', Response::HTTP_FOUND);
     }
 
     #[Route('/api/{version}/docs', name: 'api_docs', requirements: ['version' => 'v[0-9]+(?:\.[0-9]+)?'], methods: ['GET'])]
@@ -31,7 +39,7 @@ final class DocsController
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Retaia API Docs ({$version})</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
+    <link rel="stylesheet" href="/swagger-ui/swagger-ui.css" />
     <style>
       html, body { margin: 0; padding: 0; }
       body { background: #fafafa; }
@@ -39,7 +47,7 @@ final class DocsController
   </head>
   <body>
     <div id="swagger-ui"></div>
-    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script src="/swagger-ui/swagger-ui-bundle.js"></script>
     <script>
       window.onload = function () {
         SwaggerUIBundle({
@@ -59,7 +67,7 @@ HTML;
     }
 
     #[Route('/api/{version}/openapi', name: 'api_openapi', requirements: ['version' => 'v[0-9]+(?:\.[0-9]+)?'], methods: ['GET'])]
-    public function openApi(string $version): Response
+    public function openApi(Request $request, string $version): Response
     {
         $openApiPath = $this->resolveOpenApiPath($version);
         if ($openApiPath === null) {
@@ -71,7 +79,20 @@ HTML;
             return new Response('Unable to read OpenAPI file.', Response::HTTP_INTERNAL_SERVER_ERROR, ['Content-Type' => 'text/plain; charset=UTF-8']);
         }
 
-        return new Response($content, Response::HTTP_OK, ['Content-Type' => 'application/yaml; charset=UTF-8']);
+        $response = new Response($content, Response::HTTP_OK, ['Content-Type' => 'application/yaml; charset=UTF-8']);
+        $response->setPublic();
+        $mtime = filemtime($openApiPath);
+        if (is_int($mtime)) {
+            $response->setLastModified(new \DateTimeImmutable('@'.$mtime));
+        }
+        $sha = hash_file('sha256', $openApiPath);
+        if (is_string($sha) && $sha !== '') {
+            $response->setEtag($sha);
+        }
+        $response->headers->set('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
+        $response->isNotModified($request);
+
+        return $response;
     }
 
     private function resolveOpenApiPath(string $version): ?string
