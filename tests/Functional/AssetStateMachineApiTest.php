@@ -4,6 +4,8 @@ namespace App\Tests\Functional;
 
 use App\Asset\AssetState;
 use App\Entity\Asset;
+use App\Tests\Support\ApiAuthClientTrait;
+use App\Tests\Support\FunctionalSchemaTrait;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
@@ -14,6 +16,8 @@ use Symfony\Component\HttpFoundation\Response;
 final class AssetStateMachineApiTest extends WebTestCase
 {
     use RecreateDatabaseTrait;
+    use ApiAuthClientTrait;
+    use FunctionalSchemaTrait;
 
     public function testDecisionTransitionWorksFromDecisionPendingToKeep(): void
     {
@@ -220,17 +224,7 @@ final class AssetStateMachineApiTest extends WebTestCase
             $this->seedAssets();
         }
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
-            'email' => 'admin@retaia.local',
-            'password' => 'change-me',
-        ]);
-
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
-        $payload = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertIsArray($payload);
-        $token = $payload['access_token'] ?? null;
-        self::assertIsString($token);
-        $client->setServerParameter('HTTP_AUTHORIZATION', 'Bearer '.$token);
+        $this->authenticateClient($client, 'admin@retaia.local');
 
         return $client;
     }
@@ -239,9 +233,8 @@ final class AssetStateMachineApiTest extends WebTestCase
     {
         /** @var Connection $connection */
         $connection = self::getContainer()->get(Connection::class);
-        $connection->executeStatement('CREATE TABLE IF NOT EXISTS asset_operation_lock (id VARCHAR(32) PRIMARY KEY NOT NULL, asset_uuid VARCHAR(36) NOT NULL, lock_type VARCHAR(32) NOT NULL, actor_id VARCHAR(64) NOT NULL, acquired_at DATETIME NOT NULL, released_at DATETIME DEFAULT NULL)');
-        $connection->executeStatement('CREATE TABLE IF NOT EXISTS idempotency_entry (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, actor_id VARCHAR(64) NOT NULL, method VARCHAR(8) NOT NULL, path VARCHAR(255) NOT NULL, idempotency_key VARCHAR(128) NOT NULL, request_hash VARCHAR(64) NOT NULL, response_status INTEGER NOT NULL, response_body CLOB NOT NULL, created_at DATETIME NOT NULL)');
-        $connection->executeStatement('CREATE UNIQUE INDEX IF NOT EXISTS uniq_idempotency_key_scope ON idempotency_entry (actor_id, method, path, idempotency_key)');
+        $this->ensureOperationLockTable($connection);
+        $this->ensureIdempotencyTable($connection);
     }
 
     private function seedAssets(): void

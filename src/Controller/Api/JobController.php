@@ -5,6 +5,7 @@ namespace App\Controller\Api;
 use App\Application\Job\JobEndpointResult;
 use App\Application\Job\JobEndpointsHandler;
 use App\Api\Service\IdempotencyService;
+use App\Controller\RequestPayloadTrait;
 use App\Job\Job;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -16,6 +17,8 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/api/v1/jobs')]
 final class JobController
 {
+    use RequestPayloadTrait;
+
     public function __construct(
         private IdempotencyService $idempotency,
         private JobEndpointsHandler $jobEndpointsHandler,
@@ -171,20 +174,6 @@ final class JobController
 
             return new JsonResponse($job->toArray(), Response::HTTP_OK);
         });
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function payload(Request $request): array
-    {
-        if ($request->getContent() === '') {
-            return [];
-        }
-
-        $decoded = json_decode($request->getContent(), true);
-
-        return is_array($decoded) ? $decoded : [];
     }
 
     private function actorId(): string

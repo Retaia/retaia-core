@@ -2,6 +2,8 @@
 
 namespace App\Tests\Functional;
 
+use App\Tests\Support\ApiAuthClientTrait;
+use App\Tests\Support\FunctionalSchemaTrait;
 use Doctrine\DBAL\Connection;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
@@ -11,6 +13,8 @@ use Symfony\Component\HttpFoundation\Response;
 final class JobApiTest extends WebTestCase
 {
     use RecreateDatabaseTrait;
+    use ApiAuthClientTrait;
+    use FunctionalSchemaTrait;
 
     public function testClaimIsAtomicWithSingleWinner(): void
     {
@@ -522,45 +526,9 @@ final class JobApiTest extends WebTestCase
                 updated_at DATETIME NOT NULL
             )'
         );
-        $connection->executeStatement(
-            'CREATE TABLE IF NOT EXISTS processing_job (
-                id VARCHAR(36) PRIMARY KEY NOT NULL,
-                asset_uuid VARCHAR(36) NOT NULL,
-                job_type VARCHAR(64) NOT NULL,
-                status VARCHAR(16) NOT NULL,
-                claimed_by VARCHAR(32) DEFAULT NULL,
-                lock_token VARCHAR(64) DEFAULT NULL,
-                locked_until DATETIME DEFAULT NULL,
-                result_payload CLOB DEFAULT NULL,
-                created_at DATETIME NOT NULL,
-                updated_at DATETIME NOT NULL
-            )'
-        );
-        $connection->executeStatement(
-            'CREATE TABLE IF NOT EXISTS asset_operation_lock (
-                id VARCHAR(32) PRIMARY KEY NOT NULL,
-                asset_uuid VARCHAR(36) NOT NULL,
-                lock_type VARCHAR(32) NOT NULL,
-                actor_id VARCHAR(64) NOT NULL,
-                acquired_at DATETIME NOT NULL,
-                released_at DATETIME DEFAULT NULL
-            )'
-        );
-
-        $connection->executeStatement(
-            'CREATE TABLE IF NOT EXISTS idempotency_entry (
-                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                actor_id VARCHAR(64) NOT NULL,
-                method VARCHAR(8) NOT NULL,
-                path VARCHAR(255) NOT NULL,
-                idempotency_key VARCHAR(128) NOT NULL,
-                request_hash VARCHAR(64) NOT NULL,
-                response_status INTEGER NOT NULL,
-                response_body CLOB NOT NULL,
-                created_at DATETIME NOT NULL
-            )'
-        );
-        $connection->executeStatement('CREATE UNIQUE INDEX IF NOT EXISTS uniq_idempotency_key_scope ON idempotency_entry (actor_id, method, path, idempotency_key)');
+        $this->ensureProcessingJobTable($connection);
+        $this->ensureOperationLockTable($connection);
+        $this->ensureIdempotencyTable($connection);
     }
 
     private function bootClient(): KernelBrowser
@@ -578,17 +546,7 @@ final class JobApiTest extends WebTestCase
 
     private function loginAs(KernelBrowser $client, string $email): void
     {
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
-            'email' => $email,
-            'password' => 'change-me',
-        ]);
-
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
-        $payload = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertIsArray($payload);
-        $token = $payload['access_token'] ?? null;
-        self::assertIsString($token);
-        $client->setServerParameter('HTTP_AUTHORIZATION', 'Bearer '.$token);
+        $this->authenticateClient($client, $email);
     }
 
     /**

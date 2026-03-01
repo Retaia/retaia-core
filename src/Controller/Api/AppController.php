@@ -6,6 +6,7 @@ use App\Application\AppPolicy\AppPolicyEndpointsHandler;
 use App\Application\AppPolicy\AppPolicyEndpointResult;
 use App\Application\AppPolicy\GetAppFeaturesEndpointResult;
 use App\Application\AppPolicy\PatchAppFeaturesEndpointResult;
+use App\Controller\RequestPayloadTrait;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -16,6 +17,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 final class AppController
 {
     use ApiErrorResponderTrait;
+    use RequestPayloadTrait;
 
     public function __construct(
         private TranslatorInterface $translator,
@@ -125,17 +127,4 @@ final class AppController
         );
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    private function payload(Request $request): array
-    {
-        if ($request->getContent() === '') {
-            return [];
-        }
-
-        $decoded = json_decode($request->getContent(), true);
-
-        return is_array($decoded) ? $decoded : [];
-    }
 }

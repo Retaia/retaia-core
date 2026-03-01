@@ -4,6 +4,7 @@ namespace App\Controller\Api;
 
 use App\Application\Agent\RegisterAgentEndpointHandler;
 use App\Application\Agent\RegisterAgentEndpointResult;
+use App\Controller\RequestPayloadTrait;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -13,6 +14,8 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/api/v1/agents')]
 final class AgentController
 {
+    use RequestPayloadTrait;
+
     public function __construct(
         private TranslatorInterface $translator,
         private RegisterAgentEndpointHandler $registerAgentEndpointHandler,
@@ -47,20 +50,6 @@ final class AgentController
         }
 
         return new JsonResponse($result->payload() ?? [], Response::HTTP_OK);
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function payload(Request $request): array
-    {
-        if ($request->getContent() === '') {
-            return [];
-        }
-
-        $decoded = json_decode($request->getContent(), true);
-
-        return is_array($decoded) ? $decoded : [];
     }
 
 }

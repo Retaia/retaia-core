@@ -29,6 +29,7 @@ use App\Application\AuthClient\RevokeClientTokenEndpointResult;
 use App\Application\AuthClient\RotateClientSecretEndpointResult;
 use App\Application\AuthClient\StartDeviceFlowEndpointResult;
 use App\Auth\UserAccessTokenService;
+use App\Controller\RequestPayloadTrait;
 use App\Domain\AuthClient\DeviceFlowStatus;
 use App\Observability\MetricName;
 use App\Observability\Repository\MetricEventRepository;
@@ -42,6 +43,8 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/api/v1/auth')]
 final class AuthController
 {
+    use RequestPayloadTrait;
+
     public function __construct(
         private RequestPasswordResetEndpointHandler $requestPasswordResetEndpointHandler,
         private ResetPasswordEndpointHandler $resetPasswordEndpointHandler,
@@ -671,17 +674,4 @@ final class AuthController
         return new JsonResponse(['canceled' => true], Response::HTTP_OK);
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    private function payload(Request $request): array
-    {
-        if ($request->getContent() === '') {
-            return [];
-        }
-
-        $decoded = json_decode($request->getContent(), true);
-
-        return is_array($decoded) ? $decoded : [];
-    }
 }
