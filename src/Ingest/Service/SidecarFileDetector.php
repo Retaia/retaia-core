@@ -142,16 +142,10 @@ class SidecarFileDetector
         if (!$this->isAuxiliarySidecarExtension($extension)) {
             return null;
         }
-        if (!$this->isAttachableAuxiliarySidecarExtension($extension)) {
+        if ($this->auxiliaryUnmatchedReason($normalized) !== null) {
             return null;
         }
-
-        $originalExtensions = match ($extension) {
-            'xmp' => array_merge(self::RAW_EXTENSIONS, self::PHOTO_EXTENSIONS, self::VIDEO_EXTENSIONS),
-            'srt' => array_merge(self::VIDEO_EXTENSIONS, self::AUDIO_EXTENSIONS),
-            'lrv', 'thm' => self::VIDEO_EXTENSIONS,
-            default => [],
-        };
+        $originalExtensions = $this->originalExtensionsForAuxiliary($extension);
 
         $originalCandidates = $this->findSiblingCandidatesByExtensions($normalized, $originalExtensions);
         if (count($originalCandidates) !== 1) {
@@ -318,6 +312,33 @@ class SidecarFileDetector
         return $this->isAuxiliarySidecarExtension($this->extension($normalized));
     }
 
+    public function auxiliaryUnmatchedReason(string $filePath): ?string
+    {
+        $normalized = $this->normalizePath($filePath);
+        if (!$this->isInboxPath($normalized)) {
+            return null;
+        }
+
+        $extension = $this->extension($normalized);
+        if (!$this->isAuxiliarySidecarExtension($extension)) {
+            return null;
+        }
+        if (!$this->isAttachableAuxiliarySidecarExtension($extension)) {
+            return 'disabled_by_policy';
+        }
+
+        $originalExtensions = $this->originalExtensionsForAuxiliary($extension);
+        $originalCandidates = $this->findSiblingCandidatesByExtensions($normalized, $originalExtensions);
+        if (count($originalCandidates) === 0) {
+            return 'missing_parent';
+        }
+        if (count($originalCandidates) > 1) {
+            return 'ambiguous_parent';
+        }
+
+        return null;
+    }
+
     private function isAuxiliarySidecarExtension(string $extension): bool
     {
         return in_array($extension, self::AUXILIARY_SIDECAR_EXTENSIONS, true);
@@ -330,6 +351,19 @@ class SidecarFileDetector
         }
 
         return $this->videoLegacySidecarsEnabled;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function originalExtensionsForAuxiliary(string $extension): array
+    {
+        return match ($extension) {
+            'xmp' => array_merge(self::RAW_EXTENSIONS, self::PHOTO_EXTENSIONS, self::VIDEO_EXTENSIONS),
+            'srt' => array_merge(self::VIDEO_EXTENSIONS, self::AUDIO_EXTENSIONS),
+            'lrv', 'thm' => self::VIDEO_EXTENSIONS,
+            default => [],
+        };
     }
 
     private function findProxyFolderParentOriginal(string $path, string $basename): ?string
