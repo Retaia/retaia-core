@@ -118,7 +118,6 @@ final class JobRepository
         string $stateVersion = '1',
         ?string $correlationId = null
     ): bool {
-    {
         $id = bin2hex(random_bytes(16));
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
