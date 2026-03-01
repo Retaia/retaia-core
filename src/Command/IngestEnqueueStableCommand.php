@@ -107,6 +107,11 @@ final class IngestEnqueueStableCommand extends Command
 
                 return ['queued' => $queued, 'missing' => 0];
             }
+            if ($this->sidecarFileDetector->isAuxiliarySidecarPath($sourcePath)) {
+                $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
+
+                return ['queued' => 0, 'missing' => 0];
+            }
 
             $this->scanStateStore->markMissing($sourcePath, new \DateTimeImmutable());
 
@@ -136,6 +141,11 @@ final class IngestEnqueueStableCommand extends Command
             $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
 
             return ['queued' => $queued, 'missing' => 0];
+        }
+        if ($this->sidecarFileDetector->isAuxiliarySidecarPath($sourcePath)) {
+            $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
+
+            return ['queued' => 0, 'missing' => 0];
         }
 
         $asset = $this->findOrCreateAsset($sourcePath);

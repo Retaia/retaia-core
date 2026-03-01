@@ -507,6 +507,9 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         file_put_contents($root.'/INBOX/drone.mov', 'video');
         file_put_contents($root.'/INBOX/drone.lrv', 'legacy-proxy');
         file_put_contents($root.'/INBOX/drone.thm', 'thumb');
+        putenv('APP_INGEST_VIDEO_LEGACY_SIDECARS_ENABLED=1');
+        $_ENV['APP_INGEST_VIDEO_LEGACY_SIDECARS_ENABLED'] = '1';
+        $_SERVER['APP_INGEST_VIDEO_LEGACY_SIDECARS_ENABLED'] = '1';
         putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
         $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
         $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
@@ -550,6 +553,107 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         self::assertNull($entityManager->find(Asset::class, $thmAssetUuid));
         self::assertFileExists($root.'/INBOX/drone.lrv');
         self::assertFileExists($root.'/INBOX/drone.thm');
+
+        putenv('APP_INGEST_VIDEO_LEGACY_SIDECARS_ENABLED=0');
+        $_ENV['APP_INGEST_VIDEO_LEGACY_SIDECARS_ENABLED'] = '0';
+        $_SERVER['APP_INGEST_VIDEO_LEGACY_SIDECARS_ENABLED'] = '0';
+    }
+
+    public function testLegacyLrvSidecarIsIgnoredWhenFeatureDisabled(): void
+    {
+        $root = sys_get_temp_dir().'/retaia-enqueue-legacy-disabled-'.bin2hex(random_bytes(4));
+        mkdir($root.'/INBOX', 0777, true);
+        mkdir($root.'/ARCHIVE', 0777, true);
+        mkdir($root.'/REJECTS', 0777, true);
+        file_put_contents($root.'/INBOX/drone.mov', 'video');
+        file_put_contents($root.'/INBOX/drone.lrv', 'legacy-proxy');
+        putenv('APP_INGEST_VIDEO_LEGACY_SIDECARS_ENABLED=0');
+        $_ENV['APP_INGEST_VIDEO_LEGACY_SIDECARS_ENABLED'] = '0';
+        $_SERVER['APP_INGEST_VIDEO_LEGACY_SIDECARS_ENABLED'] = '0';
+        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
+        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        static::ensureKernelShutdown();
+
+        static::bootKernel();
+        $container = static::getContainer();
+        /** @var Connection $connection */
+        $connection = $container->get(Connection::class);
+        $this->ensureTables($connection);
+
+        foreach (['INBOX/drone.mov', 'INBOX/drone.lrv'] as $path) {
+            $connection->insert('ingest_scan_file', [
+                'path' => $path,
+                'size_bytes' => 100,
+                'mtime' => '2026-02-10 12:00:00',
+                'stable_count' => 2,
+                'status' => 'stable',
+                'first_seen_at' => '2026-02-10 12:00:00',
+                'last_seen_at' => '2026-02-10 12:01:00',
+            ]);
+        }
+
+        $application = new Application(static::$kernel);
+        $command = $application->find('app:ingest:enqueue-stable');
+        $tester = new CommandTester($command);
+        $tester->execute(['--limit' => 20]);
+
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = $container->get(EntityManagerInterface::class);
+        $videoAssetUuid = $this->assetUuidFromPath('INBOX/drone.mov');
+        $lrvAssetUuid = $this->assetUuidFromPath('INBOX/drone.lrv');
+
+        $videoAsset = $entityManager->find(Asset::class, $videoAssetUuid);
+        self::assertInstanceOf(Asset::class, $videoAsset);
+        self::assertNotContains('INBOX/drone.lrv', $videoAsset->getFields()['paths']['sidecars_relative'] ?? []);
+        self::assertNull($entityManager->find(Asset::class, $lrvAssetUuid));
+    }
+
+    public function testAmbiguousXmpSidecarIsNotAutoAttached(): void
+    {
+        $root = sys_get_temp_dir().'/retaia-enqueue-xmp-ambiguous-'.bin2hex(random_bytes(4));
+        mkdir($root.'/INBOX', 0777, true);
+        mkdir($root.'/ARCHIVE', 0777, true);
+        mkdir($root.'/REJECTS', 0777, true);
+        file_put_contents($root.'/INBOX/shot.cr2', 'raw');
+        file_put_contents($root.'/INBOX/shot.png', 'png');
+        file_put_contents($root.'/INBOX/shot.xmp', 'xmp');
+        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
+        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        static::ensureKernelShutdown();
+
+        static::bootKernel();
+        $container = static::getContainer();
+        /** @var Connection $connection */
+        $connection = $container->get(Connection::class);
+        $this->ensureTables($connection);
+
+        foreach (['INBOX/shot.cr2', 'INBOX/shot.png', 'INBOX/shot.xmp'] as $path) {
+            $connection->insert('ingest_scan_file', [
+                'path' => $path,
+                'size_bytes' => 100,
+                'mtime' => '2026-02-10 12:00:00',
+                'stable_count' => 2,
+                'status' => 'stable',
+                'first_seen_at' => '2026-02-10 12:00:00',
+                'last_seen_at' => '2026-02-10 12:01:00',
+            ]);
+        }
+
+        $application = new Application(static::$kernel);
+        $command = $application->find('app:ingest:enqueue-stable');
+        $tester = new CommandTester($command);
+        $tester->execute(['--limit' => 20]);
+
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = $container->get(EntityManagerInterface::class);
+        $rawAssetUuid = $this->assetUuidFromPath('INBOX/shot.cr2');
+        $xmpAssetUuid = $this->assetUuidFromPath('INBOX/shot.xmp');
+        $rawAsset = $entityManager->find(Asset::class, $rawAssetUuid);
+        self::assertInstanceOf(Asset::class, $rawAsset);
+        self::assertNotContains('INBOX/shot.xmp', $rawAsset->getFields()['paths']['sidecars_relative'] ?? []);
+        self::assertNull($entityManager->find(Asset::class, $xmpAssetUuid));
     }
 
     public function testEmptyExistingProxyDoesNotSkipGenerateProxyJob(): void

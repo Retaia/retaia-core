@@ -23,6 +23,7 @@ class SidecarFileDetector
 
     public function __construct(
         private WatchPathResolver $watchPathResolver,
+        private bool $videoLegacySidecarsEnabled = false,
     ) {
     }
 
@@ -138,7 +139,10 @@ class SidecarFileDetector
         }
 
         $extension = $this->extension($normalized);
-        if (!in_array($extension, self::AUXILIARY_SIDECAR_EXTENSIONS, true)) {
+        if (!$this->isAuxiliarySidecarExtension($extension)) {
+            return null;
+        }
+        if (!$this->isAttachableAuxiliarySidecarExtension($extension)) {
             return null;
         }
 
@@ -149,10 +153,11 @@ class SidecarFileDetector
             default => [],
         };
 
-        $original = $this->findSiblingByExtensions($normalized, $originalExtensions);
-        if ($original === null) {
+        $originalCandidates = $this->findSiblingCandidatesByExtensions($normalized, $originalExtensions);
+        if (count($originalCandidates) !== 1) {
             return null;
         }
+        $original = $originalCandidates[0];
 
         return [
             'path' => $normalized,
@@ -180,7 +185,7 @@ class SidecarFileDetector
         if (in_array($extension, array_merge(self::VIDEO_EXTENSIONS, self::AUDIO_EXTENSIONS), true)) {
             $sidecarExtensions[] = 'srt';
         }
-        if (in_array($extension, self::VIDEO_EXTENSIONS, true)) {
+        if ($this->videoLegacySidecarsEnabled && in_array($extension, self::VIDEO_EXTENSIONS, true)) {
             $sidecarExtensions = array_merge($sidecarExtensions, self::LEGACY_VIDEO_SIDECAR_EXTENSIONS);
         }
 
@@ -193,7 +198,11 @@ class SidecarFileDetector
         $basename = pathinfo($normalized, PATHINFO_FILENAME);
         foreach ($sidecarExtensions as $sidecarExtension) {
             $candidate = ($dirname === '.' ? '' : $dirname.'/').$basename.'.'.$sidecarExtension;
-            if ($this->fileExists($candidate)) {
+            if (!$this->fileExists($candidate)) {
+                continue;
+            }
+            $detected = $this->detectAuxiliarySidecarFile($candidate);
+            if (is_array($detected) && (string) ($detected['original'] ?? '') === $normalized) {
                 $sidecars[] = $candidate;
             }
         }
@@ -259,6 +268,52 @@ class SidecarFileDetector
         }
 
         return null;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function findSiblingCandidatesByExtensions(string $path, array $extensions): array
+    {
+        $dirname = dirname($path);
+        $basename = pathinfo($path, PATHINFO_FILENAME);
+        $candidates = [];
+
+        foreach ($extensions as $extension) {
+            $candidate = ($dirname === '.' ? '' : $dirname.'/').$basename.'.'.$extension;
+            if ($candidate === $path) {
+                continue;
+            }
+            if ($this->fileExists($candidate)) {
+                $candidates[] = $candidate;
+            }
+        }
+
+        return array_values(array_unique($candidates));
+    }
+
+    public function isAuxiliarySidecarPath(string $filePath): bool
+    {
+        $normalized = $this->normalizePath($filePath);
+        if (!$this->isInboxPath($normalized)) {
+            return false;
+        }
+
+        return $this->isAuxiliarySidecarExtension($this->extension($normalized));
+    }
+
+    private function isAuxiliarySidecarExtension(string $extension): bool
+    {
+        return in_array($extension, self::AUXILIARY_SIDECAR_EXTENSIONS, true);
+    }
+
+    private function isAttachableAuxiliarySidecarExtension(string $extension): bool
+    {
+        if (!in_array($extension, self::LEGACY_VIDEO_SIDECAR_EXTENSIONS, true)) {
+            return true;
+        }
+
+        return $this->videoLegacySidecarsEnabled;
     }
 
     private function findProxyFolderParentOriginal(string $path, string $basename): ?string
