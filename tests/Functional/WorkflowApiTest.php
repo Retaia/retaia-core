@@ -463,6 +463,15 @@ final class WorkflowApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
         $unsafePath = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertSame('VALIDATION_FAILED', $unsafePath['code'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/ops/ingest/requeue', [
+            'asset_uuid' => '11111111-1111-4111-8111-111111111111',
+            'reason' => 'manual_recovery',
+            'include_sidecars' => 'yes',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $invalidSidecars = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $invalidSidecars['code'] ?? null);
     }
 
     public function testOpsEndpointsRequireAuthentication(): void

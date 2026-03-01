@@ -307,6 +307,13 @@ final class OpsController
             }
             $includeDerived = (bool) $payload['include_derived'];
         }
+        if (array_key_exists('include_sidecars', $payload) && !is_bool($payload['include_sidecars'])) {
+            return $this->errorResponse(
+                'VALIDATION_FAILED',
+                'include_sidecars must be a boolean',
+                Response::HTTP_BAD_REQUEST
+            );
+        }
 
         $normalizedPath = ltrim($path, '/');
         $targetAsset = $assetUuid !== ''
