@@ -5,6 +5,7 @@ namespace App\Tests\Functional;
 use App\Asset\AssetState;
 use App\Entity\Asset;
 use App\Tests\Support\ApiAuthClientTrait;
+use App\Tests\Support\FixtureUsers;
 use App\Tests\Support\FunctionalSchemaTrait;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
@@ -342,6 +343,49 @@ final class OpenApiContractTest extends WebTestCase
         }
     }
 
+    public function testAuthenticatedSecuredOperationsWithoutRequestBodyMatchDeclaredStatuses(): void
+    {
+        $openApi = $this->openApi();
+        $errorCodes = $this->errorCodes($this->errorSchema($openApi));
+        $operations = $this->securedOperationsWithoutRequestBodyAndPathParameters($openApi);
+
+        self::assertNotEmpty($operations, 'Expected at least one secured OpenAPI operation without request body and path params.');
+
+        $client = static::createClient();
+        $client->disableReboot();
+        $this->ensureAuxiliaryTables();
+        foreach ($operations as $operation) {
+            $url = '/api/v1'.(string) $operation['path'];
+            $method = strtoupper((string) $operation['method']);
+            $email = $this->isAgentScopedOperation((string) $operation['path']) ? FixtureUsers::AGENT_EMAIL : FixtureUsers::ADMIN_EMAIL;
+            $this->authenticateClient($client, $email);
+
+            $client->request($method, $url);
+
+            $status = (string) $client->getResponse()->getStatusCode();
+            /** @var array<int, string> $declaredStatuses */
+            $declaredStatuses = $operation['statuses'];
+
+            self::assertContains(
+                $status,
+                $declaredStatuses,
+                sprintf('Runtime status %s for %s %s is not declared in OpenAPI (%s).', $status, $method, (string) $operation['path'], implode(', ', $declaredStatuses))
+            );
+
+            if ((int) $status < 400) {
+                continue;
+            }
+
+            $statusSchemaRef = $openApi['paths'][(string) $operation['path']][strtolower((string) $operation['method'])]['responses'][$status]['content']['application/json']['schema']['$ref'] ?? null;
+            if ($statusSchemaRef !== '#/components/schemas/ErrorResponse') {
+                continue;
+            }
+
+            $payload = json_decode((string) $client->getResponse()->getContent(), true);
+            $this->assertErrorPayloadMatchesModel($payload, $errorCodes);
+        }
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -460,5 +504,85 @@ final class OpenApiContractTest extends WebTestCase
         $asset = new Asset($uuid, 'VIDEO', 'contract.mov', $state);
         $entityManager->persist($asset);
         $entityManager->flush();
+    }
+
+    /**
+     * @param array<string, mixed> $openApi
+     * @return array<int, array{path: string, method: string, statuses: array<int, string>}>
+     */
+    private function securedOperationsWithoutRequestBodyAndPathParameters(array $openApi): array
+    {
+        $operations = [];
+        $paths = $openApi['paths'] ?? [];
+        self::assertIsArray($paths);
+
+        foreach ($paths as $path => $pathItem) {
+            if (!is_string($path) || !is_array($pathItem) || str_contains($path, '{')) {
+                continue;
+            }
+
+            if ($path === '/auth/logout') {
+                continue;
+            }
+
+            if (str_starts_with($path, '/jobs') || str_starts_with($path, '/ops')) {
+                continue;
+            }
+
+            foreach ($pathItem as $method => $operation) {
+                if (!is_string($method) || !is_array($operation)) {
+                    continue;
+                }
+
+                $normalizedMethod = strtolower($method);
+                if (!in_array($normalizedMethod, ['get', 'post', 'patch', 'put', 'delete'], true)) {
+                    continue;
+                }
+
+                $security = $operation['security'] ?? null;
+                if (!is_array($security) || $security === []) {
+                    continue;
+                }
+
+                if (($operation['requestBody']['required'] ?? false) === true) {
+                    continue;
+                }
+
+                $responses = $operation['responses'] ?? null;
+                if (!is_array($responses) || $responses === []) {
+                    continue;
+                }
+
+                $statuses = [];
+                foreach (array_keys($responses) as $status) {
+                    if (!is_string($status) && !is_int($status)) {
+                        continue;
+                    }
+
+                    $normalizedStatus = (string) $status;
+                    if (!preg_match('/^[1-5]\d{2}$/', $normalizedStatus)) {
+                        continue;
+                    }
+                    $statuses[] = $normalizedStatus;
+                }
+
+                if ($statuses === []) {
+                    continue;
+                }
+
+                $operations[] = [
+                    'path' => $path,
+                    'method' => $normalizedMethod,
+                    'statuses' => $statuses,
+                ];
+            }
+        }
+
+        return $operations;
+    }
+
+    private function isAgentScopedOperation(string $path): bool
+    {
+        return str_starts_with($path, '/jobs') || $path === '/agents/register';
     }
 }
