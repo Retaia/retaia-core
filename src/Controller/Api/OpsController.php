@@ -4,6 +4,8 @@ namespace App\Controller\Api;
 
 use App\Application\Auth\ResolveAdminActorHandler;
 use App\Application\Auth\ResolveAdminActorResult;
+use App\Asset\Repository\AssetRepositoryInterface;
+use App\Entity\Asset;
 use App\Controller\RequestPayloadTrait;
 use App\Ingest\Repository\IngestDiagnosticsRepository;
 use App\Ingest\Service\WatchPathResolver;
@@ -34,6 +36,7 @@ final class OpsController
         private IngestDiagnosticsRepository $ingestDiagnostics,
         private OperationLockRepository $locks,
         private JobRepository $jobs,
+        private AssetRepositoryInterface $assets,
         private Connection $connection,
         private WatchPathResolver $watchPathResolver,
         private TranslatorInterface $translator,
@@ -251,6 +254,92 @@ final class OpsController
         );
     }
 
+    #[Route('/ingest/requeue', name: 'api_ops_ingest_requeue', methods: ['POST'])]
+    public function ingestRequeue(Request $request): JsonResponse
+    {
+        $forbidden = $this->requireAdminActor();
+        if ($forbidden instanceof JsonResponse) {
+            return $forbidden;
+        }
+
+        $payload = $this->payload($request);
+        $assetUuid = trim((string) ($payload['asset_uuid'] ?? ''));
+        $path = trim((string) ($payload['path'] ?? ''));
+        $reason = trim((string) ($payload['reason'] ?? ''));
+
+        if ($assetUuid === '' && $path === '') {
+            return $this->errorResponse(
+                'VALIDATION_FAILED',
+                'asset_uuid or path is required',
+                Response::HTTP_BAD_REQUEST
+            );
+        }
+        if ($reason === '') {
+            return $this->errorResponse(
+                'VALIDATION_FAILED',
+                'reason is required',
+                Response::HTTP_BAD_REQUEST
+            );
+        }
+        if ($assetUuid !== '' && !$this->isValidUuid($assetUuid)) {
+            return $this->errorResponse(
+                'VALIDATION_FAILED',
+                'asset_uuid must be a valid UUID',
+                Response::HTTP_BAD_REQUEST
+            );
+        }
+        if ($path !== '' && !$this->isSafeRelativePath($path)) {
+            return $this->errorResponse(
+                'VALIDATION_FAILED',
+                'path must be a safe relative path',
+                Response::HTTP_BAD_REQUEST
+            );
+        }
+
+        $includeDerived = true;
+        if (array_key_exists('include_derived', $payload)) {
+            if (!is_bool($payload['include_derived'])) {
+                return $this->errorResponse(
+                    'VALIDATION_FAILED',
+                    'include_derived must be a boolean',
+                    Response::HTTP_BAD_REQUEST
+                );
+            }
+            $includeDerived = (bool) $payload['include_derived'];
+        }
+        if (array_key_exists('include_sidecars', $payload) && !is_bool($payload['include_sidecars'])) {
+            return $this->errorResponse(
+                'VALIDATION_FAILED',
+                'include_sidecars must be a boolean',
+                Response::HTTP_BAD_REQUEST
+            );
+        }
+
+        $normalizedPath = ltrim($path, '/');
+        $targetAsset = $assetUuid !== ''
+            ? $this->assets->findByUuid($assetUuid)
+            : $this->assets->findByUuid($this->assetUuidFromPath($normalizedPath));
+
+        $requeuedAssets = 0;
+        $requeuedJobs = 0;
+        $deduplicatedJobs = 0;
+        if ($targetAsset instanceof Asset) {
+            [$requeuedJobs, $deduplicatedJobs] = $this->requeueJobsForAsset($targetAsset, $includeDerived);
+            $requeuedAssets = 1;
+        }
+
+        return new JsonResponse([
+            'accepted' => true,
+            'target' => array_filter([
+                'asset_uuid' => $assetUuid !== '' ? $assetUuid : ($targetAsset?->getUuid()),
+                'path' => $normalizedPath !== '' ? $normalizedPath : null,
+            ], static fn (mixed $v): bool => is_string($v) && $v !== ''),
+            'requeued_assets' => $requeuedAssets,
+            'requeued_jobs' => $requeuedJobs,
+            'deduplicated_jobs' => $deduplicatedJobs,
+        ], Response::HTTP_ACCEPTED);
+    }
+
     private function requireAdminActor(): ?JsonResponse
     {
         if ($this->resolveAdminActorHandler->handle()->status() === ResolveAdminActorResult::STATUS_AUTHORIZED) {
@@ -258,6 +347,67 @@ final class OpsController
         }
 
         return $this->errorResponse('FORBIDDEN_ACTOR', $this->translator->trans('auth.error.forbidden_actor'), Response::HTTP_FORBIDDEN);
+    }
+
+    private function isSafeRelativePath(string $path): bool
+    {
+        $normalized = ltrim(trim($path), '/');
+        if ($normalized === '' || str_contains($normalized, "\0")) {
+            return false;
+        }
+
+        return !str_contains($normalized, '../') && !str_contains($normalized, '..\\');
+    }
+
+    private function isValidUuid(string $uuid): bool
+    {
+        return (bool) preg_match('/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/', $uuid);
+    }
+
+    /**
+     * @return array{int,int}
+     */
+    private function requeueJobsForAsset(Asset $asset, bool $includeDerived): array
+    {
+        $jobs = ['extract_facts'];
+        $fields = $asset->getFields();
+        $proxyDone = (bool) ($fields['proxy_done'] ?? false);
+
+        if ($includeDerived) {
+            $jobs[] = 'generate_thumbnails';
+            if (!$proxyDone) {
+                $jobs[] = 'generate_proxy';
+            }
+            if ($asset->getMediaType() === 'AUDIO') {
+                $jobs[] = 'generate_audio_waveform';
+            }
+        }
+
+        $requeued = 0;
+        $deduplicated = 0;
+        foreach ($jobs as $jobType) {
+            if ($this->jobs->enqueuePendingIfMissing($asset->getUuid(), $jobType)) {
+                ++$requeued;
+            } else {
+                ++$deduplicated;
+            }
+        }
+
+        return [$requeued, $deduplicated];
+    }
+
+    private function assetUuidFromPath(string $path): string
+    {
+        $hex = md5($path);
+
+        return sprintf(
+            '%s-%s-%s-%s-%s',
+            substr($hex, 0, 8),
+            substr($hex, 8, 4),
+            substr($hex, 12, 4),
+            substr($hex, 16, 4),
+            substr($hex, 20, 12)
+        );
     }
 
 }
