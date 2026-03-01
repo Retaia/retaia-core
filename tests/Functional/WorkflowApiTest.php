@@ -178,6 +178,59 @@ final class WorkflowApiTest extends WebTestCase
         self::assertSame('STATE_CONFLICT', $payload['code'] ?? null);
     }
 
+    public function testPurgeDeletesDerivedFilesAndRows(): void
+    {
+        $root = sys_get_temp_dir().'/retaia-purge-derived-'.bin2hex(random_bytes(4));
+        mkdir($root.'/INBOX', 0777, true);
+        mkdir($root.'/ARCHIVE', 0777, true);
+        mkdir($root.'/REJECTS/.derived/99999999-9999-4999-8999-999999999999', 0777, true);
+        file_put_contents($root.'/REJECTS/purge-derived.mov', 'origin');
+        file_put_contents($root.'/REJECTS/.derived/99999999-9999-4999-8999-999999999999/proxy.mp4', 'derived');
+        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+
+        $client = $this->createAuthenticatedClient('admin@retaia.local');
+        $uuid = '99999999-9999-4999-8999-999999999999';
+        $this->seedAsset($uuid, AssetState::REJECTED, 'purge-derived.mov');
+
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = static::getContainer()->get(EntityManagerInterface::class);
+        $asset = $entityManager->find(Asset::class, $uuid);
+        self::assertInstanceOf(Asset::class, $asset);
+        $asset->setFields([
+            'source_path' => 'INBOX/purge-derived.mov',
+            'current_path' => 'REJECTS/purge-derived.mov',
+            'paths' => [
+                'original_relative' => 'REJECTS/purge-derived.mov',
+                'sidecars_relative' => ['REJECTS/.derived/99999999-9999-4999-8999-999999999999/proxy.mp4'],
+            ],
+        ]);
+        $entityManager->flush();
+
+        /** @var Connection $connection */
+        $connection = static::getContainer()->get(Connection::class);
+        $connection->insert('asset_derived_file', [
+            'id' => bin2hex(random_bytes(8)),
+            'asset_uuid' => $uuid,
+            'kind' => 'proxy_video',
+            'content_type' => 'video/mp4',
+            'size_bytes' => 7,
+            'sha256' => null,
+            'storage_path' => 'REJECTS/.derived/99999999-9999-4999-8999-999999999999/proxy.mp4',
+            'created_at' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
+        ]);
+
+        $client->jsonRequest('POST', '/api/v1/assets/'.$uuid.'/purge', [], [
+            'HTTP_IDEMPOTENCY_KEY' => 'purge-derived-1',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        self::assertFileDoesNotExist($root.'/REJECTS/purge-derived.mov');
+        self::assertFileDoesNotExist($root.'/REJECTS/.derived/99999999-9999-4999-8999-999999999999/proxy.mp4');
+        $count = (int) $connection->fetchOne('SELECT COUNT(*) FROM asset_derived_file WHERE asset_uuid = :assetUuid', ['assetUuid' => $uuid]);
+        self::assertSame(0, $count);
+    }
+
     private function createAuthenticatedClient(string $email): KernelBrowser
     {
         $client = static::createClient();
@@ -218,6 +271,7 @@ final class WorkflowApiTest extends WebTestCase
         $connection->executeStatement('CREATE TABLE IF NOT EXISTS batch_move_report (batch_id VARCHAR(16) PRIMARY KEY NOT NULL, payload CLOB NOT NULL, created_at DATETIME NOT NULL)');
         $connection->executeStatement('CREATE TABLE IF NOT EXISTS asset_operation_lock (id VARCHAR(32) PRIMARY KEY NOT NULL, asset_uuid VARCHAR(36) NOT NULL, lock_type VARCHAR(32) NOT NULL, actor_id VARCHAR(64) NOT NULL, acquired_at DATETIME NOT NULL, released_at DATETIME DEFAULT NULL)');
         $connection->executeStatement('CREATE TABLE IF NOT EXISTS processing_job (id VARCHAR(36) PRIMARY KEY NOT NULL, asset_uuid VARCHAR(36) NOT NULL, job_type VARCHAR(64) NOT NULL, status VARCHAR(16) NOT NULL, claimed_by VARCHAR(32) DEFAULT NULL, lock_token VARCHAR(64) DEFAULT NULL, locked_until DATETIME DEFAULT NULL, result_payload CLOB DEFAULT NULL, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL)');
+        $connection->executeStatement('CREATE TABLE IF NOT EXISTS asset_derived_file (id VARCHAR(16) PRIMARY KEY NOT NULL, asset_uuid VARCHAR(36) NOT NULL, kind VARCHAR(64) NOT NULL, content_type VARCHAR(128) NOT NULL, size_bytes INTEGER NOT NULL, sha256 VARCHAR(64) DEFAULT NULL, storage_path VARCHAR(255) NOT NULL, created_at DATETIME NOT NULL)');
         $connection->executeStatement('CREATE TABLE IF NOT EXISTS idempotency_entry (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, actor_id VARCHAR(64) NOT NULL, method VARCHAR(8) NOT NULL, path VARCHAR(255) NOT NULL, idempotency_key VARCHAR(128) NOT NULL, request_hash VARCHAR(64) NOT NULL, response_status INTEGER NOT NULL, response_body CLOB NOT NULL, created_at DATETIME NOT NULL)');
         $connection->executeStatement('CREATE UNIQUE INDEX IF NOT EXISTS uniq_idempotency_key_scope ON idempotency_entry (actor_id, method, path, idempotency_key)');
     }

@@ -7,6 +7,7 @@ use App\Asset\Repository\AssetRepositoryInterface;
 use App\Entity\Asset;
 use App\Ingest\Repository\PathAuditRepository;
 use App\Ingest\Service\WatchPathResolver;
+use Doctrine\DBAL\Connection;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -21,6 +22,7 @@ final class IngestApplyOutboxCommand extends Command
         private WatchPathResolver $watchPathResolver,
         private AssetRepositoryInterface $assets,
         private PathAuditRepository $audit,
+        private Connection $connection,
     ) {
         parent::__construct();
     }
@@ -86,12 +88,16 @@ final class IngestApplyOutboxCommand extends Command
             if (!@rename($fromAbsolute, $finalAbsolute)) {
                 throw new \RuntimeException(sprintf('Unable to move %s to %s', $fromRelative, $finalRelative));
             }
+            $remap = $this->moveDerivedFilesForAsset($asset->getUuid(), $targetFolder, $root);
+            $this->applyDerivedPathRemap($asset, $remap);
             $this->persistPathUpdate($asset, $fromRelative, $finalRelative);
 
             return 1;
         }
 
         if (is_file($targetAbsolute)) {
+            $remap = $this->moveDerivedFilesForAsset($asset->getUuid(), $targetFolder, $root);
+            $this->applyDerivedPathRemap($asset, $remap);
             $this->persistPathUpdate($asset, $fromRelative, $targetRelative);
 
             return 0;
@@ -133,6 +139,95 @@ final class IngestApplyOutboxCommand extends Command
         $this->assets->save($asset);
 
         $this->audit->record($asset->getUuid(), $fromRelative, $toRelative, 'state_transition', new \DateTimeImmutable());
+    }
+
+    /**
+     * @return array<string, string> oldPath => newPath
+     */
+    private function moveDerivedFilesForAsset(string $assetUuid, string $targetFolder, string $root): array
+    {
+        try {
+            $rows = $this->connection->fetchAllAssociative(
+                'SELECT id, storage_path FROM asset_derived_file WHERE asset_uuid = :assetUuid',
+                ['assetUuid' => $assetUuid]
+            );
+        } catch (\Throwable) {
+            return [];
+        }
+
+        $remap = [];
+        foreach ($rows as $row) {
+            $id = (string) ($row['id'] ?? '');
+            $storagePathRaw = (string) ($row['storage_path'] ?? '');
+            $storagePath = ltrim(trim($storagePathRaw), '/');
+            if ($id === '' || !$this->isSafeRelativePath($storagePath)) {
+                continue;
+            }
+
+            $targetStoragePath = $targetFolder.'/'.$storagePath;
+            $sourceAbsolute = $root.DIRECTORY_SEPARATOR.$storagePath;
+            $targetAbsolute = $root.DIRECTORY_SEPARATOR.$targetStoragePath;
+
+            if (!is_dir(dirname($targetAbsolute)) && !mkdir(dirname($targetAbsolute), 0777, true) && !is_dir(dirname($targetAbsolute))) {
+                throw new \RuntimeException(sprintf('Unable to create derived target directory for %s', $targetStoragePath));
+            }
+
+            if (is_file($sourceAbsolute)) {
+                if (!@rename($sourceAbsolute, $targetAbsolute)) {
+                    throw new \RuntimeException(sprintf('Unable to move derived file %s to %s', $storagePath, $targetStoragePath));
+                }
+            } elseif (!is_file($targetAbsolute)) {
+                continue;
+            }
+
+            $this->connection->update('asset_derived_file', ['storage_path' => $targetStoragePath], ['id' => $id]);
+            $remap[$storagePath] = $targetStoragePath;
+        }
+
+        return $remap;
+    }
+
+    /**
+     * @param array<string, string> $remap
+     */
+    private function applyDerivedPathRemap(Asset $asset, array $remap): void
+    {
+        if ($remap === []) {
+            return;
+        }
+
+        $fields = $asset->getFields();
+
+        $paths = is_array($fields['paths'] ?? null) ? $fields['paths'] : [];
+        $sidecars = is_array($paths['sidecars_relative'] ?? null) ? $paths['sidecars_relative'] : [];
+        $mappedSidecars = [];
+        foreach ($sidecars as $sidecar) {
+            $normalized = ltrim((string) $sidecar, '/');
+            $mappedSidecars[] = $remap[$normalized] ?? $normalized;
+        }
+        $paths['sidecars_relative'] = array_values(array_unique(array_filter(array_map('strval', $mappedSidecars), static fn (string $v): bool => $v !== '')));
+
+        $derived = is_array($fields['derived'] ?? null) ? $fields['derived'] : [];
+        $manifest = is_array($derived['derived_manifest'] ?? null) ? $derived['derived_manifest'] : [];
+        foreach ($manifest as $index => $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $ref = ltrim((string) ($item['ref'] ?? ''), '/');
+            if ($ref === '') {
+                continue;
+            }
+            if (isset($remap[$ref])) {
+                $item['ref'] = $remap[$ref];
+                $manifest[$index] = $item;
+            }
+        }
+        $derived['derived_manifest'] = $manifest;
+
+        $fields['paths'] = $paths;
+        $fields['derived'] = $derived;
+        $asset->setFields($fields);
+        $this->assets->save($asset);
     }
 
     private function isSafeRelativePath(string $path): bool
