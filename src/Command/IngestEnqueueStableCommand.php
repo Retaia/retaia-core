@@ -47,57 +47,83 @@ final class IngestEnqueueStableCommand extends Command
         $root = $this->watchPathResolver->resolveRoot();
 
         foreach ($stableFiles as $file) {
-            $sourcePath = ltrim((string) $file['path'], '/');
-            if (!$this->isSafeRelativePath($sourcePath)) {
-                $this->scanStateStore->markMissing($sourcePath, new \DateTimeImmutable());
-                ++$missing;
-                continue;
-            }
-
-            $absoluteSource = $root.DIRECTORY_SEPARATOR.$sourcePath;
-            if (!is_file($absoluteSource)) {
-                $missingProxy = $this->proxyFileDetector->detectProxyFile($sourcePath);
-                if ($missingProxy !== null) {
-                    $originalPath = (string) ($missingProxy['original'] ?? '');
-                    if ($originalPath !== '' && $this->isSafeRelativePath($originalPath)) {
-                        $this->attachExistingProxyToAsset($originalPath, $missingProxy);
-                        $queued += $this->enqueueRequiredJobs($this->findOrCreateAsset($originalPath), true);
-                    }
-                    $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
-                    continue;
+            try {
+                $result = $this->connection->transactional(fn (): array => $this->processStableFile($file, $root));
+                $queued += (int) ($result['queued'] ?? 0);
+                $missing += (int) ($result['missing'] ?? 0);
+            } catch (\Throwable $e) {
+                $sourcePath = ltrim((string) ($file['path'] ?? ''), '/');
+                if ($sourcePath !== '' && $this->isSafeRelativePath($sourcePath)) {
+                    $this->scanStateStore->markMissing($sourcePath, new \DateTimeImmutable());
                 }
-
-                $this->scanStateStore->markMissing($sourcePath, new \DateTimeImmutable());
                 ++$missing;
-                continue;
+                $io->warning(sprintf('Skipping ingest file %s: %s', $sourcePath !== '' ? $sourcePath : '<unknown>', $e->getMessage()));
             }
-
-            $proxy = $this->proxyFileDetector->detectProxyFile($sourcePath);
-            if ($proxy !== null) {
-                $originalPath = (string) ($proxy['original'] ?? '');
-                if ($originalPath !== '' && $this->isSafeRelativePath($originalPath)) {
-                    $this->attachExistingProxyToAsset($originalPath, $proxy);
-                    $queued += $this->enqueueRequiredJobs($this->findOrCreateAsset($originalPath), true);
-                }
-                $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
-                continue;
-            }
-
-            $asset = $this->findOrCreateAsset($sourcePath);
-
-            $existingProxy = $this->proxyFileDetector->detectExistingProxyForOriginal($sourcePath);
-            if ($existingProxy !== null) {
-                $this->attachExistingProxyToAsset($sourcePath, $existingProxy);
-            }
-
-            $queued += $this->enqueueRequiredJobs($asset, $existingProxy !== null);
-
-            $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
         }
 
         $io->success(sprintf('Queued %d stable file(s). Missing: %d.', $queued, $missing));
 
         return Command::SUCCESS;
+    }
+
+    /**
+     * @param array{path:string,size:int,mtime:\DateTimeImmutable,stable_count:int,status:string} $file
+     * @return array{queued:int,missing:int}
+     */
+    private function processStableFile(array $file, string $root): array
+    {
+        $queued = 0;
+        $missing = 0;
+        $sourcePath = ltrim((string) $file['path'], '/');
+        if (!$this->isSafeRelativePath($sourcePath)) {
+            $this->scanStateStore->markMissing($sourcePath, new \DateTimeImmutable());
+
+            return ['queued' => 0, 'missing' => 1];
+        }
+
+        $absoluteSource = $root.DIRECTORY_SEPARATOR.$sourcePath;
+        if (!is_file($absoluteSource)) {
+            $missingProxy = $this->proxyFileDetector->detectProxyFile($sourcePath);
+            if ($missingProxy !== null) {
+                $originalPath = (string) ($missingProxy['original'] ?? '');
+                if ($originalPath !== '' && $this->isSafeRelativePath($originalPath) && $this->canUseExistingProxy($missingProxy, $originalPath)) {
+                    $this->attachExistingProxyToAsset($originalPath, $missingProxy);
+                    $queued += $this->enqueueRequiredJobs($this->findOrCreateAsset($originalPath), true);
+                }
+                $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
+
+                return ['queued' => $queued, 'missing' => 0];
+            }
+
+            $this->scanStateStore->markMissing($sourcePath, new \DateTimeImmutable());
+
+            return ['queued' => 0, 'missing' => 1];
+        }
+
+        $proxy = $this->proxyFileDetector->detectProxyFile($sourcePath);
+        if ($proxy !== null) {
+            $originalPath = (string) ($proxy['original'] ?? '');
+            if ($originalPath !== '' && $this->isSafeRelativePath($originalPath) && $this->canUseExistingProxy($proxy, $originalPath)) {
+                $this->attachExistingProxyToAsset($originalPath, $proxy);
+                $queued += $this->enqueueRequiredJobs($this->findOrCreateAsset($originalPath), true);
+            }
+            $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
+
+            return ['queued' => $queued, 'missing' => 0];
+        }
+
+        $asset = $this->findOrCreateAsset($sourcePath);
+
+        $existingProxy = $this->proxyFileDetector->detectExistingProxyForOriginal($sourcePath);
+        $usableExistingProxy = $existingProxy !== null && $this->canUseExistingProxy($existingProxy, $sourcePath);
+        if ($usableExistingProxy && $existingProxy !== null) {
+            $this->attachExistingProxyToAsset($sourcePath, $existingProxy);
+        }
+
+        $queued += $this->enqueueRequiredJobs($asset, $usableExistingProxy);
+        $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
+
+        return ['queued' => $queued, 'missing' => $missing];
     }
 
     private function assetUuidFromPath(string $path): string
@@ -174,8 +200,9 @@ final class IngestEnqueueStableCommand extends Command
 
         $paths = is_array($fields['paths'] ?? null) ? $fields['paths'] : [];
         $sidecars = is_array($paths['sidecars_relative'] ?? null) ? $paths['sidecars_relative'] : [];
-        if (!in_array($proxyPath, $sidecars, true)) {
-            $sidecars[] = $proxyPath;
+        $sidecars = array_values(array_filter(array_map('strval', $sidecars), static fn (string $item): bool => $item !== $proxyPath && $item !== ''));
+        if (!in_array($materializedStoragePath, $sidecars, true)) {
+            $sidecars[] = $materializedStoragePath;
         }
         $paths['storage_id'] = (string) ($paths['storage_id'] ?? $this->defaultStorageId);
         $paths['original_relative'] = (string) ($paths['original_relative'] ?? $originalPath);
@@ -208,7 +235,6 @@ final class IngestEnqueueStableCommand extends Command
         $fields['proxy_done'] = true;
         $asset->setFields($fields);
         $this->assets->save($asset);
-
     }
 
     private function isSafeRelativePath(string $path): bool
@@ -241,11 +267,9 @@ final class IngestEnqueueStableCommand extends Command
         }
 
         foreach ($jobs as $jobType) {
-            if ($this->jobs->hasJobForAssetAndType($asset->getUuid(), $jobType)) {
-                continue;
+            if ($this->jobs->enqueuePendingIfMissing($asset->getUuid(), $jobType)) {
+                ++$queued;
             }
-            $this->jobs->enqueuePending($asset->getUuid(), $jobType);
-            ++$queued;
         }
 
         return $queued;
@@ -328,7 +352,7 @@ final class IngestEnqueueStableCommand extends Command
 
         $sourceAbsolutePath = $root.DIRECTORY_SEPARATOR.$proxyPath;
         if (!is_file($sourceAbsolutePath)) {
-            return $targetStoragePath;
+            throw new \RuntimeException(sprintf('Proxy source file not found: %s', $proxyPath));
         }
 
         if (@rename($sourceAbsolutePath, $targetAbsolutePath)) {
@@ -341,5 +365,49 @@ final class IngestEnqueueStableCommand extends Command
         @unlink($sourceAbsolutePath);
 
         return $targetStoragePath;
+    }
+
+    /**
+     * @param array{path:string,type:string,kind:string,original:string} $proxy
+     */
+    private function canUseExistingProxy(array $proxy, string $originalPath): bool
+    {
+        $kind = (string) ($proxy['kind'] ?? '');
+        $path = (string) ($proxy['path'] ?? '');
+        if ($kind === '' || $path === '') {
+            return false;
+        }
+
+        $root = rtrim($this->watchPathResolver->resolveRoot(), DIRECTORY_SEPARATOR);
+        $absolutePath = $root.DIRECTORY_SEPARATOR.$path;
+        if (is_file($absolutePath)) {
+            $size = filesize($absolutePath);
+            if (is_int($size) && $size > 0) {
+                return true;
+            }
+        }
+
+        $assetUuid = $this->assetUuidFromPath($originalPath);
+        $existing = $this->connection->fetchAssociative(
+            'SELECT storage_path FROM asset_derived_file WHERE asset_uuid = :assetUuid AND kind = :kind ORDER BY created_at DESC LIMIT 1',
+            ['assetUuid' => $assetUuid, 'kind' => $kind]
+        );
+        if (!is_array($existing)) {
+            return false;
+        }
+
+        $storagePath = (string) ($existing['storage_path'] ?? '');
+        if ($storagePath === '') {
+            return false;
+        }
+
+        $derivedAbsolutePath = $root.DIRECTORY_SEPARATOR.$storagePath;
+        if (!is_file($derivedAbsolutePath)) {
+            return false;
+        }
+
+        $derivedSize = filesize($derivedAbsolutePath);
+
+        return is_int($derivedSize) && $derivedSize > 0;
     }
 }
