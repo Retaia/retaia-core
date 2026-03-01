@@ -224,9 +224,37 @@ final class WorkflowApiTest extends WebTestCase
         $payload = json_decode((string) $client->getResponse()->getContent(), true);
 
         self::assertIsArray($payload);
-        self::assertContains($payload['status'] ?? null, ['ok', 'degraded', 'down']);
+        self::assertSame('ok', $payload['status'] ?? null);
         self::assertIsArray($payload['checks'] ?? null);
         self::assertNotEmpty($payload['checks']);
+        $checkNames = array_map(static fn (array $check): string => (string) ($check['name'] ?? ''), $payload['checks']);
+        self::assertContains('database', $checkNames);
+    }
+
+    public function testOpsReadinessReturnsDegradedWhenCriticalFoldersAreMissing(): void
+    {
+        $root = sys_get_temp_dir().'/retaia-readiness-degraded-'.bin2hex(random_bytes(4));
+        mkdir($root.'/INBOX', 0777, true);
+        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+
+        $client = $this->createAuthenticatedClient('admin@retaia.local');
+        $client->request('GET', '/api/v1/ops/readiness');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+
+        self::assertIsArray($payload);
+        self::assertSame('degraded', $payload['status'] ?? null);
+        self::assertIsArray($payload['checks'] ?? null);
+        $ingestCheck = null;
+        foreach ($payload['checks'] as $check) {
+            if (($check['name'] ?? null) === 'ingest_watch_path') {
+                $ingestCheck = $check;
+                break;
+            }
+        }
+        self::assertIsArray($ingestCheck);
+        self::assertSame('fail', $ingestCheck['status'] ?? null);
     }
 
     public function testOpsMissingEndpointsReturnExpectedPayloads(): void
@@ -303,6 +331,14 @@ final class WorkflowApiTest extends WebTestCase
         $locks = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertSame(2, $locks['total'] ?? null);
         self::assertCount(1, $locks['items'] ?? []);
+        self::assertSame('lock-asset-2', $locks['items'][0]['asset_uuid'] ?? null);
+
+        $client->request('GET', '/api/v1/ops/locks?limit=1&offset=1');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $locksPage2 = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame(2, $locksPage2['total'] ?? null);
+        self::assertCount(1, $locksPage2['items'] ?? []);
+        self::assertSame('lock-asset-1', $locksPage2['items'][0]['asset_uuid'] ?? null);
 
         $client->jsonRequest('POST', '/api/v1/ops/locks/recover', [
             'stale_lock_minutes' => 1,
@@ -313,6 +349,23 @@ final class WorkflowApiTest extends WebTestCase
         self::assertSame(true, $recover['dry_run'] ?? null);
         self::assertGreaterThanOrEqual(1, (int) ($recover['stale_examined'] ?? 0));
         self::assertSame(0, $recover['recovered'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/ops/locks/recover', [
+            'stale_lock_minutes' => 0,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $recoverInvalidMinutes = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $recoverInvalidMinutes['code'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/ops/locks/recover', [
+            'stale_lock_minutes' => '30',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+
+        $client->jsonRequest('POST', '/api/v1/ops/locks/recover', [
+            'dry_run' => 'true',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
 
         $client->request('GET', '/api/v1/ops/jobs/queue');
         self::assertResponseStatusCodeSame(Response::HTTP_OK);

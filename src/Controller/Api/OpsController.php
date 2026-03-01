@@ -155,8 +155,33 @@ final class OpsController
         }
 
         $payload = $this->payload($request);
-        $staleLockMinutes = max(1, (int) ($payload['stale_lock_minutes'] ?? 30));
-        $dryRun = (bool) ($payload['dry_run'] ?? false);
+        $staleLockMinutes = 30;
+        if (array_key_exists('stale_lock_minutes', $payload)) {
+            $raw = $payload['stale_lock_minutes'];
+            if (!is_int($raw) || $raw < 1) {
+                return $this->errorResponse(
+                    'VALIDATION_FAILED',
+                    'stale_lock_minutes must be an integer >= 1',
+                    Response::HTTP_BAD_REQUEST
+                );
+            }
+
+            $staleLockMinutes = $raw;
+        }
+
+        $dryRun = false;
+        if (array_key_exists('dry_run', $payload)) {
+            $raw = $payload['dry_run'];
+            if (!is_bool($raw)) {
+                return $this->errorResponse(
+                    'VALIDATION_FAILED',
+                    'dry_run must be a boolean',
+                    Response::HTTP_BAD_REQUEST
+                );
+            }
+
+            $dryRun = $raw;
+        }
         $before = new \DateTimeImmutable(sprintf('-%d minutes', $staleLockMinutes));
 
         $staleExamined = 0;
