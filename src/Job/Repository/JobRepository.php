@@ -261,6 +261,113 @@ final class JobRepository
     }
 
     /**
+     * @return array{
+     *     summary:array{pending_total:int,claimed_total:int,failed_total:int},
+     *     by_type:array<int, array{job_type:string,pending:int,claimed:int,failed:int,oldest_pending_age_seconds:?int}>
+     * }
+     */
+    public function queueDiagnosticsSnapshot(): array
+    {
+        try {
+            $summaryRows = $this->connection->fetchAllAssociative(
+                'SELECT status, COUNT(*) AS total
+                 FROM processing_job
+                 GROUP BY status'
+            );
+            $byTypeRows = $this->connection->fetchAllAssociative(
+                'SELECT job_type, status, COUNT(*) AS total
+                 FROM processing_job
+                 GROUP BY job_type, status
+                 ORDER BY job_type ASC'
+            );
+            $oldestPendingRows = $this->connection->fetchAllAssociative(
+                'SELECT job_type, MIN(created_at) AS oldest_pending_at
+                 FROM processing_job
+                 WHERE status = :pending
+                 GROUP BY job_type',
+                ['pending' => JobStatus::PENDING->value]
+            );
+        } catch (\Throwable) {
+            return [
+                'summary' => [
+                    'pending_total' => 0,
+                    'claimed_total' => 0,
+                    'failed_total' => 0,
+                ],
+                'by_type' => [],
+            ];
+        }
+
+        $summary = [
+            'pending_total' => 0,
+            'claimed_total' => 0,
+            'failed_total' => 0,
+        ];
+        foreach ($summaryRows as $row) {
+            $status = trim((string) ($row['status'] ?? ''));
+            $total = max(0, (int) ($row['total'] ?? 0));
+            if ($status === JobStatus::PENDING->value) {
+                $summary['pending_total'] = $total;
+            } elseif ($status === JobStatus::CLAIMED->value) {
+                $summary['claimed_total'] = $total;
+            } elseif ($status === JobStatus::FAILED->value) {
+                $summary['failed_total'] = $total;
+            }
+        }
+
+        /** @var array<string, array{job_type:string,pending:int,claimed:int,failed:int,oldest_pending_age_seconds:?int}> $byType */
+        $byType = [];
+        foreach ($byTypeRows as $row) {
+            $jobType = trim((string) ($row['job_type'] ?? ''));
+            $status = trim((string) ($row['status'] ?? ''));
+            $total = max(0, (int) ($row['total'] ?? 0));
+            if ($jobType === '') {
+                continue;
+            }
+
+            if (!isset($byType[$jobType])) {
+                $byType[$jobType] = [
+                    'job_type' => $jobType,
+                    'pending' => 0,
+                    'claimed' => 0,
+                    'failed' => 0,
+                    'oldest_pending_age_seconds' => null,
+                ];
+            }
+
+            if ($status === JobStatus::PENDING->value) {
+                $byType[$jobType]['pending'] = $total;
+            } elseif ($status === JobStatus::CLAIMED->value) {
+                $byType[$jobType]['claimed'] = $total;
+            } elseif ($status === JobStatus::FAILED->value) {
+                $byType[$jobType]['failed'] = $total;
+            }
+        }
+
+        $now = new \DateTimeImmutable();
+        foreach ($oldestPendingRows as $row) {
+            $jobType = trim((string) ($row['job_type'] ?? ''));
+            $oldestRaw = trim((string) ($row['oldest_pending_at'] ?? ''));
+            if ($jobType === '' || !isset($byType[$jobType]) || $oldestRaw === '') {
+                continue;
+            }
+
+            try {
+                $oldest = new \DateTimeImmutable($oldestRaw);
+                $age = max(0, $now->getTimestamp() - $oldest->getTimestamp());
+                $byType[$jobType]['oldest_pending_age_seconds'] = $age;
+            } catch (\Throwable) {
+                $byType[$jobType]['oldest_pending_age_seconds'] = null;
+            }
+        }
+
+        return [
+            'summary' => $summary,
+            'by_type' => array_values($byType),
+        ];
+    }
+
+    /**
      * @param array<string, mixed> $row
      */
     private function hydrate(array $row): Job

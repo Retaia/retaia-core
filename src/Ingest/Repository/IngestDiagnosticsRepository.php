@@ -8,6 +8,12 @@ use Doctrine\DBAL\ParameterType;
 
 final class IngestDiagnosticsRepository
 {
+    private const ALLOWED_UNMATCHED_REASONS = [
+        'missing_parent',
+        'ambiguous_parent',
+        'disabled_by_policy',
+    ];
+
     public function __construct(
         private Connection $connection,
     ) {
@@ -78,8 +84,26 @@ final class IngestDiagnosticsRepository
         return [
             'queued' => $this->countScanStatus('queued'),
             'missing' => $this->countScanStatus('missing'),
-            'unmatched_sidecars' => $this->countUnmatchedSidecars(),
+            'unmatched_sidecars' => $this->countUnmatchedSidecars(null, null),
             'latest_unmatched' => $this->latestUnmatchedSidecars($limit),
+        ];
+    }
+
+    /**
+     * @return array{
+     *     items:array<int, array{path:string,reason:string,detected_at:string}>,
+     *     total:int
+     * }
+     */
+    public function unmatchedSnapshot(?string $reason, ?\DateTimeImmutable $since, int $limit = 50): array
+    {
+        $normalizedReason = $this->normalizeReason($reason);
+        $normalizedSince = $since?->setTimezone(new \DateTimeZone('UTC'));
+        $normalizedLimit = max(1, min(200, $limit));
+
+        return [
+            'items' => $this->listUnmatchedSidecars($normalizedReason, $normalizedSince, $normalizedLimit),
+            'total' => $this->countUnmatchedSidecars($normalizedReason, $normalizedSince),
         ];
     }
 
@@ -95,10 +119,28 @@ final class IngestDiagnosticsRepository
         }
     }
 
-    private function countUnmatchedSidecars(): int
+    private function countUnmatchedSidecars(?string $reason, ?\DateTimeImmutable $since): int
     {
+        $whereParts = [];
+        $params = [];
+
+        if ($reason !== null) {
+            $whereParts[] = 'reason = :reason';
+            $params['reason'] = $reason;
+        }
+
+        if ($since instanceof \DateTimeImmutable) {
+            $whereParts[] = 'detected_at >= :since';
+            $params['since'] = $since->format('Y-m-d H:i:s');
+        }
+
+        $where = $whereParts === [] ? '' : ' WHERE '.implode(' AND ', $whereParts);
+
         try {
-            return (int) $this->connection->fetchOne('SELECT COUNT(*) FROM ingest_unmatched_sidecar');
+            return (int) $this->connection->fetchOne(
+                'SELECT COUNT(*) FROM ingest_unmatched_sidecar'.$where,
+                $params
+            );
         } catch (\Throwable) {
             return 0;
         }
@@ -119,6 +161,53 @@ final class IngestDiagnosticsRepository
             return [];
         }
 
+        return $this->mapUnmatchedRows($rows);
+    }
+
+    /**
+     * @return array<int, array{path:string,reason:string,detected_at:string}>
+     */
+    private function listUnmatchedSidecars(?string $reason, ?\DateTimeImmutable $since, int $limit): array
+    {
+        $whereParts = [];
+        $params = ['limit' => $limit];
+        $types = ['limit' => ParameterType::INTEGER];
+
+        if ($reason !== null) {
+            $whereParts[] = 'reason = :reason';
+            $params['reason'] = $reason;
+        }
+
+        if ($since instanceof \DateTimeImmutable) {
+            $whereParts[] = 'detected_at >= :since';
+            $params['since'] = $since->format('Y-m-d H:i:s');
+        }
+
+        $where = $whereParts === [] ? '' : ' WHERE '.implode(' AND ', $whereParts);
+
+        try {
+            $rows = $this->connection->fetchAllAssociative(
+                'SELECT path, reason, detected_at
+                 FROM ingest_unmatched_sidecar'
+                .$where.
+                ' ORDER BY detected_at DESC
+                 LIMIT :limit',
+                $params,
+                $types
+            );
+        } catch (\Throwable) {
+            return [];
+        }
+
+        return $this->mapUnmatchedRows($rows);
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $rows
+     * @return array<int, array{path:string,reason:string,detected_at:string}>
+     */
+    private function mapUnmatchedRows(array $rows): array
+    {
         $items = [];
         foreach ($rows as $row) {
             $path = trim((string) ($row['path'] ?? ''));
@@ -143,5 +232,15 @@ final class IngestDiagnosticsRepository
         }
 
         return $items;
+    }
+
+    private function normalizeReason(?string $reason): ?string
+    {
+        $normalized = trim((string) $reason);
+        if ($normalized === '' || !in_array($normalized, self::ALLOWED_UNMATCHED_REASONS, true)) {
+            return null;
+        }
+
+        return $normalized;
     }
 }
