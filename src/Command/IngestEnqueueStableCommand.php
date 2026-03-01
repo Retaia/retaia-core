@@ -88,44 +88,9 @@ final class IngestEnqueueStableCommand extends Command
 
         $absoluteSource = $root.DIRECTORY_SEPARATOR.$sourcePath;
         if (!is_file($absoluteSource)) {
-            $missingProxy = $this->sidecarFileDetector->detectProxyFile($sourcePath);
-            if ($missingProxy !== null) {
-                $originalPath = (string) ($missingProxy['original'] ?? '');
-                if ($originalPath !== '' && $this->isSafeRelativePath($originalPath) && $this->canUseExistingProxy($missingProxy, $originalPath)) {
-                    $this->attachExistingProxyToAsset($originalPath, $missingProxy);
-                    $queued += $this->enqueueRequiredJobs($this->findOrCreateAsset($originalPath), true);
-                }
-                $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
-
-                return ['queued' => $queued, 'missing' => 0, 'unmatched_sidecars' => 0];
-            }
-
-            if ($this->sidecarFileDetector->isProxyCandidatePath($sourcePath)) {
-                $this->ingestDiagnostics->recordUnmatchedSidecar($sourcePath, 'missing_parent');
-                $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
-
-                return ['queued' => 0, 'missing' => 0, 'unmatched_sidecars' => 1];
-            }
-
-            $missingSidecar = $this->sidecarFileDetector->detectAuxiliarySidecarFile($sourcePath);
-            if ($missingSidecar !== null) {
-                $originalPath = (string) ($missingSidecar['original'] ?? '');
-                $sidecarPath = (string) ($missingSidecar['path'] ?? '');
-                if ($originalPath !== '' && $sidecarPath !== '' && $this->isSafeRelativePath($originalPath)) {
-                    $this->attachAuxiliarySidecarToAsset($originalPath, $sidecarPath);
-                    $queued += $this->enqueueRequiredJobs($this->findOrCreateAsset($originalPath), false);
-                }
-                $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
-                $this->ingestDiagnostics->clearUnmatchedSidecar($sourcePath);
-
-                return ['queued' => $queued, 'missing' => 0, 'unmatched_sidecars' => 0];
-            }
-            if ($this->sidecarFileDetector->isAuxiliarySidecarPath($sourcePath)) {
-                $reason = $this->sidecarFileDetector->auxiliaryUnmatchedReason($sourcePath) ?? 'missing_parent';
-                $this->ingestDiagnostics->recordUnmatchedSidecar($sourcePath, $reason);
-                $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
-
-                return ['queued' => 0, 'missing' => 0, 'unmatched_sidecars' => 1];
+            $sidecarOrProxyResult = $this->handleSidecarOrProxyCandidate($sourcePath, $queued);
+            if ($sidecarOrProxyResult !== null) {
+                return $sidecarOrProxyResult;
             }
 
             $this->scanStateStore->markMissing($sourcePath, new \DateTimeImmutable());
@@ -133,6 +98,32 @@ final class IngestEnqueueStableCommand extends Command
             return ['queued' => 0, 'missing' => 1, 'unmatched_sidecars' => 0];
         }
 
+        $sidecarOrProxyResult = $this->handleSidecarOrProxyCandidate($sourcePath, $queued);
+        if ($sidecarOrProxyResult !== null) {
+            return $sidecarOrProxyResult;
+        }
+
+        $asset = $this->findOrCreateAsset($sourcePath);
+        $this->attachExistingAuxiliarySidecarsToAsset($sourcePath);
+
+        $existingProxy = $this->sidecarFileDetector->detectExistingProxyForOriginal($sourcePath);
+        $usableExistingProxy = $existingProxy !== null && $this->canUseExistingProxy($existingProxy, $sourcePath);
+        if ($usableExistingProxy && $existingProxy !== null) {
+            $this->attachExistingProxyToAsset($sourcePath, $existingProxy);
+        }
+
+        $queued += $this->enqueueRequiredJobs($asset, $usableExistingProxy);
+        $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
+
+        return ['queued' => $queued, 'missing' => $missing, 'unmatched_sidecars' => $unmatchedSidecars];
+    }
+
+    /**
+     * @param int $queued
+     * @return array{queued:int,missing:int,unmatched_sidecars:int}|null
+     */
+    private function handleSidecarOrProxyCandidate(string $sourcePath, int &$queued): ?array
+    {
         $proxy = $this->sidecarFileDetector->detectProxyFile($sourcePath);
         if ($proxy !== null) {
             $originalPath = (string) ($proxy['original'] ?? '');
@@ -152,6 +143,15 @@ final class IngestEnqueueStableCommand extends Command
             return ['queued' => 0, 'missing' => 0, 'unmatched_sidecars' => 1];
         }
 
+        return $this->handleAuxiliarySidecarCandidate($sourcePath, $queued);
+    }
+
+    /**
+     * @param int $queued
+     * @return array{queued:int,missing:int,unmatched_sidecars:int}|null
+     */
+    private function handleAuxiliarySidecarCandidate(string $sourcePath, int &$queued): ?array
+    {
         $sidecar = $this->sidecarFileDetector->detectAuxiliarySidecarFile($sourcePath);
         if ($sidecar !== null) {
             $originalPath = (string) ($sidecar['original'] ?? '');
@@ -165,6 +165,7 @@ final class IngestEnqueueStableCommand extends Command
 
             return ['queued' => $queued, 'missing' => 0, 'unmatched_sidecars' => 0];
         }
+
         if ($this->sidecarFileDetector->isAuxiliarySidecarPath($sourcePath)) {
             $reason = $this->sidecarFileDetector->auxiliaryUnmatchedReason($sourcePath) ?? 'missing_parent';
             $this->ingestDiagnostics->recordUnmatchedSidecar($sourcePath, $reason);
@@ -173,19 +174,7 @@ final class IngestEnqueueStableCommand extends Command
             return ['queued' => 0, 'missing' => 0, 'unmatched_sidecars' => 1];
         }
 
-        $asset = $this->findOrCreateAsset($sourcePath);
-        $this->attachExistingAuxiliarySidecarsToAsset($sourcePath);
-
-        $existingProxy = $this->sidecarFileDetector->detectExistingProxyForOriginal($sourcePath);
-        $usableExistingProxy = $existingProxy !== null && $this->canUseExistingProxy($existingProxy, $sourcePath);
-        if ($usableExistingProxy && $existingProxy !== null) {
-            $this->attachExistingProxyToAsset($sourcePath, $existingProxy);
-        }
-
-        $queued += $this->enqueueRequiredJobs($asset, $usableExistingProxy);
-        $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
-
-        return ['queued' => $queued, 'missing' => $missing, 'unmatched_sidecars' => $unmatchedSidecars];
+        return null;
     }
 
     private function assetUuidFromPath(string $path): string
