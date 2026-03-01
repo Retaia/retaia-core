@@ -48,7 +48,7 @@ final class IngestPipelineE2ETest extends KernelTestCase
         $enqueue->execute(['--limit' => 10]);
 
         $jobCount = (int) $connection->fetchOne('SELECT COUNT(*) FROM processing_job');
-        self::assertSame(1, $jobCount);
+        self::assertSame(3, $jobCount);
         $status = (string) $connection->fetchOne('SELECT status FROM ingest_scan_file WHERE path = :path', ['path' => 'INBOX/e2e.mov']);
         self::assertSame('queued', $status);
     }

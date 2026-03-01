@@ -46,10 +46,10 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         $command = $application->find('app:ingest:enqueue-stable');
         $tester = new CommandTester($command);
         $tester->execute(['--limit' => 10]);
-        self::assertStringContainsString('Queued 1 stable file(s). Missing: 0.', $tester->getDisplay());
+        self::assertStringContainsString('Queued 3 stable file(s). Missing: 0.', $tester->getDisplay());
 
         $jobCount = (int) $connection->fetchOne('SELECT COUNT(*) FROM processing_job');
-        self::assertSame(1, $jobCount);
+        self::assertSame(3, $jobCount);
         $scanStatus = (string) $connection->fetchOne('SELECT status FROM ingest_scan_file WHERE path = :path', ['path' => 'INBOX/new-rush.mov']);
         self::assertSame('queued', $scanStatus);
 
@@ -134,7 +134,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         $command = $application->find('app:ingest:enqueue-stable');
         $tester = new CommandTester($command);
         $tester->execute(['--limit' => 10]);
-        self::assertStringContainsString('Queued 1 stable file(s). Missing: 0.', $tester->getDisplay());
+        self::assertStringContainsString('Queued 3 stable file(s). Missing: 0.', $tester->getDisplay());
 
         /** @var EntityManagerInterface $entityManager */
         $entityManager = $container->get(EntityManagerInterface::class);
@@ -142,6 +142,184 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         $asset = $entityManager->find(Asset::class, $assetUuid);
         self::assertInstanceOf(Asset::class, $asset);
         self::assertSame('PHOTO', $asset->getMediaType());
+    }
+
+    public function testRawAndJpegPairUsesRawAsMainAssetAndMarksProxyDone(): void
+    {
+        $root = sys_get_temp_dir().'/retaia-enqueue-raw-jpg-'.bin2hex(random_bytes(4));
+        mkdir($root.'/INBOX', 0777, true);
+        mkdir($root.'/ARCHIVE', 0777, true);
+        mkdir($root.'/REJECTS', 0777, true);
+        file_put_contents($root.'/INBOX/shot.cr2', 'raw');
+        file_put_contents($root.'/INBOX/shot.jpg', 'jpg');
+        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
+        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        static::ensureKernelShutdown();
+
+        static::bootKernel();
+        $container = static::getContainer();
+        /** @var Connection $connection */
+        $connection = $container->get(Connection::class);
+        $this->ensureTables($connection);
+
+        foreach (['INBOX/shot.cr2', 'INBOX/shot.jpg'] as $path) {
+            $connection->insert('ingest_scan_file', [
+                'path' => $path,
+                'size_bytes' => 100,
+                'mtime' => '2026-02-10 12:00:00',
+                'stable_count' => 2,
+                'status' => 'stable',
+                'first_seen_at' => '2026-02-10 12:00:00',
+                'last_seen_at' => '2026-02-10 12:01:00',
+            ]);
+        }
+
+        $application = new Application(static::$kernel);
+        $command = $application->find('app:ingest:enqueue-stable');
+        $tester = new CommandTester($command);
+        $tester->execute(['--limit' => 20]);
+
+        $jobCount = (int) $connection->fetchOne('SELECT COUNT(*) FROM processing_job');
+        self::assertSame(2, $jobCount);
+
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = $container->get(EntityManagerInterface::class);
+        $rawAssetUuid = $this->assetUuidFromPath('INBOX/shot.cr2');
+        $jpgAssetUuid = $this->assetUuidFromPath('INBOX/shot.jpg');
+
+        $rawAsset = $entityManager->find(Asset::class, $rawAssetUuid);
+        self::assertInstanceOf(Asset::class, $rawAsset);
+        self::assertSame('PHOTO', $rawAsset->getMediaType());
+        self::assertTrue((bool) ($rawAsset->getFields()['proxy_done'] ?? false));
+        self::assertContains('INBOX/shot.jpg', $rawAsset->getFields()['paths']['sidecars_relative'] ?? []);
+
+        $jpgAsset = $entityManager->find(Asset::class, $jpgAssetUuid);
+        self::assertNull($jpgAsset);
+
+        $proxyDerivedCount = (int) $connection->fetchOne(
+            'SELECT COUNT(*) FROM asset_derived_file WHERE asset_uuid = :assetUuid AND kind = :kind',
+            ['assetUuid' => $rawAssetUuid, 'kind' => 'proxy_photo']
+        );
+        self::assertSame(1, $proxyDerivedCount);
+    }
+
+    public function testLrfSidecarIsAttachedToOriginalAndNotQueuedAsStandaloneAsset(): void
+    {
+        $root = sys_get_temp_dir().'/retaia-enqueue-lrf-'.bin2hex(random_bytes(4));
+        mkdir($root.'/INBOX', 0777, true);
+        mkdir($root.'/ARCHIVE', 0777, true);
+        mkdir($root.'/REJECTS', 0777, true);
+        file_put_contents($root.'/INBOX/drone.mov', 'video');
+        file_put_contents($root.'/INBOX/drone.lrf', 'proxy');
+        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
+        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        static::ensureKernelShutdown();
+
+        static::bootKernel();
+        $container = static::getContainer();
+        /** @var Connection $connection */
+        $connection = $container->get(Connection::class);
+        $this->ensureTables($connection);
+
+        foreach (['INBOX/drone.mov', 'INBOX/drone.lrf'] as $path) {
+            $connection->insert('ingest_scan_file', [
+                'path' => $path,
+                'size_bytes' => 100,
+                'mtime' => '2026-02-10 12:00:00',
+                'stable_count' => 2,
+                'status' => 'stable',
+                'first_seen_at' => '2026-02-10 12:00:00',
+                'last_seen_at' => '2026-02-10 12:01:00',
+            ]);
+        }
+
+        $application = new Application(static::$kernel);
+        $command = $application->find('app:ingest:enqueue-stable');
+        $tester = new CommandTester($command);
+        $tester->execute(['--limit' => 20]);
+
+        $jobCount = (int) $connection->fetchOne('SELECT COUNT(*) FROM processing_job');
+        self::assertSame(2, $jobCount);
+
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = $container->get(EntityManagerInterface::class);
+        $videoAssetUuid = $this->assetUuidFromPath('INBOX/drone.mov');
+        $lrfAssetUuid = $this->assetUuidFromPath('INBOX/drone.lrf');
+
+        $videoAsset = $entityManager->find(Asset::class, $videoAssetUuid);
+        self::assertInstanceOf(Asset::class, $videoAsset);
+        self::assertTrue((bool) ($videoAsset->getFields()['proxy_done'] ?? false));
+        self::assertContains('INBOX/drone.lrf', $videoAsset->getFields()['paths']['sidecars_relative'] ?? []);
+
+        $lrfAsset = $entityManager->find(Asset::class, $lrfAssetUuid);
+        self::assertNull($lrfAsset);
+
+        $proxyDerivedCount = (int) $connection->fetchOne(
+            'SELECT COUNT(*) FROM asset_derived_file WHERE asset_uuid = :assetUuid AND kind = :kind',
+            ['assetUuid' => $videoAssetUuid, 'kind' => 'proxy_video']
+        );
+        self::assertSame(1, $proxyDerivedCount);
+    }
+
+    public function testProxyFolderFileIsAttachedToProjectOriginal(): void
+    {
+        $root = sys_get_temp_dir().'/retaia-enqueue-proxy-folder-'.bin2hex(random_bytes(4));
+        mkdir($root.'/INBOX/project/proxy', 0777, true);
+        mkdir($root.'/ARCHIVE', 0777, true);
+        mkdir($root.'/REJECTS', 0777, true);
+        file_put_contents($root.'/INBOX/project/clip.mov', 'video');
+        file_put_contents($root.'/INBOX/project/proxy/clip.mp4', 'proxy');
+        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
+        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        static::ensureKernelShutdown();
+
+        static::bootKernel();
+        $container = static::getContainer();
+        /** @var Connection $connection */
+        $connection = $container->get(Connection::class);
+        $this->ensureTables($connection);
+
+        foreach (['INBOX/project/clip.mov', 'INBOX/project/proxy/clip.mp4'] as $path) {
+            $connection->insert('ingest_scan_file', [
+                'path' => $path,
+                'size_bytes' => 100,
+                'mtime' => '2026-02-10 12:00:00',
+                'stable_count' => 2,
+                'status' => 'stable',
+                'first_seen_at' => '2026-02-10 12:00:00',
+                'last_seen_at' => '2026-02-10 12:01:00',
+            ]);
+        }
+
+        $application = new Application(static::$kernel);
+        $command = $application->find('app:ingest:enqueue-stable');
+        $tester = new CommandTester($command);
+        $tester->execute(['--limit' => 20]);
+
+        $jobCount = (int) $connection->fetchOne('SELECT COUNT(*) FROM processing_job');
+        self::assertSame(2, $jobCount);
+
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = $container->get(EntityManagerInterface::class);
+        $mainAssetUuid = $this->assetUuidFromPath('INBOX/project/clip.mov');
+        $proxyAssetUuid = $this->assetUuidFromPath('INBOX/project/proxy/clip.mp4');
+
+        $mainAsset = $entityManager->find(Asset::class, $mainAssetUuid);
+        self::assertInstanceOf(Asset::class, $mainAsset);
+        self::assertTrue((bool) ($mainAsset->getFields()['proxy_done'] ?? false));
+        self::assertContains('INBOX/project/proxy/clip.mp4', $mainAsset->getFields()['paths']['sidecars_relative'] ?? []);
+
+        $proxyAsset = $entityManager->find(Asset::class, $proxyAssetUuid);
+        self::assertNull($proxyAsset);
+
+        $proxyDerivedCount = (int) $connection->fetchOne(
+            'SELECT COUNT(*) FROM asset_derived_file WHERE asset_uuid = :assetUuid AND kind = :kind',
+            ['assetUuid' => $mainAssetUuid, 'kind' => 'proxy_video']
+        );
+        self::assertSame(1, $proxyDerivedCount);
     }
 
     private function ensureTables(Connection $connection): void
@@ -169,6 +347,18 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
                 status VARCHAR(32) NOT NULL,
                 first_seen_at DATETIME NOT NULL,
                 last_seen_at DATETIME NOT NULL
+            )'
+        );
+        $connection->executeStatement(
+            'CREATE TABLE IF NOT EXISTS asset_derived_file (
+                id VARCHAR(16) PRIMARY KEY NOT NULL,
+                asset_uuid VARCHAR(36) NOT NULL,
+                kind VARCHAR(64) NOT NULL,
+                content_type VARCHAR(128) NOT NULL,
+                size_bytes INTEGER NOT NULL,
+                sha256 VARCHAR(64) DEFAULT NULL,
+                storage_path VARCHAR(255) NOT NULL,
+                created_at DATETIME NOT NULL
             )'
         );
     }

@@ -2,76 +2,242 @@
 
 namespace App\Ingest\Service;
 
-/**
- * Service that detects proxy files in INBOX directory
- */
 class ProxyFileDetector
 {
+    /** @var array<int, string> */
+    private const RAW_EXTENSIONS = ['cr2', 'cr3', 'nef', 'arw', 'dng', 'rw2', 'orf', 'raf'];
+    /** @var array<int, string> */
+    private const VIDEO_EXTENSIONS = ['mov', 'mp4', 'mxf', 'avi', 'mkv'];
+    /** @var array<int, string> */
+    private const PHOTO_PROXY_EXTENSIONS = ['jpg', 'jpeg', 'webp'];
+    /** @var array<int, string> */
+    private const PROXY_FOLDER_NAMES = ['proxy', 'proxies', 'proxie'];
+
+    public function __construct(
+        private WatchPathResolver $watchPathResolver,
+    ) {
+    }
+
     /**
-     * Detects proxy files in INBOX directory with different formats
-     * 
-     * @param string $filePath Path to the file to check
-     * @return array{path: string, type: string, original: string|null}|null
+     * @return array{path:string,type:string,kind:string,original:string}|null
      */
     public function detectProxyFile(string $filePath): ?array
     {
-        // Only process files in INBOX directory (main restriction)
-        if (!str_contains(strtolower($filePath), '/inbox/')) {
+        $normalized = $this->normalizePath($filePath);
+        if (!$this->isInboxPath($normalized)) {
             return null;
         }
-        
-        // Extract filename without path
-        $filename = basename($filePath);
-        
-        // Proxy files with .lrf extension (DJI drone low-res files)
-        if (str_ends_with(strtolower($filename), '.lrf')) {
-            $baseName = substr($filename, 0, -4); // Remove .lrf extension
+
+        $extension = $this->extension($normalized);
+        $basename = pathinfo($normalized, PATHINFO_FILENAME);
+
+        // DJI proxy sidecar.
+        if ($extension === 'lrf') {
+            $original = $this->findSiblingByExtensions($normalized, self::VIDEO_EXTENSIONS);
+            if ($original === null) {
+                return null;
+            }
+
             return [
-                'path' => $filePath,
+                'path' => $normalized,
                 'type' => 'lrf',
-                'original' => null
+                'kind' => 'proxy_video',
+                'original' => $original,
             ];
         }
 
-        // CR2 with JPEG detection (raw + jpeg files)
-        if (str_ends_with(strtolower($filename), '.cr2')) {
+        // Camera JPEG sidecar used as existing photo proxy for RAW.
+        if (in_array($extension, self::PHOTO_PROXY_EXTENSIONS, true)) {
+            $original = $this->findSiblingByExtensions($normalized, self::RAW_EXTENSIONS);
+            if ($original === null) {
+                return null;
+            }
+
             return [
-                'path' => $filePath,
-                'type' => 'cr2_jpeg',
-                'original' => null
+                'path' => $normalized,
+                'type' => 'raw_jpg',
+                'kind' => 'proxy_photo',
+                'original' => $original,
             ];
         }
 
-        // Proxy folder structure detection (proxy/, proxies/, proxie/)
-        $pathParts = explode(DIRECTORY_SEPARATOR, $filePath);
-        if (count($pathParts) >= 2) {
-            $firstDir = strtolower($pathParts[1]);
-            if ($firstDir === 'proxy' || $firstDir === 'proxies' || $firstDir === 'proxie') {
+        // DaVinci-style proxy folder.
+        $folderProxyOriginal = $this->findProxyFolderParentOriginal($normalized, $basename);
+        if ($folderProxyOriginal !== null) {
+            $kind = $this->proxyKindForExtension($extension);
+            if ($kind !== null) {
                 return [
-                    'path' => $filePath,
+                    'path' => $normalized,
                     'type' => 'proxy_folder',
-                    'original' => null
+                    'kind' => $kind,
+                    'original' => $folderProxyOriginal,
                 ];
             }
         }
 
         return null;
     }
-    
+
     /**
-     * Check if a file is a proxy file that should bypass proxy generation
+     * @return array{path:string,type:string,kind:string,original:string}|null
      */
-    public function isProxyFile(string $filePath): bool
+    public function detectExistingProxyForOriginal(string $filePath): ?array
     {
-        return $this->detectProxyFile($filePath) !== null;
+        $normalized = $this->normalizePath($filePath);
+        if (!$this->isInboxPath($normalized)) {
+            return null;
+        }
+
+        $extension = $this->extension($normalized);
+
+        if (in_array($extension, self::RAW_EXTENSIONS, true)) {
+            $proxy = $this->findSiblingByExtensions($normalized, self::PHOTO_PROXY_EXTENSIONS);
+            $proxy ??= $this->findProxyInSiblingProxyFolders($normalized, self::PHOTO_PROXY_EXTENSIONS);
+            if ($proxy !== null) {
+                return [
+                    'path' => $proxy,
+                    'type' => 'raw_jpg',
+                    'kind' => 'proxy_photo',
+                    'original' => $normalized,
+                ];
+            }
+        }
+
+        if (in_array($extension, self::VIDEO_EXTENSIONS, true)) {
+            $proxy = $this->findSiblingByExtensions($normalized, ['lrf']);
+            $proxy ??= $this->findProxyInSiblingProxyFolders($normalized, array_merge(self::VIDEO_EXTENSIONS, ['lrf']));
+            if ($proxy !== null) {
+                return [
+                    'path' => $proxy,
+                    'type' => 'lrf',
+                    'kind' => 'proxy_video',
+                    'original' => $normalized,
+                ];
+            }
+        }
+
+        return null;
     }
-    
+
     /**
-     * Get proxy type for a file
+     * @return array{path:string,type:string,kind:string,original:string}|null
      */
-    public function getProxyType(string $filePath): ?string
+    public function detectForPath(string $filePath): ?array
     {
-        $proxy = $this->detectProxyFile($filePath);
-        return $proxy ? $proxy['type'] : null;
+        $asProxy = $this->detectProxyFile($filePath);
+        if ($asProxy !== null) {
+            return $asProxy;
+        }
+
+        return $this->detectExistingProxyForOriginal($filePath);
+    }
+
+    private function normalizePath(string $path): string
+    {
+        return ltrim(str_replace('\\', '/', trim($path)), '/');
+    }
+
+    private function isInboxPath(string $path): bool
+    {
+        $parts = explode('/', $path);
+
+        return isset($parts[0]) && strtolower((string) $parts[0]) === 'inbox';
+    }
+
+    private function extension(string $path): string
+    {
+        return strtolower(pathinfo($path, PATHINFO_EXTENSION));
+    }
+
+    private function fileExists(string $relativePath): bool
+    {
+        $root = rtrim($this->watchPathResolver->resolveRoot(), DIRECTORY_SEPARATOR);
+        if ($root === '') {
+            return false;
+        }
+
+        $absolute = $root.DIRECTORY_SEPARATOR.$relativePath;
+
+        return is_file($absolute);
+    }
+
+    private function findSiblingByExtensions(string $path, array $extensions): ?string
+    {
+        $dirname = dirname($path);
+        $basename = pathinfo($path, PATHINFO_FILENAME);
+
+        foreach ($extensions as $extension) {
+            $candidate = ($dirname === '.' ? '' : $dirname.'/').$basename.'.'.$extension;
+            if ($candidate === $path) {
+                continue;
+            }
+            if ($this->fileExists($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private function findProxyFolderParentOriginal(string $path, string $basename): ?string
+    {
+        $parts = explode('/', $path);
+        $proxyFolderIndex = null;
+        foreach ($parts as $index => $part) {
+            if (in_array(strtolower($part), self::PROXY_FOLDER_NAMES, true)) {
+                $proxyFolderIndex = $index;
+                break;
+            }
+        }
+
+        if ($proxyFolderIndex === null || $proxyFolderIndex < 1) {
+            return null;
+        }
+
+        $parentParts = array_slice($parts, 0, $proxyFolderIndex);
+        $parentDir = implode('/', $parentParts);
+        $extensions = array_merge(self::VIDEO_EXTENSIONS, self::RAW_EXTENSIONS, ['wav', 'mp3', 'aac']);
+
+        foreach ($extensions as $extension) {
+            $candidate = $parentDir.'/'.$basename.'.'.$extension;
+            if ($this->fileExists($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private function proxyKindForExtension(string $extension): ?string
+    {
+        if (in_array($extension, self::PHOTO_PROXY_EXTENSIONS, true)) {
+            return 'proxy_photo';
+        }
+        if (in_array($extension, self::VIDEO_EXTENSIONS, true) || $extension === 'lrf') {
+            return 'proxy_video';
+        }
+        if (in_array($extension, ['wav', 'mp3', 'aac'], true)) {
+            return 'proxy_audio';
+        }
+
+        return null;
+    }
+
+    private function findProxyInSiblingProxyFolders(string $path, array $extensions): ?string
+    {
+        $dirname = dirname($path);
+        $basename = pathinfo($path, PATHINFO_FILENAME);
+        $baseDir = $dirname === '.' ? '' : $dirname;
+
+        foreach (self::PROXY_FOLDER_NAMES as $folderName) {
+            foreach ($extensions as $extension) {
+                $candidate = ($baseDir === '' ? '' : $baseDir.'/').$folderName.'/'.$basename.'.'.$extension;
+                if ($this->fileExists($candidate)) {
+                    return $candidate;
+                }
+            }
+        }
+
+        return null;
     }
 }
