@@ -21,6 +21,12 @@ final class OpsController
 {
     use ApiErrorResponderTrait;
 
+    private const ALLOWED_UNMATCHED_REASONS = [
+        'missing_parent',
+        'ambiguous_parent',
+        'disabled_by_policy',
+    ];
+
     public function __construct(
         private ResolveAdminActorHandler $resolveAdminActorHandler,
         private IngestDiagnosticsRepository $ingestDiagnostics,
@@ -126,11 +132,15 @@ final class OpsController
 
         $assetUuid = trim((string) $request->query->get('asset_uuid', ''));
         $lockType = trim((string) $request->query->get('lock_type', ''));
+        $limit = max(1, min(200, (int) $request->query->get('limit', 50)));
+        $offset = max(0, (int) $request->query->get('offset', 0));
 
         return new JsonResponse(
             $this->locks->activeLocksSnapshot(
                 $assetUuid !== '' ? $assetUuid : null,
                 $lockType !== '' ? $lockType : null,
+                $limit,
+                $offset,
             ),
             Response::HTTP_OK
         );
@@ -187,13 +197,24 @@ final class OpsController
 
         $limit = max(1, min(200, (int) $request->query->get('limit', 50)));
         $reason = trim((string) $request->query->get('reason', ''));
+        if ($reason !== '' && !in_array($reason, self::ALLOWED_UNMATCHED_REASONS, true)) {
+            return $this->errorResponse(
+                'VALIDATION_FAILED',
+                'reason must be one of: missing_parent, ambiguous_parent, disabled_by_policy',
+                Response::HTTP_BAD_REQUEST
+            );
+        }
         $sinceRaw = trim((string) $request->query->get('since', ''));
         $since = null;
         if ($sinceRaw !== '') {
             try {
                 $since = new \DateTimeImmutable($sinceRaw);
             } catch (\Throwable) {
-                $since = null;
+                return $this->errorResponse(
+                    'VALIDATION_FAILED',
+                    'since must be a valid ISO-8601 date-time',
+                    Response::HTTP_BAD_REQUEST
+                );
             }
         }
 

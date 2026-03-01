@@ -243,6 +243,14 @@ final class WorkflowApiTest extends WebTestCase
             'acquired_at' => '2026-02-10 10:00:00',
             'released_at' => null,
         ]);
+        $connection->insert('asset_operation_lock', [
+            'id' => bin2hex(random_bytes(16)),
+            'asset_uuid' => 'lock-asset-2',
+            'lock_type' => 'asset_purge_lock',
+            'actor_id' => 'ops-admin',
+            'acquired_at' => '2026-02-10 10:01:00',
+            'released_at' => null,
+        ]);
         $connection->insert('processing_job', [
             'id' => 'job-pending-ops',
             'asset_uuid' => 'job-asset-1',
@@ -290,11 +298,11 @@ final class WorkflowApiTest extends WebTestCase
             'detected_at' => '2026-02-10 12:10:00',
         ]);
 
-        $client->request('GET', '/api/v1/ops/locks?asset_uuid=lock-asset-1');
+        $client->request('GET', '/api/v1/ops/locks?limit=1&offset=0');
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $locks = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame(1, $locks['total'] ?? null);
-        self::assertSame('asset_move_lock', $locks['items'][0]['lock_type'] ?? null);
+        self::assertSame(2, $locks['total'] ?? null);
+        self::assertCount(1, $locks['items'] ?? []);
 
         $client->jsonRequest('POST', '/api/v1/ops/locks/recover', [
             'stale_lock_minutes' => 1,
@@ -319,6 +327,41 @@ final class WorkflowApiTest extends WebTestCase
         $unmatched = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertSame(1, $unmatched['total'] ?? null);
         self::assertSame('INBOX/unmatched-1.xmp', $unmatched['items'][0]['path'] ?? null);
+
+        $client->request('GET', '/api/v1/ops/ingest/unmatched?reason=invalid_reason');
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $invalidReason = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $invalidReason['code'] ?? null);
+
+        $client->request('GET', '/api/v1/ops/ingest/unmatched?since=not-a-date');
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $invalidSince = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $invalidSince['code'] ?? null);
+    }
+
+    public function testOpsEndpointsRequireAuthentication(): void
+    {
+        $client = static::createClient();
+
+        $client->request('GET', '/api/v1/ops/ingest/diagnostics');
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
+
+        $client->request('GET', '/api/v1/ops/readiness');
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+
+        $client->request('GET', '/api/v1/ops/locks');
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+
+        $client->request('POST', '/api/v1/ops/locks/recover', server: ['CONTENT_TYPE' => 'application/json'], content: '{}');
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+
+        $client->request('GET', '/api/v1/ops/jobs/queue');
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+
+        $client->request('GET', '/api/v1/ops/ingest/unmatched');
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
     }
 
     public function testPurgeReturnsConflictWhenAssetHasActiveOperationLock(): void
