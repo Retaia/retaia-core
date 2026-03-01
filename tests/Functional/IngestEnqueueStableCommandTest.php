@@ -202,6 +202,13 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
             ['assetUuid' => $rawAssetUuid, 'kind' => 'proxy_photo']
         );
         self::assertSame(1, $proxyDerivedCount);
+        $storagePath = (string) $connection->fetchOne(
+            'SELECT storage_path FROM asset_derived_file WHERE asset_uuid = :assetUuid AND kind = :kind LIMIT 1',
+            ['assetUuid' => $rawAssetUuid, 'kind' => 'proxy_photo']
+        );
+        self::assertStringStartsWith('.derived/'.$rawAssetUuid.'/', $storagePath);
+        self::assertFileExists($root.'/'.$storagePath);
+        self::assertFileDoesNotExist($root.'/INBOX/shot.jpg');
     }
 
     public function testLrfSidecarIsAttachedToOriginalAndNotQueuedAsStandaloneAsset(): void
@@ -261,6 +268,14 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
             ['assetUuid' => $videoAssetUuid, 'kind' => 'proxy_video']
         );
         self::assertSame(1, $proxyDerivedCount);
+        $storagePath = (string) $connection->fetchOne(
+            'SELECT storage_path FROM asset_derived_file WHERE asset_uuid = :assetUuid AND kind = :kind LIMIT 1',
+            ['assetUuid' => $videoAssetUuid, 'kind' => 'proxy_video']
+        );
+        self::assertStringStartsWith('.derived/'.$videoAssetUuid.'/', $storagePath);
+        self::assertStringEndsWith('.mp4', $storagePath);
+        self::assertFileExists($root.'/'.$storagePath);
+        self::assertFileDoesNotExist($root.'/INBOX/drone.lrf');
     }
 
     public function testProxyFolderFileIsAttachedToProjectOriginal(): void
@@ -320,6 +335,13 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
             ['assetUuid' => $mainAssetUuid, 'kind' => 'proxy_video']
         );
         self::assertSame(1, $proxyDerivedCount);
+        $storagePath = (string) $connection->fetchOne(
+            'SELECT storage_path FROM asset_derived_file WHERE asset_uuid = :assetUuid AND kind = :kind LIMIT 1',
+            ['assetUuid' => $mainAssetUuid, 'kind' => 'proxy_video']
+        );
+        self::assertStringStartsWith('.derived/'.$mainAssetUuid.'/', $storagePath);
+        self::assertFileExists($root.'/'.$storagePath);
+        self::assertFileDoesNotExist($root.'/INBOX/project/proxy/clip.mp4');
     }
 
     private function ensureTables(Connection $connection): void
