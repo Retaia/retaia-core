@@ -220,6 +220,7 @@ final class IngestEnqueueStableCommand extends Command
             [
                 'storage_id' => $this->defaultStorageId,
                 'source_path' => $sourcePath,
+                'review_processing_version' => '1',
                 'processing_profile' => $this->processingProfileFromMediaType($this->mediaTypeFromPath($sourcePath)),
                 'paths' => [
                     'storage_id' => $this->defaultStorageId,
@@ -341,6 +342,7 @@ final class IngestEnqueueStableCommand extends Command
     private function enqueueRequiredJobs(Asset $asset, bool $hasExistingProxy): int
     {
         $queued = 0;
+        $stateVersion = $this->ensureReviewProcessingVersion($asset);
         $jobs = ['extract_facts', 'generate_thumbnails'];
         if (!$hasExistingProxy) {
             $jobs[] = 'generate_proxy';
@@ -350,12 +352,27 @@ final class IngestEnqueueStableCommand extends Command
         }
 
         foreach ($jobs as $jobType) {
-            if ($this->jobs->enqueuePendingIfMissing($asset->getUuid(), $jobType)) {
+            if ($this->jobs->enqueuePendingIfMissing($asset->getUuid(), $jobType, $stateVersion)) {
                 ++$queued;
             }
         }
 
         return $queued;
+    }
+
+    private function ensureReviewProcessingVersion(Asset $asset): string
+    {
+        $fields = $asset->getFields();
+        $current = trim((string) ($fields['review_processing_version'] ?? ''));
+        if ($current !== '') {
+            return $current;
+        }
+
+        $fields['review_processing_version'] = '1';
+        $asset->setFields($fields);
+        $this->assets->save($asset);
+
+        return '1';
     }
 
     private function persistDerivedFile(Asset $asset, string $kind, string $proxyPath): string
