@@ -128,6 +128,9 @@ jobs:
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist --optimize-autoloader
 
+      - name: Run OpenAPI runtime contract smoke
+        run: composer test:openapi-contract
+
       - name: Run tests and enforce coverage
         run: composer test:quality
 

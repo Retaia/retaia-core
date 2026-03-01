@@ -491,6 +491,9 @@ final class OpenApiContractTest extends WebTestCase
         $connection->executeStatement('CREATE UNIQUE INDEX IF NOT EXISTS uniq_app_user_email ON app_user (email)');
         $this->ensureIdempotencyTable($connection);
         $this->ensureOperationLockTable($connection);
+        $this->ensureProcessingJobTable($connection);
+        $this->ensureIngestScanTable($connection);
+        $this->ensureUnmatchedSidecarTable($connection);
     }
 
     private function seedAsset(string $uuid, AssetState $state): void
@@ -522,10 +525,6 @@ final class OpenApiContractTest extends WebTestCase
             }
 
             if ($path === '/auth/logout') {
-                continue;
-            }
-
-            if (str_starts_with($path, '/jobs') || str_starts_with($path, '/ops')) {
                 continue;
             }
 

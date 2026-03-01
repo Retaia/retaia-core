@@ -7,6 +7,7 @@ use App\Entity\Asset;
 use App\Tests\Support\FixtureUsers;
 use Doctrine\ORM\EntityManagerInterface;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\HttpFoundation\Response;
@@ -37,26 +38,52 @@ final class AuthzMatrixTest extends WebTestCase
         self::assertSame('FORBIDDEN_ACTOR', $payload['code'] ?? null);
     }
 
-    public function testAdminGetsForbiddenScopeOnAgentJobEndpoint(): void
+    #[DataProvider('jobEndpointMatrixProvider')]
+    public function testAdminGetsForbiddenScopeOnAgentJobEndpoints(string $method, string $uri, array $payload = []): void
     {
         $client = $this->createAdminClient();
 
-        $client->request('GET', '/api/v1/jobs');
+        $this->requestJson($client, $method, $uri, $payload);
 
         self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
         $payload = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertSame('FORBIDDEN_SCOPE', $payload['code'] ?? null);
     }
 
-    public function testAnonymousActorGetsUnauthorizedOnAgentJobEndpoint(): void
+    #[DataProvider('jobEndpointMatrixProvider')]
+    public function testAnonymousActorGetsUnauthorizedOnAgentJobEndpoints(string $method, string $uri, array $payload = []): void
     {
         $client = static::createClient();
 
-        $client->request('GET', '/api/v1/jobs');
+        $this->requestJson($client, $method, $uri, $payload);
 
         self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
         $payload = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
+    }
+
+    #[DataProvider('opsEndpointMatrixProvider')]
+    public function testAnonymousActorGetsUnauthorizedOnOpsEndpoints(string $method, string $uri, array $payload = []): void
+    {
+        $client = static::createClient();
+
+        $this->requestJson($client, $method, $uri, $payload);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $error = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('UNAUTHORIZED', $error['code'] ?? null);
+    }
+
+    #[DataProvider('opsEndpointMatrixProvider')]
+    public function testAgentGetsForbiddenActorOnOpsEndpoints(string $method, string $uri, array $payload = []): void
+    {
+        $client = $this->createAgentClient();
+
+        $this->requestJson($client, $method, $uri, $payload);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        $error = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('FORBIDDEN_ACTOR', $error['code'] ?? null);
     }
 
     public function testOperatorGetsForbiddenScopeOnAgentRegistrationEndpoint(): void
@@ -158,5 +185,43 @@ final class AuthzMatrixTest extends WebTestCase
         $client->setServerParameter('HTTP_AUTHORIZATION', 'Bearer '.$token);
 
         return $client;
+    }
+
+    private function requestJson(KernelBrowser $client, string $method, string $uri, array $payload = []): void
+    {
+        $normalizedMethod = strtoupper($method);
+        if (in_array($normalizedMethod, ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
+            $client->jsonRequest($normalizedMethod, $uri, $payload);
+
+            return;
+        }
+
+        $client->request($normalizedMethod, $uri);
+    }
+
+    /**
+     * @return iterable<array{string, string, array<string, mixed>}>
+     */
+    public static function jobEndpointMatrixProvider(): iterable
+    {
+        yield ['GET', '/api/v1/jobs', []];
+        yield ['POST', '/api/v1/jobs/job-authz-1/claim', []];
+        yield ['POST', '/api/v1/jobs/job-authz-1/heartbeat', ['lock_token' => 't']];
+        yield ['POST', '/api/v1/jobs/job-authz-1/submit', ['lock_token' => 't', 'job_type' => 'extract_facts', 'result_payload' => []]];
+        yield ['POST', '/api/v1/jobs/job-authz-1/fail', ['lock_token' => 't', 'error_code' => 'GENERIC_ERROR']];
+    }
+
+    /**
+     * @return iterable<array{string, string, array<string, mixed>}>
+     */
+    public static function opsEndpointMatrixProvider(): iterable
+    {
+        yield ['GET', '/api/v1/ops/ingest/diagnostics', []];
+        yield ['GET', '/api/v1/ops/readiness', []];
+        yield ['GET', '/api/v1/ops/locks', []];
+        yield ['POST', '/api/v1/ops/locks/recover', []];
+        yield ['GET', '/api/v1/ops/jobs/queue', []];
+        yield ['GET', '/api/v1/ops/ingest/unmatched', []];
+        yield ['POST', '/api/v1/ops/ingest/requeue', []];
     }
 }
