@@ -15,7 +15,9 @@ class SidecarFileDetector
     /** @var array<int, string> */
     private const PHOTO_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp'];
     /** @var array<int, string> */
-    private const AUXILIARY_SIDECAR_EXTENSIONS = ['xmp', 'srt'];
+    private const LEGACY_VIDEO_SIDECAR_EXTENSIONS = ['lrv', 'thm'];
+    /** @var array<int, string> */
+    private const AUXILIARY_SIDECAR_EXTENSIONS = ['xmp', 'srt', 'lrv', 'thm'];
     /** @var array<int, string> */
     private const PROXY_FOLDER_NAMES = ['proxy', 'proxies', 'proxie'];
 
@@ -143,6 +145,7 @@ class SidecarFileDetector
         $originalExtensions = match ($extension) {
             'xmp' => array_merge(self::RAW_EXTENSIONS, self::PHOTO_EXTENSIONS, self::VIDEO_EXTENSIONS),
             'srt' => array_merge(self::VIDEO_EXTENSIONS, self::AUDIO_EXTENSIONS),
+            'lrv', 'thm' => self::VIDEO_EXTENSIONS,
             default => [],
         };
 
@@ -176,6 +179,9 @@ class SidecarFileDetector
         }
         if (in_array($extension, array_merge(self::VIDEO_EXTENSIONS, self::AUDIO_EXTENSIONS), true)) {
             $sidecarExtensions[] = 'srt';
+        }
+        if (in_array($extension, self::VIDEO_EXTENSIONS, true)) {
+            $sidecarExtensions = array_merge($sidecarExtensions, self::LEGACY_VIDEO_SIDECAR_EXTENSIONS);
         }
 
         if ($sidecarExtensions === []) {
