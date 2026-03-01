@@ -108,6 +108,7 @@ final class IngestPipelineE2ETest extends KernelTestCase
                 id VARCHAR(36) PRIMARY KEY NOT NULL,
                 asset_uuid VARCHAR(36) NOT NULL,
                 job_type VARCHAR(64) NOT NULL,
+                state_version VARCHAR(64) NOT NULL DEFAULT \'1\',
                 status VARCHAR(16) NOT NULL,
                 claimed_by VARCHAR(32) DEFAULT NULL,
                 lock_token VARCHAR(64) DEFAULT NULL,
@@ -117,6 +118,6 @@ final class IngestPipelineE2ETest extends KernelTestCase
                 updated_at DATETIME NOT NULL
             )'
         );
-        $connection->executeStatement('CREATE UNIQUE INDEX IF NOT EXISTS uniq_processing_job_asset_type ON processing_job (asset_uuid, job_type)');
+        $connection->executeStatement('CREATE UNIQUE INDEX IF NOT EXISTS uniq_processing_job_asset_type_version ON processing_job (asset_uuid, job_type, state_version)');
     }
 }

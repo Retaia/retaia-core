@@ -93,6 +93,7 @@ final class AssetWorkflowGateway implements AssetWorkflowGatewayPort
 
         try {
             $this->stateMachine->transition($asset, AssetState::READY);
+            $this->prepareFieldsForReprocess($asset);
             $this->assets->save($asset);
         } catch (StateConflictException) {
             return ['status' => ReprocessAssetResult::STATUS_STATE_CONFLICT, 'payload' => null];
@@ -105,5 +106,22 @@ final class AssetWorkflowGateway implements AssetWorkflowGatewayPort
                 'state' => $asset->getState()->value,
             ],
         ];
+    }
+
+    private function prepareFieldsForReprocess(Asset $asset): void
+    {
+        $fields = $asset->getFields();
+        $fields['facts_done'] = false;
+        $fields['proxy_done'] = false;
+        $fields['thumbs_done'] = false;
+
+        $currentVersion = trim((string) ($fields['review_processing_version'] ?? ''));
+        if ($currentVersion === '' || !ctype_digit($currentVersion)) {
+            $fields['review_processing_version'] = '1';
+        } else {
+            $fields['review_processing_version'] = (string) (((int) $currentVersion) + 1);
+        }
+
+        $asset->setFields($fields);
     }
 }

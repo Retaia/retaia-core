@@ -66,20 +66,31 @@ final class JobRepository
         return is_array($row) ? $this->hydrate($row) : null;
     }
 
-    public function hasJobForAssetAndType(string $assetUuid, string $jobType): bool
+    public function hasJobForAssetAndType(string $assetUuid, string $jobType, ?string $stateVersion = null): bool
     {
-        $row = $this->connection->fetchAssociative(
-            'SELECT id FROM processing_job WHERE asset_uuid = :assetUuid AND job_type = :jobType LIMIT 1',
-            [
-                'assetUuid' => $assetUuid,
-                'jobType' => $jobType,
-            ]
-        );
+        if ($stateVersion === null) {
+            $row = $this->connection->fetchAssociative(
+                'SELECT id FROM processing_job WHERE asset_uuid = :assetUuid AND job_type = :jobType LIMIT 1',
+                [
+                    'assetUuid' => $assetUuid,
+                    'jobType' => $jobType,
+                ]
+            );
+        } else {
+            $row = $this->connection->fetchAssociative(
+                'SELECT id FROM processing_job WHERE asset_uuid = :assetUuid AND job_type = :jobType AND state_version = :stateVersion LIMIT 1',
+                [
+                    'assetUuid' => $assetUuid,
+                    'jobType' => $jobType,
+                    'stateVersion' => $stateVersion,
+                ]
+            );
+        }
 
         return is_array($row);
     }
 
-    public function enqueuePending(string $assetUuid, string $jobType): Job
+    public function enqueuePending(string $assetUuid, string $jobType, string $stateVersion = '1'): Job
     {
         $id = bin2hex(random_bytes(16));
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
@@ -87,6 +98,7 @@ final class JobRepository
             'id' => $id,
             'asset_uuid' => $assetUuid,
             'job_type' => $jobType,
+            'state_version' => $stateVersion,
             'status' => JobStatus::PENDING->value,
             'claimed_by' => null,
             'lock_token' => null,
@@ -99,7 +111,7 @@ final class JobRepository
         return $this->find($id) ?? throw new \RuntimeException('Unable to load queued job.');
     }
 
-    public function enqueuePendingIfMissing(string $assetUuid, string $jobType): bool
+    public function enqueuePendingIfMissing(string $assetUuid, string $jobType, string $stateVersion = '1'): bool
     {
         $id = bin2hex(random_bytes(16));
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
@@ -109,6 +121,7 @@ final class JobRepository
                 'id' => $id,
                 'asset_uuid' => $assetUuid,
                 'job_type' => $jobType,
+                'state_version' => $stateVersion,
                 'status' => JobStatus::PENDING->value,
                 'claimed_by' => null,
                 'lock_token' => null,

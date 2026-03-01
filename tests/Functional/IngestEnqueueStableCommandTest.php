@@ -50,6 +50,10 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
 
         $jobCount = (int) $connection->fetchOne('SELECT COUNT(*) FROM processing_job');
         self::assertSame(3, $jobCount);
+        $distinctStateVersionCount = (int) $connection->fetchOne('SELECT COUNT(DISTINCT state_version) FROM processing_job');
+        self::assertSame(1, $distinctStateVersionCount);
+        $stateVersion = (string) $connection->fetchOne('SELECT state_version FROM processing_job LIMIT 1');
+        self::assertSame('1', $stateVersion);
         $scanStatus = (string) $connection->fetchOne('SELECT status FROM ingest_scan_file WHERE path = :path', ['path' => 'INBOX/new-rush.mov']);
         self::assertSame('queued', $scanStatus);
 
@@ -728,6 +732,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
                 id VARCHAR(36) PRIMARY KEY NOT NULL,
                 asset_uuid VARCHAR(36) NOT NULL,
                 job_type VARCHAR(64) NOT NULL,
+                state_version VARCHAR(64) NOT NULL DEFAULT \'1\',
                 status VARCHAR(16) NOT NULL,
                 claimed_by VARCHAR(32) DEFAULT NULL,
                 lock_token VARCHAR(64) DEFAULT NULL,
@@ -737,7 +742,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
                 updated_at DATETIME NOT NULL
             )'
         );
-        $connection->executeStatement('CREATE UNIQUE INDEX IF NOT EXISTS uniq_processing_job_asset_type ON processing_job (asset_uuid, job_type)');
+        $connection->executeStatement('CREATE UNIQUE INDEX IF NOT EXISTS uniq_processing_job_asset_type_version ON processing_job (asset_uuid, job_type, state_version)');
         $connection->executeStatement(
             'CREATE TABLE IF NOT EXISTS ingest_scan_file (
                 path VARCHAR(1024) PRIMARY KEY NOT NULL,

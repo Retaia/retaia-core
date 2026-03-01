@@ -71,6 +71,16 @@ final class AssetStateMachineApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $payload = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertSame('READY', $payload['state'] ?? null);
+
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = self::getContainer()->get(EntityManagerInterface::class);
+        $entityManager->clear();
+        $asset = $entityManager->find(Asset::class, '33333333-3333-3333-3333-333333333333');
+        self::assertInstanceOf(Asset::class, $asset);
+        self::assertSame('4', (string) ($asset->getFields()['review_processing_version'] ?? null));
+        self::assertFalse((bool) ($asset->getFields()['facts_done'] ?? true));
+        self::assertFalse((bool) ($asset->getFields()['proxy_done'] ?? true));
+        self::assertFalse((bool) ($asset->getFields()['thumbs_done'] ?? true));
     }
 
     public function testReprocessReturnsNotFoundForUnknownAsset(): void
@@ -265,6 +275,10 @@ final class AssetStateMachineApiTest extends WebTestCase
         $asset3 = new Asset('33333333-3333-3333-3333-333333333333', 'PHOTO', 'archive-001.jpg', AssetState::ARCHIVED);
         $asset3->setFields([
             'captured_at' => '2026-02-15T12:00:00Z',
+            'review_processing_version' => '3',
+            'facts_done' => true,
+            'proxy_done' => true,
+            'thumbs_done' => true,
         ]);
 
         $entityManager->persist($asset1);
