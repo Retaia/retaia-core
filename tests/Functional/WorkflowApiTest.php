@@ -4,6 +4,8 @@ namespace App\Tests\Functional;
 
 use App\Asset\AssetState;
 use App\Entity\Asset;
+use App\Tests\Support\ApiAuthClientTrait;
+use App\Tests\Support\FunctionalSchemaTrait;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
@@ -14,6 +16,8 @@ use Symfony\Component\HttpFoundation\Response;
 final class WorkflowApiTest extends WebTestCase
 {
     use RecreateDatabaseTrait;
+    use ApiAuthClientTrait;
+    use FunctionalSchemaTrait;
 
     public function testMovePreviewAndApplyTransitionsAssets(): void
     {
@@ -501,16 +505,7 @@ final class WorkflowApiTest extends WebTestCase
         $client->disableReboot();
         $this->ensureWorkflowSchema();
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
-            'email' => $email,
-            'password' => 'change-me',
-        ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
-        $payload = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertIsArray($payload);
-        $token = $payload['access_token'] ?? null;
-        self::assertIsString($token);
-        $client->setServerParameter('HTTP_AUTHORIZATION', 'Bearer '.$token);
+        $this->authenticateClient($client, $email);
 
         return $client;
     }
@@ -533,12 +528,11 @@ final class WorkflowApiTest extends WebTestCase
         /** @var Connection $connection */
         $connection = static::getContainer()->get(Connection::class);
         $connection->executeStatement('CREATE TABLE IF NOT EXISTS batch_move_report (batch_id VARCHAR(16) PRIMARY KEY NOT NULL, payload CLOB NOT NULL, created_at DATETIME NOT NULL)');
-        $connection->executeStatement('CREATE TABLE IF NOT EXISTS asset_operation_lock (id VARCHAR(32) PRIMARY KEY NOT NULL, asset_uuid VARCHAR(36) NOT NULL, lock_type VARCHAR(32) NOT NULL, actor_id VARCHAR(64) NOT NULL, acquired_at DATETIME NOT NULL, released_at DATETIME DEFAULT NULL)');
-        $connection->executeStatement('CREATE TABLE IF NOT EXISTS processing_job (id VARCHAR(36) PRIMARY KEY NOT NULL, asset_uuid VARCHAR(36) NOT NULL, job_type VARCHAR(64) NOT NULL, status VARCHAR(16) NOT NULL, claimed_by VARCHAR(32) DEFAULT NULL, lock_token VARCHAR(64) DEFAULT NULL, locked_until DATETIME DEFAULT NULL, result_payload CLOB DEFAULT NULL, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL)');
-        $connection->executeStatement('CREATE TABLE IF NOT EXISTS ingest_scan_file (path VARCHAR(1024) PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, mtime DATETIME NOT NULL, stable_count INTEGER NOT NULL, status VARCHAR(32) NOT NULL, first_seen_at DATETIME NOT NULL, last_seen_at DATETIME NOT NULL)');
-        $connection->executeStatement('CREATE TABLE IF NOT EXISTS ingest_unmatched_sidecar (path VARCHAR(1024) PRIMARY KEY NOT NULL, reason VARCHAR(64) NOT NULL, detected_at DATETIME NOT NULL)');
-        $connection->executeStatement('CREATE TABLE IF NOT EXISTS asset_derived_file (id VARCHAR(16) PRIMARY KEY NOT NULL, asset_uuid VARCHAR(36) NOT NULL, kind VARCHAR(64) NOT NULL, content_type VARCHAR(128) NOT NULL, size_bytes INTEGER NOT NULL, sha256 VARCHAR(64) DEFAULT NULL, storage_path VARCHAR(255) NOT NULL, created_at DATETIME NOT NULL)');
-        $connection->executeStatement('CREATE TABLE IF NOT EXISTS idempotency_entry (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, actor_id VARCHAR(64) NOT NULL, method VARCHAR(8) NOT NULL, path VARCHAR(255) NOT NULL, idempotency_key VARCHAR(128) NOT NULL, request_hash VARCHAR(64) NOT NULL, response_status INTEGER NOT NULL, response_body CLOB NOT NULL, created_at DATETIME NOT NULL)');
-        $connection->executeStatement('CREATE UNIQUE INDEX IF NOT EXISTS uniq_idempotency_key_scope ON idempotency_entry (actor_id, method, path, idempotency_key)');
+        $this->ensureOperationLockTable($connection);
+        $this->ensureProcessingJobTable($connection);
+        $this->ensureIngestScanTable($connection);
+        $this->ensureUnmatchedSidecarTable($connection);
+        $this->ensureAssetDerivedFileTable($connection);
+        $this->ensureIdempotencyTable($connection);
     }
 }

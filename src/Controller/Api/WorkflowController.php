@@ -5,6 +5,7 @@ namespace App\Controller\Api;
 use App\Application\Workflow\WorkflowEndpointsHandler;
 use App\Application\Workflow\WorkflowEndpointResult;
 use App\Api\Service\IdempotencyService;
+use App\Controller\RequestPayloadTrait;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -14,6 +15,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 final class WorkflowController
 {
     use ApiErrorResponderTrait;
+    use RequestPayloadTrait;
 
     public function __construct(
         private IdempotencyService $idempotency,
@@ -161,20 +163,6 @@ final class WorkflowController
 
             return new JsonResponse($result->payload() ?? [], Response::HTTP_OK);
         });
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function payload(Request $request): array
-    {
-        if ($request->getContent() === '') {
-            return [];
-        }
-
-        $decoded = json_decode($request->getContent(), true);
-
-        return is_array($decoded) ? $decoded : [];
     }
 
     private function actorId(): string

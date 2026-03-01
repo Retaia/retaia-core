@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "44b4f29cd7a615658ea3e4ad940d16d0",
+    "content-hash": "ead444f7287238df887e815ef604327a",
     "packages": [
         {
             "name": "doctrine/collections",
@@ -9194,6 +9194,85 @@
                 }
             ],
             "time": "2026-01-13T10:40:19+00:00"
+        },
+        {
+            "name": "systemsdk/phpcpd",
+            "version": "v8.0.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/systemsdk/phpcpd.git",
+                "reference": "5e7214f665407436e05cbed78878f48e4e2ef245"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/systemsdk/phpcpd/zipball/5e7214f665407436e05cbed78878f48e4e2ef245",
+                "reference": "5e7214f665407436e05cbed78878f48e4e2ef245",
+                "shasum": ""
+            },
+            "require": {
+                "ext-dom": "*",
+                "ext-mbstring": "*",
+                "php": ">=8.3",
+                "phpunit/php-file-iterator": "^5.1",
+                "phpunit/php-timer": "^7.0",
+                "sebastian/cli-parser": "^3.0",
+                "sebastian/version": "^5.0"
+            },
+            "require-dev": {
+                "bamarni/composer-bin-plugin": "^1.8",
+                "roave/security-advisories": "dev-latest"
+            },
+            "bin": [
+                "phpcpd"
+            ],
+            "type": "project",
+            "extra": {
+                "bamarni-bin": {
+                    "bin-links": true,
+                    "forward-command": true,
+                    "target-directory": "tools"
+                },
+                "projectTitle": "phpcpd",
+                "allow-contrib": "true"
+            },
+            "autoload": {
+                "psr-4": {
+                    "Systemsdk\\PhpCPD\\": "src/"
+                },
+                "classmap": [
+                    "src/"
+                ],
+                "exclude-from-classmap": []
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "BSD-3-Clause"
+            ],
+            "authors": [
+                {
+                    "name": "Sebastian Bergmann",
+                    "email": "sebastian@phpunit.de",
+                    "role": "lead"
+                },
+                {
+                    "name": "Dmitriy Kravtsov",
+                    "email": "dmytro.kravtsov@systemsdk.com",
+                    "homepage": "https://github.com/systemsdk",
+                    "role": "Developer"
+                }
+            ],
+            "description": "Copy/Paste Detector for PHP code",
+            "homepage": "https://github.com/systemsdk/phpcpd",
+            "keywords": [
+                "Php code quality tool",
+                "php",
+                "phpcpd"
+            ],
+            "support": {
+                "issues": "https://github.com/systemsdk/phpcpd/issues",
+                "source": "https://github.com/systemsdk/phpcpd/tree/v8.0.0"
+            },
+            "time": "2024-12-30T16:42:37+00:00"
         },
         {
             "name": "theofidry/alice-data-fixtures",

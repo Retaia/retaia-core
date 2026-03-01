@@ -363,22 +363,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         $connection = $container->get(Connection::class);
         $this->ensureTables($connection);
 
-        foreach (['INBOX/shot.cr2', 'INBOX/shot.xmp'] as $path) {
-            $connection->insert('ingest_scan_file', [
-                'path' => $path,
-                'size_bytes' => 100,
-                'mtime' => '2026-02-10 12:00:00',
-                'stable_count' => 2,
-                'status' => 'stable',
-                'first_seen_at' => '2026-02-10 12:00:00',
-                'last_seen_at' => '2026-02-10 12:01:00',
-            ]);
-        }
-
-        $application = new Application(static::$kernel);
-        $command = $application->find('app:ingest:enqueue-stable');
-        $tester = new CommandTester($command);
-        $tester->execute(['--limit' => 20]);
+        $this->insertStableScanRowsAndRun($connection, ['INBOX/shot.cr2', 'INBOX/shot.xmp'], 20);
 
         /** @var EntityManagerInterface $entityManager */
         $entityManager = $container->get(EntityManagerInterface::class);
@@ -629,22 +614,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         $connection = $container->get(Connection::class);
         $this->ensureTables($connection);
 
-        foreach (['INBOX/shot.cr2', 'INBOX/shot.png', 'INBOX/shot.xmp'] as $path) {
-            $connection->insert('ingest_scan_file', [
-                'path' => $path,
-                'size_bytes' => 100,
-                'mtime' => '2026-02-10 12:00:00',
-                'stable_count' => 2,
-                'status' => 'stable',
-                'first_seen_at' => '2026-02-10 12:00:00',
-                'last_seen_at' => '2026-02-10 12:01:00',
-            ]);
-        }
-
-        $application = new Application(static::$kernel);
-        $command = $application->find('app:ingest:enqueue-stable');
-        $tester = new CommandTester($command);
-        $tester->execute(['--limit' => 20]);
+        $this->insertStableScanRowsAndRun($connection, ['INBOX/shot.cr2', 'INBOX/shot.png', 'INBOX/shot.xmp'], 20);
 
         /** @var EntityManagerInterface $entityManager */
         $entityManager = $container->get(EntityManagerInterface::class);
@@ -805,5 +775,28 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
             substr($hex, 16, 4),
             substr($hex, 20, 12)
         );
+    }
+
+    /**
+     * @param array<int, string> $paths
+     */
+    private function insertStableScanRowsAndRun(Connection $connection, array $paths, int $limit): void
+    {
+        foreach ($paths as $path) {
+            $connection->insert('ingest_scan_file', [
+                'path' => $path,
+                'size_bytes' => 100,
+                'mtime' => '2026-02-10 12:00:00',
+                'stable_count' => 2,
+                'status' => 'stable',
+                'first_seen_at' => '2026-02-10 12:00:00',
+                'last_seen_at' => '2026-02-10 12:01:00',
+            ]);
+        }
+
+        $application = new Application(static::$kernel);
+        $command = $application->find('app:ingest:enqueue-stable');
+        $tester = new CommandTester($command);
+        $tester->execute(['--limit' => $limit]);
     }
 }

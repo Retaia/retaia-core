@@ -15,6 +15,8 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/device')]
 final class DeviceController
 {
+    use RequestPayloadTrait;
+
     public function __construct(
         private ResolveAuthenticatedUserHandler $resolveAuthenticatedUserHandler,
         private CompleteDeviceApprovalHandler $completeDeviceApprovalHandler,
@@ -45,7 +47,7 @@ final class DeviceController
             );
         }
 
-        $payload = $this->payload($request);
+        $payload = $this->payload($request, true);
         $userCode = strtoupper(trim((string) ($payload['user_code'] ?? '')));
         if ($userCode === '') {
             return new JsonResponse(
@@ -91,22 +93,5 @@ final class DeviceController
         }
 
         return new JsonResponse(['approved' => true], Response::HTTP_OK);
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function payload(Request $request): array
-    {
-        if ($request->getContent() === '') {
-            return $request->request->all();
-        }
-
-        $decoded = json_decode($request->getContent(), true);
-        if (is_array($decoded)) {
-            return $decoded;
-        }
-
-        return $request->request->all();
     }
 }

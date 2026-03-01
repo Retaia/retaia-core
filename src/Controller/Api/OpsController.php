@@ -4,6 +4,7 @@ namespace App\Controller\Api;
 
 use App\Application\Auth\ResolveAdminActorHandler;
 use App\Application\Auth\ResolveAdminActorResult;
+use App\Controller\RequestPayloadTrait;
 use App\Ingest\Repository\IngestDiagnosticsRepository;
 use App\Ingest\Service\WatchPathResolver;
 use App\Job\Repository\JobRepository;
@@ -20,6 +21,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 final class OpsController
 {
     use ApiErrorResponderTrait;
+    use RequestPayloadTrait;
 
     private const ALLOWED_UNMATCHED_REASONS = [
         'missing_parent',
@@ -258,17 +260,4 @@ final class OpsController
         return $this->errorResponse('FORBIDDEN_ACTOR', $this->translator->trans('auth.error.forbidden_actor'), Response::HTTP_FORBIDDEN);
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    private function payload(Request $request): array
-    {
-        if ($request->getContent() === '') {
-            return [];
-        }
-
-        $decoded = json_decode($request->getContent(), true);
-
-        return is_array($decoded) ? $decoded : [];
-    }
 }

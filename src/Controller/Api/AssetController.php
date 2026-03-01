@@ -5,6 +5,7 @@ namespace App\Controller\Api;
 use App\Api\Service\IdempotencyService;
 use App\Application\Asset\AssetEndpointResult;
 use App\Application\Asset\AssetEndpointsHandler;
+use App\Controller\RequestPayloadTrait;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -14,6 +15,8 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/api/v1/assets')]
 final class AssetController
 {
+    use RequestPayloadTrait;
+
     public function __construct(
         private AssetEndpointsHandler $assetEndpointsHandler,
         private TranslatorInterface $translator,
@@ -143,7 +146,23 @@ final class AssetController
     #[Route('/{uuid}/reopen', name: 'api_assets_reopen', methods: ['POST'])]
     public function reopen(string $uuid): JsonResponse
     {
-        $result = $this->assetEndpointsHandler->reopen($uuid);
+        return $this->assetActionResponse($this->assetEndpointsHandler->reopen($uuid));
+    }
+
+    #[Route('/{uuid}/reprocess', name: 'api_assets_reprocess', methods: ['POST'])]
+    public function reprocess(string $uuid, Request $request): JsonResponse
+    {
+        if ($this->assetEndpointsHandler->isForbiddenAgentActor()) {
+            return $this->forbiddenActorResponse();
+        }
+
+        return $this->idempotency->execute($request, $this->actorId(), function () use ($uuid): JsonResponse {
+            return $this->assetActionResponse($this->assetEndpointsHandler->reprocess($uuid));
+        });
+    }
+
+    private function assetActionResponse(AssetEndpointResult $result): JsonResponse
+    {
         if ($result->status() === AssetEndpointResult::STATUS_FORBIDDEN_ACTOR) {
             return $this->forbiddenActorResponse();
         }
@@ -162,50 +181,6 @@ final class AssetController
         }
 
         return new JsonResponse($result->payload() ?? [], Response::HTTP_OK);
-    }
-
-    #[Route('/{uuid}/reprocess', name: 'api_assets_reprocess', methods: ['POST'])]
-    public function reprocess(string $uuid, Request $request): JsonResponse
-    {
-        if ($this->assetEndpointsHandler->isForbiddenAgentActor()) {
-            return $this->forbiddenActorResponse();
-        }
-
-        return $this->idempotency->execute($request, $this->actorId(), function () use ($uuid): JsonResponse {
-            $result = $this->assetEndpointsHandler->reprocess($uuid);
-            if ($result->status() === AssetEndpointResult::STATUS_FORBIDDEN_ACTOR) {
-                return $this->forbiddenActorResponse();
-            }
-            if ($result->status() === AssetEndpointResult::STATUS_NOT_FOUND) {
-                return new JsonResponse([
-                    'code' => 'NOT_FOUND',
-                    'message' => $this->translator->trans('asset.error.not_found'),
-                ], Response::HTTP_NOT_FOUND);
-            }
-
-            if ($result->status() === AssetEndpointResult::STATUS_STATE_CONFLICT) {
-                return new JsonResponse([
-                    'code' => 'STATE_CONFLICT',
-                    'message' => $this->translator->trans('asset.error.state_conflict'),
-                ], Response::HTTP_CONFLICT);
-            }
-
-            return new JsonResponse($result->payload() ?? [], Response::HTTP_OK);
-        });
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function payload(Request $request): array
-    {
-        if ($request->getContent() === '') {
-            return [];
-        }
-
-        $decoded = json_decode($request->getContent(), true);
-
-        return is_array($decoded) ? $decoded : [];
     }
 
     private function forbiddenActorResponse(): JsonResponse

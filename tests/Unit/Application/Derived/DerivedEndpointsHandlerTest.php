@@ -13,13 +13,14 @@ use App\Application\Derived\InitDerivedUploadHandler;
 use App\Application\Derived\ListDerivedFilesHandler;
 use App\Application\Derived\Port\DerivedGateway;
 use App\Application\Derived\UploadDerivedPartHandler;
+use App\Tests\Support\InMemoryDerivedGateway;
 use PHPUnit\Framework\TestCase;
 
 final class DerivedEndpointsHandlerTest extends TestCase
 {
     public function testInitUploadReturnsForbiddenActor(): void
     {
-        $handler = $this->buildHandler(false, new InMemoryDerivedGatewayForEndpoints());
+        $handler = $this->buildHandler(false, new InMemoryDerivedGateway());
         $result = $handler->initUpload('a1', []);
 
         self::assertSame(DerivedEndpointResult::STATUS_FORBIDDEN_ACTOR, $result->status());
@@ -27,7 +28,7 @@ final class DerivedEndpointsHandlerTest extends TestCase
 
     public function testInitUploadReturnsValidationFailedWhenPayloadInvalid(): void
     {
-        $handler = $this->buildHandler(true, new InMemoryDerivedGatewayForEndpoints());
+        $handler = $this->buildHandler(true, new InMemoryDerivedGateway());
         $result = $handler->initUpload('a1', []);
 
         self::assertSame(DerivedEndpointResult::STATUS_VALIDATION_FAILED, $result->status());
@@ -35,7 +36,7 @@ final class DerivedEndpointsHandlerTest extends TestCase
 
     public function testUploadPartReturnsStateConflict(): void
     {
-        $gateway = new InMemoryDerivedGatewayForEndpoints();
+        $gateway = new InMemoryDerivedGateway();
         $gateway->addPartSuccess = false;
 
         $handler = $this->buildHandler(true, $gateway);
@@ -46,7 +47,7 @@ final class DerivedEndpointsHandlerTest extends TestCase
 
     public function testListDerivedReturnsNotFoundWhenAssetUnknown(): void
     {
-        $gateway = new InMemoryDerivedGatewayForEndpoints();
+        $gateway = new InMemoryDerivedGateway();
         $gateway->assetExists = false;
 
         $handler = $this->buildHandler(true, $gateway);
@@ -57,7 +58,7 @@ final class DerivedEndpointsHandlerTest extends TestCase
 
     public function testGetByKindReturnsSuccess(): void
     {
-        $gateway = new InMemoryDerivedGatewayForEndpoints();
+        $gateway = new InMemoryDerivedGateway();
         $gateway->derivedByKind = ['id' => 'd1', 'kind' => 'proxy_video'];
 
         $handler = $this->buildHandler(true, $gateway);
@@ -90,49 +91,5 @@ final class DerivedEndpointsHandlerTest extends TestCase
             new ListDerivedFilesHandler($gateway),
             new GetDerivedByKindHandler($gateway),
         );
-    }
-}
-
-final class InMemoryDerivedGatewayForEndpoints implements DerivedGateway
-{
-    public bool $assetExists = true;
-    /** @var array<string, mixed> */
-    public array $initSession = ['upload_id' => 'u1'];
-    public bool $addPartSuccess = true;
-    /** @var array<string, mixed>|null */
-    public ?array $completeResult = ['id' => 'd1'];
-    /** @var array<int, array<string, mixed>> */
-    public array $listItems = [];
-    /** @var array<string, mixed>|null */
-    public ?array $derivedByKind = ['id' => 'd1'];
-
-    public function assetExists(string $assetUuid): bool
-    {
-        return $this->assetExists;
-    }
-
-    public function initUpload(string $assetUuid, string $kind, string $contentType, int $sizeBytes, ?string $sha256): array
-    {
-        return $this->initSession;
-    }
-
-    public function addUploadPart(string $uploadId, int $partNumber): bool
-    {
-        return $this->addPartSuccess;
-    }
-
-    public function completeUpload(string $assetUuid, string $uploadId, int $totalParts): ?array
-    {
-        return $this->completeResult;
-    }
-
-    public function listDerivedForAsset(string $assetUuid): array
-    {
-        return $this->listItems;
-    }
-
-    public function findDerivedByAssetAndKind(string $assetUuid, string $kind): ?array
-    {
-        return $this->derivedByKind;
     }
 }

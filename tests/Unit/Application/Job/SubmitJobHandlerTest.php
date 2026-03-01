@@ -95,71 +95,32 @@ final class SubmitJobHandlerTest extends TestCase
 
     public function testHandleReturnsValidationFailedWhenJobTypeDoesNotMatchJob(): void
     {
-        $gateway = $this->createMock(JobGateway::class);
-        $assets = $this->createMock(AssetRepositoryInterface::class);
-        $stateMachine = new AssetStateMachine();
-        $gateway->expects(self::once())->method('find')->with('job-1')->willReturn(
-            new Job('job-1', 'asset-1', 'extract_facts', JobStatus::CLAIMED, 'agent-1', 'token', null, [])
+        $this->assertValidationFailedResult(
+            new Job('job-1', 'asset-1', 'extract_facts', JobStatus::CLAIMED, 'agent-1', 'token', null, []),
+            'generate_proxy',
+            ['derived_patch' => ['derived_manifest' => []]],
+            ['ROLE_AGENT']
         );
-        $gateway->expects(self::never())->method('submit');
-
-        $handler = new SubmitJobHandler(
-            $gateway,
-            $assets,
-            $stateMachine,
-            new CheckSuggestTagsSubmitScopeHandler(true),
-            new ResolveJobLockConflictCodeHandler($gateway)
-        );
-
-        $result = $handler->handle('job-1', 'token', 'generate_proxy', ['derived_patch' => ['derived_manifest' => []]], ['ROLE_AGENT']);
-
-        self::assertSame(SubmitJobResult::STATUS_VALIDATION_FAILED, $result->status());
     }
 
     public function testHandleReturnsValidationFailedForDomainOwnershipViolation(): void
     {
-        $gateway = $this->createMock(JobGateway::class);
-        $assets = $this->createMock(AssetRepositoryInterface::class);
-        $stateMachine = new AssetStateMachine();
-        $gateway->expects(self::once())->method('find')->with('job-1')->willReturn(
-            new Job('job-1', 'asset-1', 'extract_facts', JobStatus::CLAIMED, 'agent-1', 'token', null, [])
+        $this->assertValidationFailedResult(
+            new Job('job-1', 'asset-1', 'extract_facts', JobStatus::CLAIMED, 'agent-1', 'token', null, []),
+            'extract_facts',
+            ['derived_patch' => ['derived_manifest' => []]],
+            ['ROLE_AGENT']
         );
-        $gateway->expects(self::never())->method('submit');
-
-        $handler = new SubmitJobHandler(
-            $gateway,
-            $assets,
-            $stateMachine,
-            new CheckSuggestTagsSubmitScopeHandler(true),
-            new ResolveJobLockConflictCodeHandler($gateway)
-        );
-
-        $result = $handler->handle('job-1', 'token', 'extract_facts', ['derived_patch' => ['derived_manifest' => []]], ['ROLE_AGENT']);
-
-        self::assertSame(SubmitJobResult::STATUS_VALIDATION_FAILED, $result->status());
     }
 
     public function testHandleReturnsValidationFailedForUnknownResultKey(): void
     {
-        $gateway = $this->createMock(JobGateway::class);
-        $assets = $this->createMock(AssetRepositoryInterface::class);
-        $stateMachine = new AssetStateMachine();
-        $gateway->expects(self::once())->method('find')->with('job-1')->willReturn(
-            new Job('job-1', 'asset-1', 'extract_facts', JobStatus::CLAIMED, 'agent-1', 'token', null, [])
+        $this->assertValidationFailedResult(
+            new Job('job-1', 'asset-1', 'extract_facts', JobStatus::CLAIMED, 'agent-1', 'token', null, []),
+            'extract_facts',
+            ['unexpected' => true],
+            ['ROLE_AGENT']
         );
-        $gateway->expects(self::never())->method('submit');
-
-        $handler = new SubmitJobHandler(
-            $gateway,
-            $assets,
-            $stateMachine,
-            new CheckSuggestTagsSubmitScopeHandler(true),
-            new ResolveJobLockConflictCodeHandler($gateway)
-        );
-
-        $result = $handler->handle('job-1', 'token', 'extract_facts', ['unexpected' => true], ['ROLE_AGENT']);
-
-        self::assertSame(SubmitJobResult::STATUS_VALIDATION_FAILED, $result->status());
     }
 
     public function testHandleReturnsValidationFailedForInvalidDerivedManifest(): void
@@ -271,5 +232,30 @@ final class SubmitJobHandlerTest extends TestCase
         ], ['ROLE_AGENT']);
 
         self::assertSame(SubmitJobResult::STATUS_SUBMITTED, $result->status());
+    }
+
+    private function assertValidationFailedResult(
+        Job $claimedJob,
+        string $jobType,
+        array $resultPayload,
+        array $actorRoles
+    ): void {
+        $gateway = $this->createMock(JobGateway::class);
+        $assets = $this->createMock(AssetRepositoryInterface::class);
+        $stateMachine = new AssetStateMachine();
+        $gateway->expects(self::once())->method('find')->with('job-1')->willReturn($claimedJob);
+        $gateway->expects(self::never())->method('submit');
+
+        $handler = new SubmitJobHandler(
+            $gateway,
+            $assets,
+            $stateMachine,
+            new CheckSuggestTagsSubmitScopeHandler(true),
+            new ResolveJobLockConflictCodeHandler($gateway)
+        );
+
+        $result = $handler->handle('job-1', 'token', $jobType, $resultPayload, $actorRoles);
+
+        self::assertSame(SubmitJobResult::STATUS_VALIDATION_FAILED, $result->status());
     }
 }
