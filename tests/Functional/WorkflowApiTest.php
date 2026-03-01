@@ -153,6 +153,62 @@ final class WorkflowApiTest extends WebTestCase
         self::assertSame('FORBIDDEN_ACTOR', $payload['code'] ?? null);
     }
 
+    public function testOpsIngestDiagnosticsReturnsSnapshotForAdmin(): void
+    {
+        $client = $this->createAuthenticatedClient('admin@retaia.local');
+
+        /** @var Connection $connection */
+        $connection = static::getContainer()->get(Connection::class);
+        $connection->insert('ingest_scan_file', [
+            'path' => 'INBOX/q1.mov',
+            'size_bytes' => 100,
+            'mtime' => '2026-02-10 12:00:00',
+            'stable_count' => 2,
+            'status' => 'queued',
+            'first_seen_at' => '2026-02-10 12:00:00',
+            'last_seen_at' => '2026-02-10 12:01:00',
+        ]);
+        $connection->insert('ingest_scan_file', [
+            'path' => 'INBOX/m1.mov',
+            'size_bytes' => 100,
+            'mtime' => '2026-02-10 12:00:00',
+            'stable_count' => 2,
+            'status' => 'missing',
+            'first_seen_at' => '2026-02-10 12:00:00',
+            'last_seen_at' => '2026-02-10 12:01:00',
+        ]);
+        $connection->insert('ingest_unmatched_sidecar', [
+            'path' => 'INBOX/a.lrf',
+            'reason' => 'missing_parent',
+            'detected_at' => '2026-02-10 12:02:00',
+        ]);
+        $connection->insert('ingest_unmatched_sidecar', [
+            'path' => 'INBOX/b.xmp',
+            'reason' => 'ambiguous_parent',
+            'detected_at' => '2026-02-10 12:03:00',
+        ]);
+
+        $client->request('GET', '/api/v1/ops/ingest/diagnostics');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame(1, $payload['queued'] ?? null);
+        self::assertSame(1, $payload['missing'] ?? null);
+        self::assertSame(2, $payload['unmatched_sidecars'] ?? null);
+        self::assertIsArray($payload['latest_unmatched'] ?? null);
+        self::assertSame('INBOX/b.xmp', $payload['latest_unmatched'][0]['path'] ?? null);
+        self::assertSame('ambiguous_parent', $payload['latest_unmatched'][0]['reason'] ?? null);
+    }
+
+    public function testOpsIngestDiagnosticsIsForbiddenForAgentActor(): void
+    {
+        $client = $this->createAuthenticatedClient('agent@retaia.local');
+
+        $client->request('GET', '/api/v1/ops/ingest/diagnostics');
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('FORBIDDEN_ACTOR', $payload['code'] ?? null);
+    }
+
     public function testPurgeReturnsConflictWhenAssetHasActiveOperationLock(): void
     {
         $client = $this->createAuthenticatedClient('admin@retaia.local');
@@ -271,6 +327,8 @@ final class WorkflowApiTest extends WebTestCase
         $connection->executeStatement('CREATE TABLE IF NOT EXISTS batch_move_report (batch_id VARCHAR(16) PRIMARY KEY NOT NULL, payload CLOB NOT NULL, created_at DATETIME NOT NULL)');
         $connection->executeStatement('CREATE TABLE IF NOT EXISTS asset_operation_lock (id VARCHAR(32) PRIMARY KEY NOT NULL, asset_uuid VARCHAR(36) NOT NULL, lock_type VARCHAR(32) NOT NULL, actor_id VARCHAR(64) NOT NULL, acquired_at DATETIME NOT NULL, released_at DATETIME DEFAULT NULL)');
         $connection->executeStatement('CREATE TABLE IF NOT EXISTS processing_job (id VARCHAR(36) PRIMARY KEY NOT NULL, asset_uuid VARCHAR(36) NOT NULL, job_type VARCHAR(64) NOT NULL, status VARCHAR(16) NOT NULL, claimed_by VARCHAR(32) DEFAULT NULL, lock_token VARCHAR(64) DEFAULT NULL, locked_until DATETIME DEFAULT NULL, result_payload CLOB DEFAULT NULL, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL)');
+        $connection->executeStatement('CREATE TABLE IF NOT EXISTS ingest_scan_file (path VARCHAR(1024) PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, mtime DATETIME NOT NULL, stable_count INTEGER NOT NULL, status VARCHAR(32) NOT NULL, first_seen_at DATETIME NOT NULL, last_seen_at DATETIME NOT NULL)');
+        $connection->executeStatement('CREATE TABLE IF NOT EXISTS ingest_unmatched_sidecar (path VARCHAR(1024) PRIMARY KEY NOT NULL, reason VARCHAR(64) NOT NULL, detected_at DATETIME NOT NULL)');
         $connection->executeStatement('CREATE TABLE IF NOT EXISTS asset_derived_file (id VARCHAR(16) PRIMARY KEY NOT NULL, asset_uuid VARCHAR(36) NOT NULL, kind VARCHAR(64) NOT NULL, content_type VARCHAR(128) NOT NULL, size_bytes INTEGER NOT NULL, sha256 VARCHAR(64) DEFAULT NULL, storage_path VARCHAR(255) NOT NULL, created_at DATETIME NOT NULL)');
         $connection->executeStatement('CREATE TABLE IF NOT EXISTS idempotency_entry (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, actor_id VARCHAR(64) NOT NULL, method VARCHAR(8) NOT NULL, path VARCHAR(255) NOT NULL, idempotency_key VARCHAR(128) NOT NULL, request_hash VARCHAR(64) NOT NULL, response_status INTEGER NOT NULL, response_body CLOB NOT NULL, created_at DATETIME NOT NULL)');
         $connection->executeStatement('CREATE UNIQUE INDEX IF NOT EXISTS uniq_idempotency_key_scope ON idempotency_entry (actor_id, method, path, idempotency_key)');

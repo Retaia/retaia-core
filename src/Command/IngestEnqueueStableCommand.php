@@ -6,6 +6,7 @@ use App\Asset\AssetState;
 use App\Asset\Repository\AssetRepositoryInterface;
 use App\Entity\Asset;
 use App\Ingest\Port\ScanStateStoreInterface;
+use App\Ingest\Repository\IngestDiagnosticsRepository;
 use App\Ingest\Service\SidecarFileDetector;
 use App\Ingest\Service\WatchPathResolver;
 use App\Job\Repository\JobRepository;
@@ -24,6 +25,7 @@ final class IngestEnqueueStableCommand extends Command
         private ScanStateStoreInterface $scanStateStore,
         private WatchPathResolver $watchPathResolver,
         private SidecarFileDetector $sidecarFileDetector,
+        private IngestDiagnosticsRepository $ingestDiagnostics,
         private AssetRepositoryInterface $assets,
         private JobRepository $jobs,
         private Connection $connection,
@@ -99,6 +101,7 @@ final class IngestEnqueueStableCommand extends Command
             }
 
             if ($this->sidecarFileDetector->isProxyCandidatePath($sourcePath)) {
+                $this->ingestDiagnostics->recordUnmatchedSidecar($sourcePath, 'missing_parent');
                 $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
 
                 return ['queued' => 0, 'missing' => 0, 'unmatched_sidecars' => 1];
@@ -113,10 +116,13 @@ final class IngestEnqueueStableCommand extends Command
                     $queued += $this->enqueueRequiredJobs($this->findOrCreateAsset($originalPath), false);
                 }
                 $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
+                $this->ingestDiagnostics->clearUnmatchedSidecar($sourcePath);
 
                 return ['queued' => $queued, 'missing' => 0, 'unmatched_sidecars' => 0];
             }
             if ($this->sidecarFileDetector->isAuxiliarySidecarPath($sourcePath)) {
+                $reason = $this->sidecarFileDetector->auxiliaryUnmatchedReason($sourcePath) ?? 'missing_parent';
+                $this->ingestDiagnostics->recordUnmatchedSidecar($sourcePath, $reason);
                 $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
 
                 return ['queued' => 0, 'missing' => 0, 'unmatched_sidecars' => 1];
@@ -140,6 +146,7 @@ final class IngestEnqueueStableCommand extends Command
         }
 
         if ($this->sidecarFileDetector->isProxyCandidatePath($sourcePath)) {
+            $this->ingestDiagnostics->recordUnmatchedSidecar($sourcePath, 'missing_parent');
             $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
 
             return ['queued' => 0, 'missing' => 0, 'unmatched_sidecars' => 1];
@@ -154,10 +161,13 @@ final class IngestEnqueueStableCommand extends Command
                 $queued += $this->enqueueRequiredJobs($this->findOrCreateAsset($originalPath), false);
             }
             $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
+            $this->ingestDiagnostics->clearUnmatchedSidecar($sourcePath);
 
             return ['queued' => $queued, 'missing' => 0, 'unmatched_sidecars' => 0];
         }
         if ($this->sidecarFileDetector->isAuxiliarySidecarPath($sourcePath)) {
+            $reason = $this->sidecarFileDetector->auxiliaryUnmatchedReason($sourcePath) ?? 'missing_parent';
+            $this->ingestDiagnostics->recordUnmatchedSidecar($sourcePath, $reason);
             $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
 
             return ['queued' => 0, 'missing' => 0, 'unmatched_sidecars' => 1];
@@ -247,6 +257,7 @@ final class IngestEnqueueStableCommand extends Command
         if ($proxyPath === '' || $proxyKind === '') {
             return;
         }
+        $this->ingestDiagnostics->clearUnmatchedSidecar($proxyPath);
 
         $materializedStoragePath = $this->persistDerivedFile($asset, $proxyKind, $proxyPath);
 
@@ -300,6 +311,7 @@ final class IngestEnqueueStableCommand extends Command
         if (!in_array($sidecarPath, $sidecars, true)) {
             $sidecars[] = $sidecarPath;
         }
+        $this->ingestDiagnostics->clearUnmatchedSidecar($sidecarPath);
 
         $paths['storage_id'] = (string) ($paths['storage_id'] ?? $this->defaultStorageId);
         $paths['original_relative'] = (string) ($paths['original_relative'] ?? $originalPath);
