@@ -2,7 +2,7 @@
 
 namespace App\Ingest\Service;
 
-class ProxyFileDetector
+class SidecarFileDetector
 {
     /** @var array<int, string> */
     private const RAW_EXTENSIONS = ['cr2', 'cr3', 'nef', 'arw', 'dng', 'rw2', 'orf', 'raf'];
