@@ -11,6 +11,12 @@ class ProxyFileDetector
     /** @var array<int, string> */
     private const PHOTO_PROXY_EXTENSIONS = ['jpg', 'jpeg', 'webp'];
     /** @var array<int, string> */
+    private const AUDIO_EXTENSIONS = ['wav', 'mp3', 'aac'];
+    /** @var array<int, string> */
+    private const PHOTO_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp'];
+    /** @var array<int, string> */
+    private const AUXILIARY_SIDECAR_EXTENSIONS = ['xmp', 'srt'];
+    /** @var array<int, string> */
     private const PROXY_FOLDER_NAMES = ['proxy', 'proxies', 'proxie'];
 
     public function __construct(
@@ -120,6 +126,76 @@ class ProxyFileDetector
     }
 
     /**
+     * @return array{path:string,type:string,original:string}|null
+     */
+    public function detectAuxiliarySidecarFile(string $filePath): ?array
+    {
+        $normalized = $this->normalizePath($filePath);
+        if (!$this->isInboxPath($normalized)) {
+            return null;
+        }
+
+        $extension = $this->extension($normalized);
+        if (!in_array($extension, self::AUXILIARY_SIDECAR_EXTENSIONS, true)) {
+            return null;
+        }
+
+        $originalExtensions = match ($extension) {
+            'xmp' => array_merge(self::RAW_EXTENSIONS, self::PHOTO_EXTENSIONS, self::VIDEO_EXTENSIONS),
+            'srt' => array_merge(self::VIDEO_EXTENSIONS, self::AUDIO_EXTENSIONS),
+            default => [],
+        };
+
+        $original = $this->findSiblingByExtensions($normalized, $originalExtensions);
+        if ($original === null) {
+            return null;
+        }
+
+        return [
+            'path' => $normalized,
+            'type' => $extension,
+            'original' => $original,
+        ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function detectExistingAuxiliarySidecarsForOriginal(string $filePath): array
+    {
+        $normalized = $this->normalizePath($filePath);
+        if (!$this->isInboxPath($normalized)) {
+            return [];
+        }
+
+        $extension = $this->extension($normalized);
+        $sidecarExtensions = [];
+
+        if (in_array($extension, array_merge(self::RAW_EXTENSIONS, self::PHOTO_EXTENSIONS, self::VIDEO_EXTENSIONS), true)) {
+            $sidecarExtensions[] = 'xmp';
+        }
+        if (in_array($extension, array_merge(self::VIDEO_EXTENSIONS, self::AUDIO_EXTENSIONS), true)) {
+            $sidecarExtensions[] = 'srt';
+        }
+
+        if ($sidecarExtensions === []) {
+            return [];
+        }
+
+        $sidecars = [];
+        $dirname = dirname($normalized);
+        $basename = pathinfo($normalized, PATHINFO_FILENAME);
+        foreach ($sidecarExtensions as $sidecarExtension) {
+            $candidate = ($dirname === '.' ? '' : $dirname.'/').$basename.'.'.$sidecarExtension;
+            if ($this->fileExists($candidate)) {
+                $sidecars[] = $candidate;
+            }
+        }
+
+        return array_values(array_unique($sidecars));
+    }
+
+    /**
      * @return array{path:string,type:string,kind:string,original:string}|null
      */
     public function detectForPath(string $filePath): ?array
@@ -196,7 +272,7 @@ class ProxyFileDetector
 
         $parentParts = array_slice($parts, 0, $proxyFolderIndex);
         $parentDir = implode('/', $parentParts);
-        $extensions = array_merge(self::VIDEO_EXTENSIONS, self::RAW_EXTENSIONS, ['wav', 'mp3', 'aac']);
+        $extensions = array_merge(self::VIDEO_EXTENSIONS, self::RAW_EXTENSIONS, self::AUDIO_EXTENSIONS);
 
         foreach ($extensions as $extension) {
             $candidate = $parentDir.'/'.$basename.'.'.$extension;
@@ -216,7 +292,7 @@ class ProxyFileDetector
         if (in_array($extension, self::VIDEO_EXTENSIONS, true) || $extension === 'lrf') {
             return 'proxy_video';
         }
-        if (in_array($extension, ['wav', 'mp3', 'aac'], true)) {
+        if (in_array($extension, self::AUDIO_EXTENSIONS, true)) {
             return 'proxy_audio';
         }
 
