@@ -454,6 +454,7 @@ final class WorkflowApiTest extends WebTestCase
         mkdir($root.'/REJECTS/.derived/99999999-9999-4999-8999-999999999999', 0777, true);
         file_put_contents($root.'/REJECTS/purge-derived.mov', 'origin');
         file_put_contents($root.'/REJECTS/.derived/99999999-9999-4999-8999-999999999999/proxy.mp4', 'derived');
+        file_put_contents($root.'/REJECTS/purge-derived.srt', 'subtitle');
         $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
         $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
 
@@ -470,7 +471,10 @@ final class WorkflowApiTest extends WebTestCase
             'current_path' => 'REJECTS/purge-derived.mov',
             'paths' => [
                 'original_relative' => 'REJECTS/purge-derived.mov',
-                'sidecars_relative' => ['REJECTS/.derived/99999999-9999-4999-8999-999999999999/proxy.mp4'],
+                'sidecars_relative' => [
+                    'REJECTS/.derived/99999999-9999-4999-8999-999999999999/proxy.mp4',
+                    'REJECTS/purge-derived.srt',
+                ],
             ],
         ]);
         $entityManager->flush();
@@ -494,6 +498,7 @@ final class WorkflowApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         self::assertFileDoesNotExist($root.'/REJECTS/purge-derived.mov');
+        self::assertFileDoesNotExist($root.'/REJECTS/purge-derived.srt');
         self::assertFileDoesNotExist($root.'/REJECTS/.derived/99999999-9999-4999-8999-999999999999/proxy.mp4');
         $count = (int) $connection->fetchOne('SELECT COUNT(*) FROM asset_derived_file WHERE asset_uuid = :assetUuid', ['assetUuid' => $uuid]);
         self::assertSame(0, $count);

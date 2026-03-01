@@ -316,6 +316,120 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
         );
     }
 
+    public function testApplyOutboxMovesDerivedForBothKeepAndRejectTargets(): void
+    {
+        $root = sys_get_temp_dir().'/retaia-move-derived-both-'.bin2hex(random_bytes(4));
+        mkdir($root.'/INBOX', 0777, true);
+        mkdir($root.'/ARCHIVE', 0777, true);
+        mkdir($root.'/REJECTS', 0777, true);
+        mkdir($root.'/.derived/11111111-1111-4111-8111-111111111111', 0777, true);
+        mkdir($root.'/.derived/22222222-2222-4222-8222-222222222222', 0777, true);
+        file_put_contents($root.'/INBOX/keep.mov', 'keep');
+        file_put_contents($root.'/INBOX/reject.mov', 'reject');
+        file_put_contents($root.'/.derived/11111111-1111-4111-8111-111111111111/proxy.mp4', 'kproxy');
+        file_put_contents($root.'/.derived/22222222-2222-4222-8222-222222222222/proxy.mp4', 'rproxy');
+
+        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+
+        static::bootKernel();
+        $container = static::getContainer();
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = $container->get(EntityManagerInterface::class);
+        /** @var Connection $connection */
+        $connection = $container->get(Connection::class);
+        $this->ensureAuditTable($connection);
+
+        $keepUuid = '11111111-1111-4111-8111-111111111111';
+        $rejectUuid = '22222222-2222-4222-8222-222222222222';
+
+        $keepAsset = new Asset(
+            $keepUuid,
+            'VIDEO',
+            'keep.mov',
+            AssetState::ARCHIVED,
+            [],
+            null,
+            [
+                'source_path' => 'INBOX/keep.mov',
+                'paths' => [
+                    'sidecars_relative' => ['.derived/'.$keepUuid.'/proxy.mp4'],
+                ],
+                'derived' => [
+                    'derived_manifest' => [
+                        ['kind' => 'proxy_video', 'ref' => '.derived/'.$keepUuid.'/proxy.mp4'],
+                    ],
+                ],
+            ]
+        );
+        $rejectAsset = new Asset(
+            $rejectUuid,
+            'VIDEO',
+            'reject.mov',
+            AssetState::REJECTED,
+            [],
+            null,
+            [
+                'source_path' => 'INBOX/reject.mov',
+                'paths' => [
+                    'sidecars_relative' => ['.derived/'.$rejectUuid.'/proxy.mp4'],
+                ],
+                'derived' => [
+                    'derived_manifest' => [
+                        ['kind' => 'proxy_video', 'ref' => '.derived/'.$rejectUuid.'/proxy.mp4'],
+                    ],
+                ],
+            ]
+        );
+        $entityManager->persist($keepAsset);
+        $entityManager->persist($rejectAsset);
+        $entityManager->flush();
+
+        foreach ([[$keepUuid, '.derived/'.$keepUuid.'/proxy.mp4'], [$rejectUuid, '.derived/'.$rejectUuid.'/proxy.mp4']] as [$uuid, $path]) {
+            $connection->insert('asset_derived_file', [
+                'id' => bin2hex(random_bytes(8)),
+                'asset_uuid' => $uuid,
+                'kind' => 'proxy_video',
+                'content_type' => 'video/mp4',
+                'size_bytes' => 6,
+                'sha256' => null,
+                'storage_path' => $path,
+                'created_at' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
+            ]);
+        }
+
+        $application = new Application(static::$kernel);
+        $command = $application->find('app:ingest:apply-outbox');
+        $tester = new CommandTester($command);
+        $tester->execute(['--limit' => 20]);
+
+        self::assertFileExists($root.'/ARCHIVE/keep.mov');
+        self::assertFileExists($root.'/REJECTS/reject.mov');
+        self::assertFileExists($root.'/ARCHIVE/.derived/'.$keepUuid.'/proxy.mp4');
+        self::assertFileExists($root.'/REJECTS/.derived/'.$rejectUuid.'/proxy.mp4');
+        self::assertFileDoesNotExist($root.'/.derived/'.$keepUuid.'/proxy.mp4');
+        self::assertFileDoesNotExist($root.'/.derived/'.$rejectUuid.'/proxy.mp4');
+
+        $keepStored = (string) $connection->fetchOne(
+            'SELECT storage_path FROM asset_derived_file WHERE asset_uuid = :assetUuid LIMIT 1',
+            ['assetUuid' => $keepUuid]
+        );
+        $rejectStored = (string) $connection->fetchOne(
+            'SELECT storage_path FROM asset_derived_file WHERE asset_uuid = :assetUuid LIMIT 1',
+            ['assetUuid' => $rejectUuid]
+        );
+        self::assertSame('ARCHIVE/.derived/'.$keepUuid.'/proxy.mp4', $keepStored);
+        self::assertSame('REJECTS/.derived/'.$rejectUuid.'/proxy.mp4', $rejectStored);
+
+        $entityManager->clear();
+        $keepReloaded = $entityManager->find(Asset::class, $keepUuid);
+        $rejectReloaded = $entityManager->find(Asset::class, $rejectUuid);
+        self::assertInstanceOf(Asset::class, $keepReloaded);
+        self::assertInstanceOf(Asset::class, $rejectReloaded);
+        self::assertContains('ARCHIVE/.derived/'.$keepUuid.'/proxy.mp4', $keepReloaded->getFields()['paths']['sidecars_relative'] ?? []);
+        self::assertContains('REJECTS/.derived/'.$rejectUuid.'/proxy.mp4', $rejectReloaded->getFields()['paths']['sidecars_relative'] ?? []);
+    }
+
     public function testMoveFailureDoesNotBlockOtherAssets(): void
     {
         $root = sys_get_temp_dir().'/retaia-move-failure-'.bin2hex(random_bytes(4));
