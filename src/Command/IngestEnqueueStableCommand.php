@@ -98,7 +98,7 @@ final class IngestEnqueueStableCommand extends Command
                 return ['queued' => $queued, 'missing' => 0, 'unmatched_sidecars' => 0];
             }
 
-            if ($this->proxyFileDetector->isProxyCandidatePath($sourcePath)) {
+            if ($this->sidecarFileDetector->isProxyCandidatePath($sourcePath)) {
                 $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
 
                 return ['queued' => 0, 'missing' => 0, 'unmatched_sidecars' => 1];
@@ -114,12 +114,12 @@ final class IngestEnqueueStableCommand extends Command
                 }
                 $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
 
-                return ['queued' => $queued, 'missing' => 0];
+                return ['queued' => $queued, 'missing' => 0, 'unmatched_sidecars' => 0];
             }
             if ($this->sidecarFileDetector->isAuxiliarySidecarPath($sourcePath)) {
                 $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
 
-                return ['queued' => 0, 'missing' => 0];
+                return ['queued' => 0, 'missing' => 0, 'unmatched_sidecars' => 1];
             }
 
             $this->scanStateStore->markMissing($sourcePath, new \DateTimeImmutable());
@@ -139,7 +139,7 @@ final class IngestEnqueueStableCommand extends Command
             return ['queued' => $queued, 'missing' => 0, 'unmatched_sidecars' => 0];
         }
 
-        if ($this->proxyFileDetector->isProxyCandidatePath($sourcePath)) {
+        if ($this->sidecarFileDetector->isProxyCandidatePath($sourcePath)) {
             $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
 
             return ['queued' => 0, 'missing' => 0, 'unmatched_sidecars' => 1];
@@ -155,12 +155,12 @@ final class IngestEnqueueStableCommand extends Command
             }
             $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
 
-            return ['queued' => $queued, 'missing' => 0];
+            return ['queued' => $queued, 'missing' => 0, 'unmatched_sidecars' => 0];
         }
         if ($this->sidecarFileDetector->isAuxiliarySidecarPath($sourcePath)) {
             $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
 
-            return ['queued' => 0, 'missing' => 0];
+            return ['queued' => 0, 'missing' => 0, 'unmatched_sidecars' => 1];
         }
 
         $asset = $this->findOrCreateAsset($sourcePath);
