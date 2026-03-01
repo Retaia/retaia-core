@@ -223,6 +223,22 @@ class SidecarFileDetector
         return $this->detectExistingProxyForOriginal($filePath);
     }
 
+    public function isProxyCandidatePath(string $filePath): bool
+    {
+        $normalized = $this->normalizePath($filePath);
+        if (!$this->isInboxPath($normalized)) {
+            return false;
+        }
+
+        $extension = $this->extension($normalized);
+        if ($extension === 'lrf') {
+            return true;
+        }
+
+        return $this->isInsideProxyFolder($normalized)
+            && $this->proxyKindForExtension($extension) !== null;
+    }
+
     private function normalizePath(string $path): string
     {
         return ltrim(str_replace('\\', '/', trim($path)), '/');
@@ -319,13 +335,7 @@ class SidecarFileDetector
     private function findProxyFolderParentOriginal(string $path, string $basename): ?string
     {
         $parts = explode('/', $path);
-        $proxyFolderIndex = null;
-        foreach ($parts as $index => $part) {
-            if (in_array(strtolower($part), self::PROXY_FOLDER_NAMES, true)) {
-                $proxyFolderIndex = $index;
-                break;
-            }
-        }
+        $proxyFolderIndex = $this->proxyFolderIndex($parts);
 
         if ($proxyFolderIndex === null || $proxyFolderIndex < 1) {
             return null;
@@ -339,6 +349,25 @@ class SidecarFileDetector
             $candidate = $parentDir.'/'.$basename.'.'.$extension;
             if ($this->fileExists($candidate)) {
                 return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private function isInsideProxyFolder(string $path): bool
+    {
+        return $this->proxyFolderIndex(explode('/', $path)) !== null;
+    }
+
+    /**
+     * @param array<int, string> $parts
+     */
+    private function proxyFolderIndex(array $parts): ?int
+    {
+        foreach ($parts as $index => $part) {
+            if (in_array(strtolower($part), self::PROXY_FOLDER_NAMES, true)) {
+                return $index;
             }
         }
 
