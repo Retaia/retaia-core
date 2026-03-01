@@ -396,6 +396,75 @@ final class WorkflowApiTest extends WebTestCase
         self::assertSame('VALIDATION_FAILED', $invalidSince['code'] ?? null);
     }
 
+    public function testOpsIngestRequeueEnqueuesJobsForAssetTarget(): void
+    {
+        $client = $this->createAuthenticatedClient('admin@retaia.local');
+        $uuid = 'abababab-1234-4abc-8abc-1234567890ab';
+        $this->seedAsset($uuid, AssetState::READY, 'requeue.mov');
+
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = static::getContainer()->get(EntityManagerInterface::class);
+        $asset = $entityManager->find(Asset::class, $uuid);
+        self::assertInstanceOf(Asset::class, $asset);
+        $asset->setFields([
+            'proxy_done' => true,
+            'paths' => [
+                'original_relative' => 'INBOX/requeue.mov',
+                'sidecars_relative' => [],
+            ],
+        ]);
+        $entityManager->flush();
+
+        /** @var Connection $connection */
+        $connection = static::getContainer()->get(Connection::class);
+        $connection->executeStatement('CREATE UNIQUE INDEX IF NOT EXISTS uniq_processing_job_asset_type ON processing_job (asset_uuid, job_type)');
+        $connection->insert('processing_job', [
+            'id' => 'requeue-existing-1',
+            'asset_uuid' => $uuid,
+            'job_type' => 'extract_facts',
+            'status' => 'pending',
+            'claimed_by' => null,
+            'lock_token' => null,
+            'locked_until' => null,
+            'result_payload' => null,
+            'created_at' => '2026-02-10 09:59:00',
+            'updated_at' => '2026-02-10 09:59:00',
+        ]);
+
+        $client->jsonRequest('POST', '/api/v1/ops/ingest/requeue', [
+            'asset_uuid' => $uuid,
+            'include_derived' => true,
+            'reason' => 'manual_recovery',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_ACCEPTED);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame(true, $payload['accepted'] ?? null);
+        self::assertSame($uuid, $payload['target']['asset_uuid'] ?? null);
+        self::assertSame(1, $payload['requeued_assets'] ?? null);
+        self::assertSame(1, $payload['requeued_jobs'] ?? null);
+        self::assertSame(1, $payload['deduplicated_jobs'] ?? null);
+    }
+
+    public function testOpsIngestRequeueValidatesPayload(): void
+    {
+        $client = $this->createAuthenticatedClient('admin@retaia.local');
+
+        $client->jsonRequest('POST', '/api/v1/ops/ingest/requeue', [
+            'asset_uuid' => '11111111-1111-4111-8111-111111111111',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $missingReason = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $missingReason['code'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/ops/ingest/requeue', [
+            'path' => '../unsafe.mov',
+            'reason' => 'manual_recovery',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $unsafePath = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $unsafePath['code'] ?? null);
+    }
+
     public function testOpsEndpointsRequireAuthentication(): void
     {
         $client = static::createClient();
