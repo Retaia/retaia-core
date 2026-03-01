@@ -37,6 +37,7 @@ security:
 
     # Note: Only the *first* matching rule is applied
     access_control:
+        - { path: ^/api/docs$, roles: PUBLIC_ACCESS }
         - { path: '^/api/v[0-9]+(?:\.[0-9]+)?/docs$', roles: PUBLIC_ACCESS }
         - { path: '^/api/v[0-9]+(?:\.[0-9]+)?/openapi$', roles: PUBLIC_ACCESS }
         - { path: ^/api/v1/health, roles: PUBLIC_ACCESS }
