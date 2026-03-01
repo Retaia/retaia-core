@@ -209,6 +209,214 @@ final class WorkflowApiTest extends WebTestCase
         self::assertSame('FORBIDDEN_ACTOR', $payload['code'] ?? null);
     }
 
+    public function testOpsReadinessReturnsSnapshotForAdmin(): void
+    {
+        $root = sys_get_temp_dir().'/retaia-readiness-'.bin2hex(random_bytes(4));
+        mkdir($root.'/INBOX', 0777, true);
+        mkdir($root.'/ARCHIVE', 0777, true);
+        mkdir($root.'/REJECTS', 0777, true);
+        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+
+        $client = $this->createAuthenticatedClient('admin@retaia.local');
+        $client->request('GET', '/api/v1/ops/readiness');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+
+        self::assertIsArray($payload);
+        self::assertSame('ok', $payload['status'] ?? null);
+        self::assertIsArray($payload['checks'] ?? null);
+        self::assertNotEmpty($payload['checks']);
+        $checkNames = array_map(static fn (array $check): string => (string) ($check['name'] ?? ''), $payload['checks']);
+        self::assertContains('database', $checkNames);
+    }
+
+    public function testOpsReadinessReturnsDegradedWhenCriticalFoldersAreMissing(): void
+    {
+        $root = sys_get_temp_dir().'/retaia-readiness-degraded-'.bin2hex(random_bytes(4));
+        mkdir($root.'/INBOX', 0777, true);
+        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+
+        $client = $this->createAuthenticatedClient('admin@retaia.local');
+        $client->request('GET', '/api/v1/ops/readiness');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+
+        self::assertIsArray($payload);
+        self::assertSame('degraded', $payload['status'] ?? null);
+        self::assertIsArray($payload['checks'] ?? null);
+        $ingestCheck = null;
+        foreach ($payload['checks'] as $check) {
+            if (($check['name'] ?? null) === 'ingest_watch_path') {
+                $ingestCheck = $check;
+                break;
+            }
+        }
+        self::assertIsArray($ingestCheck);
+        self::assertSame('fail', $ingestCheck['status'] ?? null);
+    }
+
+    public function testOpsMissingEndpointsReturnExpectedPayloads(): void
+    {
+        $client = $this->createAuthenticatedClient('admin@retaia.local');
+        /** @var Connection $connection */
+        $connection = static::getContainer()->get(Connection::class);
+
+        $connection->insert('asset_operation_lock', [
+            'id' => bin2hex(random_bytes(16)),
+            'asset_uuid' => 'lock-asset-1',
+            'lock_type' => 'asset_move_lock',
+            'actor_id' => 'ops-admin',
+            'acquired_at' => '2026-02-10 10:00:00',
+            'released_at' => null,
+        ]);
+        $connection->insert('asset_operation_lock', [
+            'id' => bin2hex(random_bytes(16)),
+            'asset_uuid' => 'lock-asset-2',
+            'lock_type' => 'asset_purge_lock',
+            'actor_id' => 'ops-admin',
+            'acquired_at' => '2026-02-10 10:01:00',
+            'released_at' => null,
+        ]);
+        $connection->insert('processing_job', [
+            'id' => 'job-pending-ops',
+            'asset_uuid' => 'job-asset-1',
+            'job_type' => 'extract_facts',
+            'status' => 'pending',
+            'claimed_by' => null,
+            'lock_token' => null,
+            'locked_until' => null,
+            'result_payload' => null,
+            'created_at' => '2026-02-10 09:59:00',
+            'updated_at' => '2026-02-10 09:59:00',
+        ]);
+        $connection->insert('processing_job', [
+            'id' => 'job-claimed-ops',
+            'asset_uuid' => 'job-asset-2',
+            'job_type' => 'extract_facts',
+            'status' => 'claimed',
+            'claimed_by' => 'agent-1',
+            'lock_token' => 'token-1',
+            'locked_until' => '2026-02-10 11:00:00',
+            'result_payload' => null,
+            'created_at' => '2026-02-10 10:00:00',
+            'updated_at' => '2026-02-10 10:00:00',
+        ]);
+        $connection->insert('processing_job', [
+            'id' => 'job-failed-ops',
+            'asset_uuid' => 'job-asset-3',
+            'job_type' => 'generate_proxy',
+            'status' => 'failed',
+            'claimed_by' => null,
+            'lock_token' => null,
+            'locked_until' => null,
+            'result_payload' => null,
+            'created_at' => '2026-02-10 10:01:00',
+            'updated_at' => '2026-02-10 10:01:00',
+        ]);
+        $connection->insert('ingest_unmatched_sidecar', [
+            'path' => 'INBOX/unmatched-1.xmp',
+            'reason' => 'missing_parent',
+            'detected_at' => '2026-02-10 12:00:00',
+        ]);
+        $connection->insert('ingest_unmatched_sidecar', [
+            'path' => 'INBOX/unmatched-2.srt',
+            'reason' => 'ambiguous_parent',
+            'detected_at' => '2026-02-10 12:10:00',
+        ]);
+
+        $client->request('GET', '/api/v1/ops/locks?limit=1&offset=0');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $locks = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame(2, $locks['total'] ?? null);
+        self::assertCount(1, $locks['items'] ?? []);
+        self::assertSame('lock-asset-2', $locks['items'][0]['asset_uuid'] ?? null);
+
+        $client->request('GET', '/api/v1/ops/locks?limit=1&offset=1');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $locksPage2 = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame(2, $locksPage2['total'] ?? null);
+        self::assertCount(1, $locksPage2['items'] ?? []);
+        self::assertSame('lock-asset-1', $locksPage2['items'][0]['asset_uuid'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/ops/locks/recover', [
+            'stale_lock_minutes' => 1,
+            'dry_run' => true,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $recover = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame(true, $recover['dry_run'] ?? null);
+        self::assertGreaterThanOrEqual(1, (int) ($recover['stale_examined'] ?? 0));
+        self::assertSame(0, $recover['recovered'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/ops/locks/recover', [
+            'stale_lock_minutes' => 0,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $recoverInvalidMinutes = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $recoverInvalidMinutes['code'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/ops/locks/recover', [
+            'stale_lock_minutes' => '30',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+
+        $client->jsonRequest('POST', '/api/v1/ops/locks/recover', [
+            'dry_run' => 'true',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+
+        $client->request('GET', '/api/v1/ops/jobs/queue');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $queue = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame(1, $queue['summary']['pending_total'] ?? null);
+        self::assertSame(1, $queue['summary']['claimed_total'] ?? null);
+        self::assertSame(1, $queue['summary']['failed_total'] ?? null);
+        self::assertNotEmpty($queue['by_type'] ?? []);
+
+        $client->request('GET', '/api/v1/ops/ingest/unmatched?reason=missing_parent&limit=10');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $unmatched = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame(1, $unmatched['total'] ?? null);
+        self::assertSame('INBOX/unmatched-1.xmp', $unmatched['items'][0]['path'] ?? null);
+
+        $client->request('GET', '/api/v1/ops/ingest/unmatched?reason=invalid_reason');
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $invalidReason = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $invalidReason['code'] ?? null);
+
+        $client->request('GET', '/api/v1/ops/ingest/unmatched?since=not-a-date');
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $invalidSince = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $invalidSince['code'] ?? null);
+    }
+
+    public function testOpsEndpointsRequireAuthentication(): void
+    {
+        $client = static::createClient();
+
+        $client->request('GET', '/api/v1/ops/ingest/diagnostics');
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
+
+        $client->request('GET', '/api/v1/ops/readiness');
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+
+        $client->request('GET', '/api/v1/ops/locks');
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+
+        $client->request('POST', '/api/v1/ops/locks/recover', server: ['CONTENT_TYPE' => 'application/json'], content: '{}');
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+
+        $client->request('GET', '/api/v1/ops/jobs/queue');
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+
+        $client->request('GET', '/api/v1/ops/ingest/unmatched');
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+    }
+
     public function testPurgeReturnsConflictWhenAssetHasActiveOperationLock(): void
     {
         $client = $this->createAuthenticatedClient('admin@retaia.local');
