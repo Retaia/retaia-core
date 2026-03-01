@@ -46,7 +46,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         $command = $application->find('app:ingest:enqueue-stable');
         $tester = new CommandTester($command);
         $tester->execute(['--limit' => 10]);
-        self::assertStringContainsString('Queued 3 stable file(s). Missing: 0.', $tester->getDisplay());
+        self::assertStringContainsString('Queued 3 stable file(s). Missing: 0. Unmatched sidecars: 0.', $tester->getDisplay());
 
         $jobCount = (int) $connection->fetchOne('SELECT COUNT(*) FROM processing_job');
         self::assertSame(3, $jobCount);
@@ -94,7 +94,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         $command = $application->find('app:ingest:enqueue-stable');
         $tester = new CommandTester($command);
         $tester->execute(['--limit' => 10]);
-        self::assertStringContainsString('Missing: 1.', $tester->getDisplay());
+        self::assertStringContainsString('Missing: 1. Unmatched sidecars: 0.', $tester->getDisplay());
 
         $jobCount = (int) $connection->fetchOne('SELECT COUNT(*) FROM processing_job');
         self::assertSame(0, $jobCount);
@@ -134,7 +134,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         $command = $application->find('app:ingest:enqueue-stable');
         $tester = new CommandTester($command);
         $tester->execute(['--limit' => 10]);
-        self::assertStringContainsString('Queued 3 stable file(s). Missing: 0.', $tester->getDisplay());
+        self::assertStringContainsString('Queued 3 stable file(s). Missing: 0. Unmatched sidecars: 0.', $tester->getDisplay());
 
         /** @var EntityManagerInterface $entityManager */
         $entityManager = $container->get(EntityManagerInterface::class);
@@ -707,6 +707,48 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         $videoAsset = $entityManager->find(Asset::class, $videoAssetUuid);
         self::assertInstanceOf(Asset::class, $videoAsset);
         self::assertFalse((bool) ($videoAsset->getFields()['proxy_done'] ?? false));
+    }
+
+    public function testOrphanLrfIsMarkedQueuedAndCountedAsUnmatchedSidecar(): void
+    {
+        $root = sys_get_temp_dir().'/retaia-enqueue-orphan-lrf-'.bin2hex(random_bytes(4));
+        mkdir($root.'/INBOX', 0777, true);
+        mkdir($root.'/ARCHIVE', 0777, true);
+        mkdir($root.'/REJECTS', 0777, true);
+        file_put_contents($root.'/INBOX/orphan.lrf', 'proxy');
+        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
+        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        static::ensureKernelShutdown();
+
+        static::bootKernel();
+        $container = static::getContainer();
+        /** @var Connection $connection */
+        $connection = $container->get(Connection::class);
+        $this->ensureTables($connection);
+
+        $connection->insert('ingest_scan_file', [
+            'path' => 'INBOX/orphan.lrf',
+            'size_bytes' => 100,
+            'mtime' => '2026-02-10 12:00:00',
+            'stable_count' => 2,
+            'status' => 'stable',
+            'first_seen_at' => '2026-02-10 12:00:00',
+            'last_seen_at' => '2026-02-10 12:01:00',
+        ]);
+
+        $application = new Application(static::$kernel);
+        $command = $application->find('app:ingest:enqueue-stable');
+        $tester = new CommandTester($command);
+        $tester->execute(['--limit' => 10]);
+
+        self::assertStringContainsString('Queued 0 stable file(s). Missing: 0. Unmatched sidecars: 1.', $tester->getDisplay());
+        self::assertSame('queued', (string) $connection->fetchOne('SELECT status FROM ingest_scan_file WHERE path = :path', ['path' => 'INBOX/orphan.lrf']));
+
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = $container->get(EntityManagerInterface::class);
+        $orphanAssetUuid = $this->assetUuidFromPath('INBOX/orphan.lrf');
+        self::assertNull($entityManager->find(Asset::class, $orphanAssetUuid));
     }
 
     private function ensureTables(Connection $connection): void
