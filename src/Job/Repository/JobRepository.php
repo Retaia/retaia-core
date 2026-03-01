@@ -6,6 +6,7 @@ use App\Job\Job;
 use App\Job\JobStatus;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\ParameterType;
+use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 
 final class JobRepository
 {
@@ -96,6 +97,31 @@ final class JobRepository
         ]);
 
         return $this->find($id) ?? throw new \RuntimeException('Unable to load queued job.');
+    }
+
+    public function enqueuePendingIfMissing(string $assetUuid, string $jobType): bool
+    {
+        $id = bin2hex(random_bytes(16));
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+
+        try {
+            $this->connection->insert('processing_job', [
+                'id' => $id,
+                'asset_uuid' => $assetUuid,
+                'job_type' => $jobType,
+                'status' => JobStatus::PENDING->value,
+                'claimed_by' => null,
+                'lock_token' => null,
+                'locked_until' => null,
+                'result_payload' => null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        } catch (UniqueConstraintViolationException) {
+            return false;
+        }
+
+        return true;
     }
 
     public function claim(string $id, string $agentId, int $ttlSeconds): ?Job

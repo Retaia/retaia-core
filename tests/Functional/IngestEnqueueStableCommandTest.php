@@ -192,7 +192,6 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         self::assertInstanceOf(Asset::class, $rawAsset);
         self::assertSame('PHOTO', $rawAsset->getMediaType());
         self::assertTrue((bool) ($rawAsset->getFields()['proxy_done'] ?? false));
-        self::assertContains('INBOX/shot.jpg', $rawAsset->getFields()['paths']['sidecars_relative'] ?? []);
 
         $jpgAsset = $entityManager->find(Asset::class, $jpgAssetUuid);
         self::assertNull($jpgAsset);
@@ -209,6 +208,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         self::assertStringStartsWith('.derived/'.$rawAssetUuid.'/', $storagePath);
         self::assertFileExists($root.'/'.$storagePath);
         self::assertFileDoesNotExist($root.'/INBOX/shot.jpg');
+        self::assertContains($storagePath, $rawAsset->getFields()['paths']['sidecars_relative'] ?? []);
     }
 
     public function testLrfSidecarIsAttachedToOriginalAndNotQueuedAsStandaloneAsset(): void
@@ -258,7 +258,6 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         $videoAsset = $entityManager->find(Asset::class, $videoAssetUuid);
         self::assertInstanceOf(Asset::class, $videoAsset);
         self::assertTrue((bool) ($videoAsset->getFields()['proxy_done'] ?? false));
-        self::assertContains('INBOX/drone.lrf', $videoAsset->getFields()['paths']['sidecars_relative'] ?? []);
 
         $lrfAsset = $entityManager->find(Asset::class, $lrfAssetUuid);
         self::assertNull($lrfAsset);
@@ -276,6 +275,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         self::assertStringEndsWith('.mp4', $storagePath);
         self::assertFileExists($root.'/'.$storagePath);
         self::assertFileDoesNotExist($root.'/INBOX/drone.lrf');
+        self::assertContains($storagePath, $videoAsset->getFields()['paths']['sidecars_relative'] ?? []);
     }
 
     public function testProxyFolderFileIsAttachedToProjectOriginal(): void
@@ -325,7 +325,6 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         $mainAsset = $entityManager->find(Asset::class, $mainAssetUuid);
         self::assertInstanceOf(Asset::class, $mainAsset);
         self::assertTrue((bool) ($mainAsset->getFields()['proxy_done'] ?? false));
-        self::assertContains('INBOX/project/proxy/clip.mp4', $mainAsset->getFields()['paths']['sidecars_relative'] ?? []);
 
         $proxyAsset = $entityManager->find(Asset::class, $proxyAssetUuid);
         self::assertNull($proxyAsset);
@@ -342,6 +341,60 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         self::assertStringStartsWith('.derived/'.$mainAssetUuid.'/', $storagePath);
         self::assertFileExists($root.'/'.$storagePath);
         self::assertFileDoesNotExist($root.'/INBOX/project/proxy/clip.mp4');
+        self::assertContains($storagePath, $mainAsset->getFields()['paths']['sidecars_relative'] ?? []);
+    }
+
+    public function testEmptyExistingProxyDoesNotSkipGenerateProxyJob(): void
+    {
+        $root = sys_get_temp_dir().'/retaia-enqueue-empty-proxy-'.bin2hex(random_bytes(4));
+        mkdir($root.'/INBOX', 0777, true);
+        mkdir($root.'/ARCHIVE', 0777, true);
+        mkdir($root.'/REJECTS', 0777, true);
+        file_put_contents($root.'/INBOX/clip.mov', 'video');
+        file_put_contents($root.'/INBOX/clip.lrf', '');
+        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
+        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        static::ensureKernelShutdown();
+
+        static::bootKernel();
+        $container = static::getContainer();
+        /** @var Connection $connection */
+        $connection = $container->get(Connection::class);
+        $this->ensureTables($connection);
+
+        foreach (['INBOX/clip.mov', 'INBOX/clip.lrf'] as $path) {
+            $connection->insert('ingest_scan_file', [
+                'path' => $path,
+                'size_bytes' => 100,
+                'mtime' => '2026-02-10 12:00:00',
+                'stable_count' => 2,
+                'status' => 'stable',
+                'first_seen_at' => '2026-02-10 12:00:00',
+                'last_seen_at' => '2026-02-10 12:01:00',
+            ]);
+        }
+
+        $application = new Application(static::$kernel);
+        $command = $application->find('app:ingest:enqueue-stable');
+        $tester = new CommandTester($command);
+        $tester->execute(['--limit' => 20]);
+
+        $videoAssetUuid = $this->assetUuidFromPath('INBOX/clip.mov');
+        $jobCount = (int) $connection->fetchOne('SELECT COUNT(*) FROM processing_job WHERE asset_uuid = :assetUuid', ['assetUuid' => $videoAssetUuid]);
+        self::assertSame(3, $jobCount);
+
+        $proxyJobCount = (int) $connection->fetchOne(
+            'SELECT COUNT(*) FROM processing_job WHERE asset_uuid = :assetUuid AND job_type = :jobType',
+            ['assetUuid' => $videoAssetUuid, 'jobType' => 'generate_proxy']
+        );
+        self::assertSame(1, $proxyJobCount);
+
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = $container->get(EntityManagerInterface::class);
+        $videoAsset = $entityManager->find(Asset::class, $videoAssetUuid);
+        self::assertInstanceOf(Asset::class, $videoAsset);
+        self::assertFalse((bool) ($videoAsset->getFields()['proxy_done'] ?? false));
     }
 
     private function ensureTables(Connection $connection): void
@@ -360,6 +413,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
                 updated_at DATETIME NOT NULL
             )'
         );
+        $connection->executeStatement('CREATE UNIQUE INDEX IF NOT EXISTS uniq_processing_job_asset_type ON processing_job (asset_uuid, job_type)');
         $connection->executeStatement(
             'CREATE TABLE IF NOT EXISTS ingest_scan_file (
                 path VARCHAR(1024) PRIMARY KEY NOT NULL,

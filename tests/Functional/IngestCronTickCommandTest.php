@@ -75,6 +75,7 @@ final class IngestCronTickCommandTest extends KernelTestCase
                 updated_at DATETIME NOT NULL
             )'
         );
+        $connection->executeStatement('CREATE UNIQUE INDEX IF NOT EXISTS uniq_processing_job_asset_type ON processing_job (asset_uuid, job_type)');
         $connection->executeStatement(
             'CREATE TABLE IF NOT EXISTS ingest_path_audit (
                 id VARCHAR(32) PRIMARY KEY NOT NULL,

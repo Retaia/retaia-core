@@ -117,5 +117,6 @@ final class IngestPipelineE2ETest extends KernelTestCase
                 updated_at DATETIME NOT NULL
             )'
         );
+        $connection->executeStatement('CREATE UNIQUE INDEX IF NOT EXISTS uniq_processing_job_asset_type ON processing_job (asset_uuid, job_type)');
     }
 }
