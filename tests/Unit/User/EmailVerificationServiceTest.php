@@ -28,7 +28,7 @@ final class EmailVerificationServiceTest extends TestCase
         $service = new EmailVerificationService(
             $users,
             new NullLogger(),
-            $this->buildVerifyEmailHelper(3600),
+            $this->buildVerifyEmailHelper(3600, 1700000000),
             'test',
         );
 
@@ -47,7 +47,7 @@ final class EmailVerificationServiceTest extends TestCase
         $service = new EmailVerificationService(
             $users,
             new NullLogger(),
-            $this->buildVerifyEmailHelper(3600),
+            $this->buildVerifyEmailHelper(3600, 1700000000),
             'test',
         );
 
@@ -68,7 +68,7 @@ final class EmailVerificationServiceTest extends TestCase
         $service = new EmailVerificationService(
             $users,
             new NullLogger(),
-            $this->buildVerifyEmailHelper(-1),
+            $this->buildVerifyEmailHelper(-1, 1700000000),
             'test',
         );
 
@@ -91,7 +91,7 @@ final class EmailVerificationServiceTest extends TestCase
         $service = new EmailVerificationService(
             $users,
             new NullLogger(),
-            $this->buildVerifyEmailHelper(3600),
+            $this->buildVerifyEmailHelper(3600, 1700000000),
             'test',
         );
 
@@ -114,7 +114,7 @@ final class EmailVerificationServiceTest extends TestCase
         $service = new EmailVerificationService(
             $users,
             new NullLogger(),
-            $this->buildVerifyEmailHelper(3600),
+            $this->buildVerifyEmailHelper(3600, 1700000000),
             'test',
         );
 
@@ -155,7 +155,7 @@ final class EmailVerificationServiceTest extends TestCase
         $service = new EmailVerificationService(
             $users,
             new NullLogger(),
-            $this->buildVerifyEmailHelper(3600),
+            $this->buildVerifyEmailHelper(3600, 1700000000),
             'test',
         );
 
@@ -182,16 +182,16 @@ final class EmailVerificationServiceTest extends TestCase
         self::assertFalse($service->confirmVerification($tamperedToken));
     }
 
-    private function buildVerifyEmailHelper(int $lifetimeSeconds): VerifyEmailHelperInterface
+    private function buildVerifyEmailHelper(int $lifetimeSeconds, int $now): VerifyEmailHelperInterface
     {
-        return new class($lifetimeSeconds) implements VerifyEmailHelperInterface {
-            public function __construct(private int $lifetimeSeconds)
+        return new class($lifetimeSeconds, $now) implements VerifyEmailHelperInterface {
+            public function __construct(private int $lifetimeSeconds, private int $now)
             {
             }
 
             public function generateSignature(string $routeName, string $userId, string $userEmail, array $extraParams = []): VerifyEmailSignatureComponents
             {
-                $expires = time() + $this->lifetimeSeconds;
+                $expires = $this->now + $this->lifetimeSeconds;
                 $normalizedEmail = mb_strtolower(trim($userEmail));
                 $signature = hash('sha256', $userId.'|'.$normalizedEmail.'|'.$expires);
                 $id = (string) ($extraParams['id'] ?? $userId);
@@ -206,7 +206,7 @@ final class EmailVerificationServiceTest extends TestCase
                 return new VerifyEmailSignatureComponents(
                     (new \DateTimeImmutable())->setTimestamp($expires),
                     $url,
-                    time()
+                    $this->now
                 );
             }
 
@@ -223,7 +223,7 @@ final class EmailVerificationServiceTest extends TestCase
                 $normalizedEmail = mb_strtolower(trim($userEmail));
                 $expected = hash('sha256', $userId.'|'.$normalizedEmail.'|'.$expires);
 
-                if ($id !== $userId || $email !== $normalizedEmail || $expires < time() || !hash_equals($expected, $signature)) {
+                if ($id !== $userId || $email !== $normalizedEmail || $expires < $this->now || !hash_equals($expected, $signature)) {
                     throw new InvalidSignatureException();
                 }
             }

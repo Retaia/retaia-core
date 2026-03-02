@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Tests\Unit\Ingest;
+namespace App\Tests\Integration\Ingest;
 
 use App\Ingest\Service\WatchPathResolver;
 use PHPUnit\Framework\TestCase;
