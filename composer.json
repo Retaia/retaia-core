@@ -91,7 +91,6 @@
         "test:behat": "vendor/bin/behat --no-coverage",
         "test:behat:coverage": "vendor/bin/behat",
         "test:quality": [
-            "@test:integration",
             "@test:coverage",
             "@test:behat:coverage",
             "@check:coverage:unit",
@@ -109,6 +108,7 @@
             "@check:openapi-docs-coherence",
             "php bin/console lint:yaml config",
             "php bin/console lint:container",
+            "@test:integration",
             "@test:quality",
             "php bin/console app:ops:readiness-check",
             "php bin/console app:sentry:probe"

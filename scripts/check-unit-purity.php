@@ -39,11 +39,15 @@ $forbiddenCalls = [
     'random_bytes',
 ];
 
+$ignoreMarker = '@unit-purity-ignore';
+
 $iterator = new RecursiveIteratorIterator(
     new RecursiveDirectoryIterator($unitDir, FilesystemIterator::SKIP_DOTS)
 );
 
 $violations = [];
+/** @var array<string, true> $forbiddenSet */
+$forbiddenSet = array_fill_keys($forbiddenCalls, true);
 foreach ($iterator as $file) {
     if (!$file instanceof SplFileInfo || $file->getExtension() !== 'php') {
         continue;
@@ -55,11 +59,37 @@ foreach ($iterator as $file) {
         continue;
     }
 
-    foreach ($forbiddenCalls as $call) {
-        if (!preg_match('/\b'.preg_quote($call, '/').'\s*\(/', $contents)) {
+    $lines = preg_split("/\r\n|\n|\r/", $contents) ?: [];
+    $tokens = token_get_all($contents);
+    $tokenCount = count($tokens);
+    for ($i = 0; $i < $tokenCount; ++$i) {
+        $token = $tokens[$i];
+        if (!is_array($token) || $token[0] !== T_STRING) {
             continue;
         }
-        $violations[] = sprintf('%s: forbidden call `%s()` in unit test', $path, $call);
+
+        $name = $token[1];
+        if (!isset($forbiddenSet[$name])) {
+            continue;
+        }
+
+        $line = (int) ($token[2] ?? 0);
+        if ($line > 0 && isset($lines[$line - 1]) && str_contains((string) $lines[$line - 1], $ignoreMarker)) {
+            continue;
+        }
+
+        $prev = previousNonWhitespaceToken($tokens, $i);
+        $next = nextNonWhitespaceToken($tokens, $i);
+        if ($next !== '(') {
+            continue;
+        }
+
+        if (is_array($prev) && in_array($prev[0], [T_FUNCTION, T_OBJECT_OPERATOR, T_DOUBLE_COLON, T_NEW], true)) {
+            continue;
+        }
+
+        $relativePath = str_replace(dirname(__DIR__).'/', '', $path);
+        $violations[] = sprintf('%s:%d forbidden call `%s()` in unit test', $relativePath, max(1, $line), $name);
     }
 }
 
@@ -75,3 +105,55 @@ if ($violations !== []) {
 fwrite(STDOUT, "Unit purity check OK.\n");
 exit(0);
 
+/**
+ * @param array<int, mixed> $tokens
+ * @return array{int, string, int}|string|null
+ */
+function previousNonWhitespaceToken(array $tokens, int $index): array|string|null
+{
+    for ($i = $index - 1; $i >= 0; --$i) {
+        $candidate = $tokens[$i];
+        if (is_string($candidate)) {
+            if (trim($candidate) === '') {
+                continue;
+            }
+
+            return $candidate;
+        }
+
+        if (in_array($candidate[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+            continue;
+        }
+
+        return $candidate;
+    }
+
+    return null;
+}
+
+/**
+ * @param array<int, mixed> $tokens
+ * @return array{int, string, int}|string|null
+ */
+function nextNonWhitespaceToken(array $tokens, int $index): array|string|null
+{
+    $count = count($tokens);
+    for ($i = $index + 1; $i < $count; ++$i) {
+        $candidate = $tokens[$i];
+        if (is_string($candidate)) {
+            if (trim($candidate) === '') {
+                continue;
+            }
+
+            return $candidate;
+        }
+
+        if (in_array($candidate[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+            continue;
+        }
+
+        return $candidate;
+    }
+
+    return null;
+}

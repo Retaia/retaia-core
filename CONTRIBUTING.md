@@ -25,6 +25,7 @@ Avant tout changement contractuel: modifier/valider `retaia-docs` puis implémen
 - `tests/Unit` est strictement isolé: pas d'accès réel filesystem, DB, réseau, processus externes, horloge/aléa non contrôlés.
 - Si un test nécessite IO/processus/ressource réelle, il DOIT être placé dans `tests/Integration`.
 - Le pipeline CI exécute un guard bloquant (`scripts/check-unit-purity.php`) sur `tests/Unit`.
+- La suite d'intégration est exécutée explicitement via `composer test:integration` (job CI dédiée).
 
 ## Règles d'implémentation
 - `feature_flags`, `app_feature_enabled`, `user_feature_enabled` suivent les règles normatives.
