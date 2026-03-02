@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Tests\Unit\Startup;
+namespace App\Tests\Integration\Startup;
 
 use App\Ingest\Service\WatchPathResolver;
 use App\Startup\StorageMarkerStartupException;
