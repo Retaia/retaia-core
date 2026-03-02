@@ -24,6 +24,7 @@ final class OpsController
 {
     use ApiErrorResponderTrait;
     use RequestPayloadTrait;
+    private const MAX_SELF_HEALING_SECONDS = 300;
 
     private const ALLOWED_UNMATCHED_REASONS = [
         'missing_parent',
@@ -115,14 +116,27 @@ final class OpsController
         ];
 
         $status = 'ok';
+        $selfHealing = [
+            'active' => false,
+            'deadline_at' => null,
+            'max_self_healing_seconds' => self::MAX_SELF_HEALING_SECONDS,
+        ];
         if (!$databaseOk) {
             $status = 'down';
         } elseif (!$watchPathOk || !$storageWritableOk) {
-            $status = 'degraded';
+            $canSelfHeal = $notWritable === [];
+            if ($canSelfHeal) {
+                $status = 'degraded';
+                $selfHealing['active'] = true;
+                $selfHealing['deadline_at'] = (new \DateTimeImmutable(sprintf('+%d seconds', self::MAX_SELF_HEALING_SECONDS)))->format(DATE_ATOM);
+            } else {
+                $status = 'down';
+            }
         }
 
         return new JsonResponse([
             'status' => $status,
+            'self_healing' => $selfHealing,
             'checks' => $checks,
         ], Response::HTTP_OK);
     }

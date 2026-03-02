@@ -229,6 +229,10 @@ final class WorkflowApiTest extends WebTestCase
 
         self::assertIsArray($payload);
         self::assertSame('ok', $payload['status'] ?? null);
+        self::assertIsArray($payload['self_healing'] ?? null);
+        self::assertSame(false, $payload['self_healing']['active'] ?? null);
+        self::assertSame(null, $payload['self_healing']['deadline_at'] ?? null);
+        self::assertSame(300, $payload['self_healing']['max_self_healing_seconds'] ?? null);
         self::assertIsArray($payload['checks'] ?? null);
         self::assertNotEmpty($payload['checks']);
         $checkNames = array_map(static fn (array $check): string => (string) ($check['name'] ?? ''), $payload['checks']);
@@ -249,6 +253,10 @@ final class WorkflowApiTest extends WebTestCase
 
         self::assertIsArray($payload);
         self::assertSame('degraded', $payload['status'] ?? null);
+        self::assertIsArray($payload['self_healing'] ?? null);
+        self::assertSame(true, $payload['self_healing']['active'] ?? null);
+        self::assertIsString($payload['self_healing']['deadline_at'] ?? null);
+        self::assertSame(300, $payload['self_healing']['max_self_healing_seconds'] ?? null);
         self::assertIsArray($payload['checks'] ?? null);
         $ingestCheck = null;
         foreach ($payload['checks'] as $check) {
