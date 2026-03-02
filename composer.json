@@ -83,7 +83,7 @@
         "staging:logs": "docker compose -f docker-compose.staging.yml logs -f --tail=200 app-staging caddy-staging database-staging",
         "prod:image:build": "bash scripts/build-prod-image.sh",
         "test:unit": "vendor/bin/phpunit --testsuite Unit",
-        "test:integration": "vendor/bin/phpunit --testsuite Integration",
+        "test:integration": "vendor/bin/phpunit --configuration phpunit.integration.xml --testsuite Integration",
         "test:e2e": "vendor/bin/phpunit --configuration phpunit.e2e-coverage.xml --testsuite E2E",
         "test:e2e:coverage": "bash scripts/run-e2e-coverage.sh",
         "test:coverage": "bash scripts/run-coverage.sh",

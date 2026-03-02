@@ -21,6 +21,11 @@ Avant tout changement contractuel: modifier/valider `retaia-docs` puis implémen
 - Toute modification de logique DOIT inclure les changements dans le code applicatif et dans les tests existants impactés (unitaires, fonctionnels/E2E, BDD legacy).
 - En cas d'incohérence logique constatée, ouvrir une proposition de changement dans `retaia-docs` au lieu d'adapter les tests à une implémentation divergente.
 
+## Discipline des tests
+- `tests/Unit` est strictement isolé: pas d'accès réel filesystem, DB, réseau, processus externes, horloge/aléa non contrôlés.
+- Si un test nécessite IO/processus/ressource réelle, il DOIT être placé dans `tests/Integration`.
+- Le pipeline CI exécute un guard bloquant (`scripts/check-unit-purity.php`) sur `tests/Unit`.
+
 ## Règles d'implémentation
 - `feature_flags`, `app_feature_enabled`, `user_feature_enabled` suivent les règles normatives.
 - Les features `CORE_V1_GLOBAL` ne sont jamais désactivables par l'utilisateur.
