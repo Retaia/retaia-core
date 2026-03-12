@@ -25,12 +25,9 @@ final class OpenApiContractTest extends WebTestCase
     {
         $openApi = $this->openApi();
 
-        $this->assertPathHasIdempotencyHeader($openApi, '/assets/{uuid}/decision', 'post');
         $this->assertPathHasIdempotencyHeader($openApi, '/assets/{uuid}/reprocess', 'post');
         $this->assertPathHasIdempotencyHeader($openApi, '/jobs/{job_id}/submit', 'post');
         $this->assertPathHasIdempotencyHeader($openApi, '/jobs/{job_id}/fail', 'post');
-        $this->assertPathHasIdempotencyHeader($openApi, '/batches/moves', 'post');
-        $this->assertPathHasIdempotencyHeader($openApi, '/decisions/apply', 'post');
         $this->assertPathHasIdempotencyHeader($openApi, '/assets/{uuid}/purge', 'post');
     }
 
@@ -44,10 +41,8 @@ final class OpenApiContractTest extends WebTestCase
         $this->ensureAuxiliaryTables();
         $this->seedAsset('11111111-1111-1111-1111-111111111111', AssetState::PROCESSED);
 
-        $client->jsonRequest('POST', '/api/v1/assets/11111111-1111-1111-1111-111111111111/decision', [
-            'action' => 'KEEP',
-        ], [
-            'HTTP_IDEMPOTENCY_KEY' => 'contract-decision-conflict-1',
+        $client->jsonRequest('POST', '/api/v1/assets/11111111-1111-1111-1111-111111111111/purge', [], [
+            'HTTP_IDEMPOTENCY_KEY' => 'contract-purge-conflict-1',
             'HTTP_X_CORRELATION_ID' => 'contract-correlation-id',
         ]);
 
@@ -166,18 +161,16 @@ final class OpenApiContractTest extends WebTestCase
         self::assertArrayHasKey('patch', $methods, 'Mutating REST operations must remain available by contract.');
     }
 
-    public function testDecisionRequestWithoutIdempotencyKeyIsRejected(): void
+    public function testReprocessRequestWithoutIdempotencyKeyIsRejected(): void
     {
         $openApi = $this->openApi();
-        $this->assertPathHasIdempotencyHeader($openApi, '/assets/{uuid}/decision', 'post');
+        $this->assertPathHasIdempotencyHeader($openApi, '/assets/{uuid}/reprocess', 'post');
 
         $client = $this->createAuthenticatedClient();
         $this->ensureAuxiliaryTables();
         $this->seedAsset('22222222-2222-2222-2222-222222222222', AssetState::DECISION_PENDING);
 
-        $client->jsonRequest('POST', '/api/v1/assets/22222222-2222-2222-2222-222222222222/decision', [
-            'action' => 'KEEP',
-        ]);
+        $client->jsonRequest('POST', '/api/v1/assets/22222222-2222-2222-2222-222222222222/reprocess');
 
         self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
         $payload = json_decode((string) $client->getResponse()->getContent(), true);
@@ -292,11 +285,11 @@ final class OpenApiContractTest extends WebTestCase
         $cases = [
             [
                 'method' => 'POST',
-                'url' => '/api/v1/assets/33333333-3333-3333-3333-333333333333/decision',
-                'payload' => ['action' => 'KEEP'],
-                'headers' => ['HTTP_IDEMPOTENCY_KEY' => 'contract-decision-conflict-2'],
+                'url' => '/api/v1/assets/33333333-3333-3333-3333-333333333333/purge',
+                'payload' => [],
+                'headers' => ['HTTP_IDEMPOTENCY_KEY' => 'contract-purge-conflict-2'],
                 'status' => Response::HTTP_CONFLICT,
-                'openapi_path' => '/assets/{uuid}/decision',
+                'openapi_path' => '/assets/{uuid}/purge',
                 'openapi_method' => 'post',
                 'openapi_status' => '409',
             ],

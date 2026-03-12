@@ -19,7 +19,7 @@ final class AuthzMatrixTest extends WebTestCase
     public function testAnonymousActorGetsUnauthorizedForMutatingAssetEndpoint(): void
     {
         $client = static::createClient();
-        $client->jsonRequest('POST', '/api/v1/assets/11111111-1111-1111-1111-111111111111/decision', ['action' => 'KEEP']);
+        $client->jsonRequest('POST', '/api/v1/decisions/preview', ['action' => 'KEEP', 'uuids' => ['11111111-1111-1111-1111-111111111111']]);
 
         self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
         $payload = json_decode((string) $client->getResponse()->getContent(), true);
@@ -31,7 +31,7 @@ final class AuthzMatrixTest extends WebTestCase
         $client = $this->createAgentClient();
         $this->seedDecisionPendingAsset();
 
-        $client->jsonRequest('POST', '/api/v1/assets/11111111-1111-1111-1111-111111111111/decision', ['action' => 'KEEP']);
+        $client->jsonRequest('POST', '/api/v1/decisions/preview', ['action' => 'KEEP', 'uuids' => ['11111111-1111-1111-1111-111111111111']]);
 
         self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
         $payload = json_decode((string) $client->getResponse()->getContent(), true);
