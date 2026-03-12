@@ -21,32 +21,59 @@ final class AssetStateMachineApiTest extends WebTestCase
 
     public function testDecisionTransitionWorksFromDecisionPendingToKeep(): void
     {
-        $client = $this->createAuthenticatedClient(true);
+        $this->withBulkDecisionsEnabled(function (): void {
+            $client = $this->createAuthenticatedClient(true);
 
-        $client->jsonRequest('POST', '/api/v1/assets/11111111-1111-1111-1111-111111111111/decision', [
-            'action' => 'KEEP',
-        ], [
-            'HTTP_IDEMPOTENCY_KEY' => 'asset-decision-ok-1',
-        ]);
+            $client->jsonRequest('POST', '/api/v1/decisions/apply', [
+                'action' => 'KEEP',
+                'uuids' => ['11111111-1111-1111-1111-111111111111'],
+            ], [
+                'HTTP_IDEMPOTENCY_KEY' => 'asset-decision-ok-1',
+            ]);
 
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
-        $payload = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('DECIDED_KEEP', $payload['state'] ?? null);
+            self::assertResponseStatusCodeSame(Response::HTTP_OK);
+            $payload = json_decode((string) $client->getResponse()->getContent(), true);
+            self::assertSame(1, $payload['applied_count'] ?? null);
+            self::assertSame('11111111-1111-1111-1111-111111111111', $payload['applied'][0]['uuid'] ?? null);
+            self::assertSame('DECIDED_KEEP', $payload['applied'][0]['state'] ?? null);
+        });
     }
 
     public function testDecisionTransitionReturns409WhenForbidden(): void
     {
-        $client = $this->createAuthenticatedClient(true);
+        $this->withBulkDecisionsEnabled(function (): void {
+            $client = $this->createAuthenticatedClient(true);
 
-        $client->jsonRequest('POST', '/api/v1/assets/22222222-2222-2222-2222-222222222222/decision', [
-            'action' => 'KEEP',
-        ], [
-            'HTTP_IDEMPOTENCY_KEY' => 'asset-decision-conflict-1',
-        ]);
+            $client->jsonRequest('POST', '/api/v1/decisions/apply', [
+                'action' => 'KEEP',
+                'uuids' => ['22222222-2222-2222-2222-222222222222'],
+            ], [
+                'HTTP_IDEMPOTENCY_KEY' => 'asset-decision-conflict-1',
+            ]);
 
-        self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
-        $payload = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('STATE_CONFLICT', $payload['code'] ?? null);
+            self::assertResponseStatusCodeSame(Response::HTTP_OK);
+            $payload = json_decode((string) $client->getResponse()->getContent(), true);
+            self::assertSame(0, $payload['applied_count'] ?? null);
+            self::assertSame('22222222-2222-2222-2222-222222222222', $payload['ineligible'][0]['uuid'] ?? null);
+            self::assertSame('STATE_CONFLICT', $payload['ineligible'][0]['code'] ?? null);
+        });
+    }
+
+    private function withBulkDecisionsEnabled(callable $callback): void
+    {
+        putenv('APP_FEATURE_DECISIONS_BULK=1');
+        $_ENV['APP_FEATURE_DECISIONS_BULK'] = '1';
+        $_SERVER['APP_FEATURE_DECISIONS_BULK'] = '1';
+        static::ensureKernelShutdown();
+
+        try {
+            $callback();
+        } finally {
+            putenv('APP_FEATURE_DECISIONS_BULK=0');
+            $_ENV['APP_FEATURE_DECISIONS_BULK'] = '0';
+            $_SERVER['APP_FEATURE_DECISIONS_BULK'] = '0';
+            static::ensureKernelShutdown();
+        }
     }
 
     public function testReopenFromArchivedTransitionsToDecisionPending(): void

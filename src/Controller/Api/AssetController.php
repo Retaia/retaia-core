@@ -106,43 +106,6 @@ final class AssetController
         return new JsonResponse($result->payload() ?? [], Response::HTTP_OK);
     }
 
-    #[Route('/{uuid}/decision', name: 'api_assets_decision', methods: ['POST'])]
-    public function decision(string $uuid, Request $request): JsonResponse
-    {
-        if ($this->assetEndpointsHandler->isForbiddenAgentActor()) {
-            return $this->forbiddenActorResponse();
-        }
-
-        return $this->idempotency->execute($request, $this->actorId(), function () use ($uuid, $request): JsonResponse {
-            $result = $this->assetEndpointsHandler->decision($uuid, $this->payload($request));
-            if ($result->status() === AssetEndpointResult::STATUS_FORBIDDEN_ACTOR) {
-                return $this->forbiddenActorResponse();
-            }
-            if ($result->status() === AssetEndpointResult::STATUS_NOT_FOUND) {
-                return new JsonResponse([
-                    'code' => 'NOT_FOUND',
-                    'message' => $this->translator->trans('asset.error.not_found'),
-                ], Response::HTTP_NOT_FOUND);
-            }
-
-            if ($result->status() === AssetEndpointResult::STATUS_STATE_CONFLICT) {
-                return new JsonResponse([
-                    'code' => 'STATE_CONFLICT',
-                    'message' => $this->translator->trans('asset.error.state_conflict'),
-                ], Response::HTTP_CONFLICT);
-            }
-
-            if ($result->status() === AssetEndpointResult::STATUS_VALIDATION_FAILED) {
-                return new JsonResponse([
-                    'code' => 'VALIDATION_FAILED',
-                    'message' => $this->translator->trans('asset.error.decision_action_required'),
-                ], Response::HTTP_UNPROCESSABLE_ENTITY);
-            }
-
-            return new JsonResponse($result->payload() ?? [], Response::HTTP_OK);
-        });
-    }
-
     #[Route('/{uuid}/reopen', name: 'api_assets_reopen', methods: ['POST'])]
     public function reopen(string $uuid): JsonResponse
     {

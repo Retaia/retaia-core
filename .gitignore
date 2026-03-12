@@ -7,6 +7,7 @@
 /node_modules/
 /ui/
 /config/reference.php
+/docker/retaia/*
 
 ###> phpunit/phpunit ###
 /phpunit.xml
