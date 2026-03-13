@@ -32,6 +32,7 @@ It manages authentication, policy/runtime feature governance, asset lifecycle, j
 - Product and behavior rules live in `specs/` (git submodule: `retaia-docs`)
 - Any normative behavior change must be made in specs first
 - Local `docs/` are implementation and operations guides (non-normative)
+- Functional runbooks now live in `retaia-docs/ops/`
 
 ## Tech Stack
 
@@ -200,6 +201,7 @@ Details:
 
 - `docs/GITHUB-WORKFLOWS.md`
 - `docs/RELEASE-OPS-RUNBOOK.md`
+- `https://github.com/Retaia/retaia-docs/tree/master/ops`
 
 ## Contributing
 
@@ -217,7 +219,12 @@ Start here:
 
 Core docs:
 
-- `docs/AUTH-OPS-RUNBOOK.md`
+- local implementation guides: `docs/*.md`
+- functional operations runbooks: `retaia-docs/ops/*.md`
+- normative product/API rules: `specs/*`
+
+- local implementation docs: `docs/*.md`
+- functional ops runbooks: `specs/ops/*.md`
 - `docs/OBSERVABILITY-RUNBOOK.md`
 - `docs/OPS-READINESS-CHECKLIST.md`
 - `docs/BOOTSTRAP-TECHNIQUE.md`
