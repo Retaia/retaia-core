@@ -307,6 +307,22 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
     }
 
+    public function testWebAuthnAuthenticateOptionsIsRateLimited(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.22');
+
+        for ($attempt = 1; $attempt <= 20; ++$attempt) {
+            $client->jsonRequest('POST', '/api/v1/auth/webauthn/authenticate/options', []);
+            self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        }
+
+        $client->jsonRequest('POST', '/api/v1/auth/webauthn/authenticate/options', []);
+        self::assertResponseStatusCodeSame(Response::HTTP_TOO_MANY_REQUESTS);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('TOO_MANY_ATTEMPTS', $payload['code'] ?? null);
+        self::assertGreaterThanOrEqual(1, (int) ($payload['retry_in_seconds'] ?? 0));
+    }
+
     private function forceTokenExpired(string $token): void
     {
         /** @var Connection $connection */
