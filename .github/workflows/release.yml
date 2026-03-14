@@ -5,6 +5,9 @@ on:
     tags:
       - "v*"
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 permissions:
   contents: write
   id-token: write
@@ -20,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
@@ -74,7 +77,7 @@ jobs:
           shasum -a 256 "${OUT_DIR}/${PACKAGE}.sbom.cdx.json" > "${OUT_DIR}/${PACKAGE}.sbom.cdx.json.sha256"
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@v4.1.0
 
       - name: Sign release artifacts (keyless)
         shell: bash
@@ -116,12 +119,12 @@ jobs:
             "${OUT_DIR}/${PACKAGE}.sbom.cdx.json"
 
       - name: Attest release archive provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: ${{ steps.meta.outputs.out_dir }}/${{ steps.meta.outputs.package }}.tar.gz
 
       - name: Attest SBOM provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: ${{ steps.meta.outputs.out_dir }}/${{ steps.meta.outputs.package }}.sbom.cdx.json
 

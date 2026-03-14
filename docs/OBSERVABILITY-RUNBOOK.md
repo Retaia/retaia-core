@@ -1,80 +1,50 @@
-# Observability Runbook
+# Observability Runbook (Core local)
 
 > Statut : non normatif.
+> Triage fonctionnel global : `retaia-docs/ops/OBSERVABILITY-TRIAGE.md`.
 
 ## Objectif
 
-Fournir un socle opérationnel minimal pour diagnostiquer les incidents API côté jobs et auth.
+Documenter les commandes et details d'implementation observabilite propres a `retaia-core`.
 
-## Événements structurés clés
+## Evenements et stockage locaux
 
-- `jobs.list_claimable`
-- `jobs.claim.succeeded`
-- `jobs.claim.conflict`
-- `jobs.heartbeat.succeeded`
-- `jobs.heartbeat.conflict`
-- `jobs.submit.succeeded`
-- `jobs.submit.conflict`
-- `jobs.fail.succeeded`
-- `jobs.fail.conflict`
-- `auth.login.failed`
-- `auth.login.throttled`
-- `auth.password_reset.*`
-- `auth.email_verification.*`
+- table de metriques persistantes: `ops_metric_event`
+- cles emises localement:
+  - `api.error.<CODE>`
+  - `lock.active.detected`
+  - `lock.active.detected.asset_move_lock`
+  - `lock.active.detected.asset_purge_lock`
+  - `lock.acquire.success.asset_move_lock`
+  - `lock.acquire.failed.asset_move_lock`
+  - `lock.release.asset_move_lock`
+  - `lock.acquire.success.asset_purge_lock`
+  - `lock.acquire.failed.asset_purge_lock`
+  - `lock.release.asset_purge_lock`
 
-## Champs à vérifier dans les logs
+## Commandes locales
 
-- `job_id`
-- `asset_uuid`
-- `agent_id`
-- `job_type`
-- `status`
-- `error_code` (sur fail)
-- `retryable` (sur fail)
-
-## Métriques opérationnelles persistées
-
-Table: `ops_metric_event`
-
-Clés émises:
-
-- `api.error.STATE_CONFLICT` (et plus généralement `api.error.<CODE>`)
-- `lock.active.detected`
-- `lock.active.detected.asset_move_lock`
-- `lock.active.detected.asset_purge_lock`
-- `lock.acquire.success.asset_move_lock`
-- `lock.acquire.failed.asset_move_lock`
-- `lock.release.asset_move_lock`
-- `lock.acquire.success.asset_purge_lock`
-- `lock.acquire.failed.asset_purge_lock`
-- `lock.release.asset_purge_lock`
-
-Commande d'alerte:
+Alerte conflits/locks:
 
 ```bash
 php bin/console app:alerts:state-conflicts --window-minutes=15 --state-conflicts-threshold=20 --lock-failed-threshold=10 --active-locks-threshold=200 --stale-locks-threshold=0 --stale-lock-minutes=30
 ```
 
-La commande retourne un code non-zéro si un seuil est dépassé.
-
-Commande de recovery (watchdog):
+Recovery stale locks:
 
 ```bash
 php bin/console app:locks:watchdog-recover --stale-lock-minutes=30
 php bin/console app:locks:watchdog-recover --stale-lock-minutes=30 --dry-run
 ```
 
-Cette commande relâche les locks `asset_move_lock` / `asset_purge_lock` actifs au-delà du seuil.
+Readiness et probe:
 
-## Procédure de triage rapide
+```bash
+php bin/console app:ops:readiness-check
+php bin/console app:sentry:probe
+```
 
-1. Vérifier `/api/v1/health` et l’état base PostgreSQL.
-2. Lancer `php bin/console app:ops:readiness-check` pour valider les prérequis runtime (DB + ingest + sentry prod).
-3. Corréler les erreurs API avec les événements structurés sur la même fenêtre temporelle.
-4. Pour les conflits jobs, regrouper par `job_id` puis vérifier `agent_id` et fréquence.
-5. Pour les incidents auth, vérifier les spikes `auth.login.throttled` et les codes API `429`.
-6. Pour les incidents de concurrence, lancer `app:alerts:state-conflicts` puis investiguer les clés lock + `STATE_CONFLICT`.
-7. Vérifier la sonde Sentry (prod):
-   - `php bin/console app:sentry:probe`
-   - DSN attendu: host `sentry.fullfrontend.be`
-8. En cas de correction, passer par PR avec tests de non-régression.
+## Details d'implementation Core
+
+- le probe Sentry prod attend un host `sentry.fullfrontend.be`
+- le watchdog relache les locks `asset_move_lock` et `asset_purge_lock` depassant le seuil configure

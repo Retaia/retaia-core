@@ -387,6 +387,15 @@ final class WorkflowApiTest extends WebTestCase
         self::assertSame(1, $queue['summary']['failed_total'] ?? null);
         self::assertNotEmpty($queue['by_type'] ?? []);
 
+        $client->request('GET', '/api/v1/ops/agents?limit=5&offset=0');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $agents = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame(0, $agents['total'] ?? null);
+        self::assertSame(5, $agents['limit'] ?? null);
+        self::assertSame(0, $agents['offset'] ?? null);
+        self::assertIsArray($agents['items'] ?? null);
+        self::assertCount(0, $agents['items'] ?? []);
+
         $client->request('GET', '/api/v1/ops/ingest/unmatched?reason=missing_parent&limit=10');
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $unmatched = json_decode((string) $client->getResponse()->getContent(), true);
@@ -501,6 +510,9 @@ final class WorkflowApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
 
         $client->request('GET', '/api/v1/ops/jobs/queue');
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+
+        $client->request('GET', '/api/v1/ops/agents');
         self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
 
         $client->request('GET', '/api/v1/ops/ingest/unmatched');

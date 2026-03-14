@@ -10,7 +10,7 @@ final class ClientKindTest extends TestCase
     public function testInteractiveKinds(): void
     {
         self::assertSame(
-            [ClientKind::UI_WEB, ClientKind::UI_MOBILE, ClientKind::AGENT],
+            [ClientKind::UI_WEB, ClientKind::AGENT],
             ClientKind::interactive()
         );
     }
@@ -26,7 +26,6 @@ final class ClientKindTest extends TestCase
     public function testMembershipHelpers(): void
     {
         self::assertTrue(ClientKind::isInteractive(ClientKind::UI_WEB));
-        self::assertTrue(ClientKind::isInteractive(ClientKind::UI_MOBILE));
         self::assertTrue(ClientKind::isInteractive(ClientKind::AGENT));
         self::assertFalse(ClientKind::isInteractive(ClientKind::MCP));
 

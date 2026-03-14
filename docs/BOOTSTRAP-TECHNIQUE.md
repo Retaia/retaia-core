@@ -107,11 +107,11 @@ Changements actés côté Core:
   - les états métier device flow (`PENDING`, `APPROVED`, `DENIED`, `EXPIRED`) sont pilotés via `200` + `status`
   - les anciens signaux `401 AUTHORIZATION_PENDING` et `403 ACCESS_DENIED` ne sont plus utilisés pour ce pilotage
 - `POST /api/v1/auth/clients/token`:
-  - `client_kind=UI_WEB` est refusé en `403 FORBIDDEN_ACTOR` (et non `422`)
+  - `client_kind in {UI_WEB, MCP}` est refusé en `403 FORBIDDEN_ACTOR` (et non `422`)
 
 Impact migration client:
 
-- les clients techniques (Agent/MCP/UI Rust) doivent piloter la machine de poll device depuis le payload de `200` (`status`)
+- les clients techniques (Agent/MCP) et surfaces interactives concernées doivent piloter la machine de poll device depuis le payload de `200` (`status`)
 - les clients ne doivent plus brancher la logique de poll sur des `401/403` legacy
 - les erreurs HTTP hors état métier restent inchangées (`400`, `422`, `429`)
 

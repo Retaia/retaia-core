@@ -231,6 +231,25 @@ final class OpsController
         return new JsonResponse($this->jobs->queueDiagnosticsSnapshot(), Response::HTTP_OK);
     }
 
+    #[Route('/agents', name: 'api_ops_agents', methods: ['GET'])]
+    public function agents(Request $request): JsonResponse
+    {
+        $forbidden = $this->requireAdminActor();
+        if ($forbidden instanceof JsonResponse) {
+            return $forbidden;
+        }
+
+        $limit = max(1, min(200, (int) $request->query->get('limit', 50)));
+        $offset = max(0, (int) $request->query->get('offset', 0));
+
+        return new JsonResponse([
+            'items' => [],
+            'total' => 0,
+            'limit' => $limit,
+            'offset' => $offset,
+        ], Response::HTTP_OK);
+    }
+
     #[Route('/ingest/unmatched', name: 'api_ops_ingest_unmatched', methods: ['GET'])]
     public function ingestUnmatched(Request $request): JsonResponse
     {

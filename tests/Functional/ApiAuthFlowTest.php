@@ -218,6 +218,32 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
     }
 
+    public function testWebAuthnRegisterOptionsRequiresAuthentication(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.18');
+
+        $client->jsonRequest('POST', '/api/v1/auth/webauthn/register/options');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
+    }
+
+    public function testWebAuthnRegisterOptionsReturnsConflictWhenUnsupported(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.19');
+        $this->loginAndAttachBearer($client, [
+            'email' => FixtureUsers::ADMIN_EMAIL,
+            'password' => FixtureUsers::DEFAULT_PASSWORD,
+        ]);
+
+        $client->jsonRequest('POST', '/api/v1/auth/webauthn/register/options');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('STATE_CONFLICT', $payload['code'] ?? null);
+    }
+
     private function forceTokenExpired(string $token): void
     {
         /** @var Connection $connection */

@@ -221,6 +221,7 @@ final class AuthzMatrixTest extends WebTestCase
         yield ['GET', '/api/v1/ops/locks', []];
         yield ['POST', '/api/v1/ops/locks/recover', []];
         yield ['GET', '/api/v1/ops/jobs/queue', []];
+        yield ['GET', '/api/v1/ops/agents', []];
         yield ['GET', '/api/v1/ops/ingest/unmatched', []];
         yield ['POST', '/api/v1/ops/ingest/requeue', []];
     }
