@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v6
 
       - name: Validate PR description structure
         run: bash scripts/check-pr-metadata.sh
@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
@@ -54,19 +54,19 @@ jobs:
       APP_DEBUG: "1"
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@2.36.0
+        uses: shivammathur/setup-php@v2
         with:
           php-version: "8.4"
           coverage: none
           tools: composer:v2
 
       - name: Cache Composer
-        uses: actions/cache@v5.0.3
+        uses: actions/cache@v5
         with:
           path: |
             ~/.composer/cache
@@ -110,19 +110,19 @@ jobs:
       APP_DEBUG: "1"
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@2.36.0
+        uses: shivammathur/setup-php@v2
         with:
           php-version: "8.4"
           coverage: pcov
           tools: composer:v2
 
       - name: Cache Composer
-        uses: actions/cache@v5.0.3
+        uses: actions/cache@v5
         with:
           path: |
             ~/.composer/cache
@@ -148,19 +148,19 @@ jobs:
       APP_DEBUG: "1"
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@2.36.0
+        uses: shivammathur/setup-php@v2
         with:
           php-version: "8.4"
           coverage: none
           tools: composer:v2
 
       - name: Cache Composer
-        uses: actions/cache@v5.0.3
+        uses: actions/cache@v5
         with:
           path: |
             ~/.composer/cache
@@ -183,19 +183,19 @@ jobs:
       APP_DEBUG: "1"
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@2.36.0
+        uses: shivammathur/setup-php@v2
         with:
           php-version: "8.4"
           coverage: none
           tools: composer:v2
 
       - name: Cache Composer
-        uses: actions/cache@v5.0.3
+        uses: actions/cache@v5
         with:
           path: |
             ~/.composer/cache
