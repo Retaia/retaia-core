@@ -229,7 +229,7 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
     }
 
-    public function testWebAuthnRegisterOptionsReturnsConflictWhenUnsupported(): void
+    public function testWebAuthnRegisterAndVerifyFlow(): void
     {
         $client = $this->createIsolatedClient('10.0.0.19');
         $this->loginAndAttachBearer($client, [
@@ -239,9 +239,72 @@ final class ApiAuthFlowTest extends WebTestCase
 
         $client->jsonRequest('POST', '/api/v1/auth/webauthn/register/options');
 
-        self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $payload = json_decode($client->getResponse()->getContent(), true);
-        self::assertSame('STATE_CONFLICT', $payload['code'] ?? null);
+        self::assertIsArray($payload);
+        self::assertIsString($payload['request_id'] ?? null);
+        self::assertIsArray($payload['public_key'] ?? null);
+        self::assertIsString($payload['public_key']['challenge'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/auth/webauthn/register/verify', [
+            'request_id' => $payload['request_id'],
+            'credential' => [
+                'request_id' => $payload['request_id'],
+                'id' => 'credential-test',
+            ],
+            'device_label' => 'MacBook Passkey',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $verifyPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($verifyPayload);
+        self::assertMatchesRegularExpression('/^[0-9a-f-]{36}$/', (string) ($verifyPayload['device_id'] ?? ''));
+        self::assertSame('MacBook Passkey', $verifyPayload['device_label'] ?? null);
+        self::assertIsString($verifyPayload['webauthn_fingerprint'] ?? null);
+    }
+
+    public function testWebAuthnAuthenticateOptionsAndVerifyFlow(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.20');
+
+        $client->jsonRequest('POST', '/api/v1/auth/webauthn/authenticate/options', [
+            'email' => FixtureUsers::ADMIN_EMAIL,
+            'client_id' => 'webauthn-interactive',
+            'client_kind' => 'UI_WEB',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        self::assertIsString($payload['request_id'] ?? null);
+        self::assertIsArray($payload['public_key'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/auth/webauthn/authenticate/verify', [
+            'request_id' => $payload['request_id'],
+            'credential' => [
+                'request_id' => $payload['request_id'],
+                'id' => 'credential-test',
+            ],
+            'client_id' => 'webauthn-interactive',
+            'client_kind' => 'UI_WEB',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $verifyPayload = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($verifyPayload);
+        self::assertIsString($verifyPayload['access_token'] ?? null);
+        self::assertSame('Bearer', $verifyPayload['token_type'] ?? null);
+        self::assertSame('webauthn-interactive', $verifyPayload['client_id'] ?? null);
+        self::assertSame('UI_WEB', $verifyPayload['client_kind'] ?? null);
+    }
+
+    public function testWebAuthnAuthenticateVerifyFailsWhenRequestIdMissing(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.21');
+
+        $client->jsonRequest('POST', '/api/v1/auth/webauthn/authenticate/verify', [
+            'credential' => ['id' => 'credential-test'],
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
     }
 
     private function forceTokenExpired(string $token): void
