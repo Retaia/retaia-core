@@ -107,6 +107,23 @@ final class AuthController
         ], Response::HTTP_OK);
     }
 
+    #[Route('/webauthn/register/options', name: 'api_auth_webauthn_register_options', methods: ['POST'])]
+    public function webauthnRegisterOptions(): JsonResponse
+    {
+        $result = $this->authSelfServiceEndpointsHandler->me();
+        if ($result->status() === AuthMeEndpointResult::STATUS_UNAUTHORIZED) {
+            return new JsonResponse(
+                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
+                Response::HTTP_UNAUTHORIZED
+            );
+        }
+
+        return new JsonResponse(
+            ['code' => 'STATE_CONFLICT', 'message' => $this->translator->trans('auth.error.state_conflict')],
+            Response::HTTP_CONFLICT
+        );
+    }
+
     #[Route('/2fa/setup', name: 'api_auth_2fa_setup', methods: ['POST'])]
     public function twoFactorSetup(): JsonResponse
     {
