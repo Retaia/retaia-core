@@ -266,6 +266,26 @@ final class ApiAuthFlowTest extends WebTestCase
     {
         $client = $this->createIsolatedClient('10.0.0.20');
 
+        $this->loginAndAttachBearer($client, [
+            'email' => FixtureUsers::ADMIN_EMAIL,
+            'password' => FixtureUsers::DEFAULT_PASSWORD,
+        ]);
+        $client->jsonRequest('POST', '/api/v1/auth/webauthn/register/options');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $registerOptions = json_decode($client->getResponse()->getContent(), true);
+        self::assertIsArray($registerOptions);
+
+        $client->jsonRequest('POST', '/api/v1/auth/webauthn/register/verify', [
+            'request_id' => $registerOptions['request_id'] ?? '',
+            'credential' => [
+                'request_id' => $registerOptions['request_id'] ?? '',
+                'id' => 'credential-test',
+            ],
+            'device_label' => 'MacBook Passkey',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $client->setServerParameter('HTTP_AUTHORIZATION', '');
+
         $client->jsonRequest('POST', '/api/v1/auth/webauthn/authenticate/options', [
             'email' => FixtureUsers::ADMIN_EMAIL,
             'client_id' => 'webauthn-interactive',
@@ -293,6 +313,22 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('Bearer', $verifyPayload['token_type'] ?? null);
         self::assertSame('webauthn-interactive', $verifyPayload['client_id'] ?? null);
         self::assertSame('UI_WEB', $verifyPayload['client_kind'] ?? null);
+    }
+
+    public function testWebAuthnAuthenticateOptionsRejectsUserWithoutRegisteredDevice(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.23');
+        $email = sprintf('no-passkey-%s@retaia.local', bin2hex(random_bytes(4)));
+        $this->insertUser($email, 'Change-me1!', ['ROLE_USER'], true);
+
+        $client->jsonRequest('POST', '/api/v1/auth/webauthn/authenticate/options', [
+            'email' => $email,
+            'client_id' => 'webauthn-interactive',
+            'client_kind' => 'UI_WEB',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
     }
 
     public function testWebAuthnAuthenticateVerifyFailsWhenRequestIdMissing(): void
