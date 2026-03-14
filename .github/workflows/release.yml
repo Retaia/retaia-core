@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
         with:
           submodules: recursive
 
@@ -60,7 +60,7 @@ jobs:
           tar -C "${OUT_DIR}" -czf "${OUT_DIR}/${PACKAGE}.tar.gz" "${PACKAGE}"
 
       - name: Generate SBOM (CycloneDX JSON)
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@v0.23.1
         with:
           path: ${{ steps.meta.outputs.out_dir }}/${{ steps.meta.outputs.package }}
           format: cyclonedx-json
@@ -77,7 +77,7 @@ jobs:
           shasum -a 256 "${OUT_DIR}/${PACKAGE}.sbom.cdx.json" > "${OUT_DIR}/${PACKAGE}.sbom.cdx.json.sha256"
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@v4.1.0
 
       - name: Sign release artifacts (keyless)
         shell: bash
@@ -119,12 +119,12 @@ jobs:
             "${OUT_DIR}/${PACKAGE}.sbom.cdx.json"
 
       - name: Attest release archive provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4.1.0
         with:
           subject-path: ${{ steps.meta.outputs.out_dir }}/${{ steps.meta.outputs.package }}.tar.gz
 
       - name: Attest SBOM provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4.1.0
         with:
           subject-path: ${{ steps.meta.outputs.out_dir }}/${{ steps.meta.outputs.package }}.sbom.cdx.json
 
