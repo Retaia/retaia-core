@@ -295,14 +295,26 @@ final class AuthController
         $allowCredentials = [];
         if ($email !== '') {
             $user = $this->findUserByEmail($email);
-            if ($user instanceof User) {
-                $devices = $this->loadWebauthnDevices($user->getId());
-                foreach ($devices as $device) {
-                    $allowCredentials[] = [
-                        'type' => 'public-key',
-                        'id' => (string) ($device['credential_id'] ?? ''),
-                    ];
-                }
+            if (!$user instanceof User || !$user->isEmailVerified()) {
+                return new JsonResponse(
+                    ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.invalid_credentials')],
+                    Response::HTTP_UNAUTHORIZED
+                );
+            }
+
+            $devices = $this->loadWebauthnDevices($user->getId());
+            if ($devices === []) {
+                return new JsonResponse(
+                    ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.invalid_credentials')],
+                    Response::HTTP_UNAUTHORIZED
+                );
+            }
+
+            foreach ($devices as $device) {
+                $allowCredentials[] = [
+                    'type' => 'public-key',
+                    'id' => (string) ($device['credential_id'] ?? ''),
+                ];
             }
         }
 
