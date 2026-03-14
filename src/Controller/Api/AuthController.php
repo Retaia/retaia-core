@@ -42,6 +42,7 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
@@ -64,6 +65,8 @@ final class AuthController
         private MetricEventRepository $metrics,
         #[Autowire(service: 'cache.app')]
         private CacheItemPoolInterface $cache,
+        #[Autowire(service: 'limiter.webauthn_authenticate')]
+        private RateLimiterFactory $webauthnAuthenticateRateLimiter,
         private EntityManagerInterface $entityManager,
         private LoggerInterface $logger,
     ) {
@@ -242,6 +245,13 @@ final class AuthController
     {
         $payload = $this->payload($request);
         $email = trim((string) ($payload['email'] ?? ''));
+        $remoteAddress = (string) ($request->getClientIp() ?? 'unknown');
+        $rateLimitKey = $email !== '' ? mb_strtolower($email).'|'.$remoteAddress : 'anonymous|'.$remoteAddress;
+        $throttled = $this->consumeWebauthnAuthenticateRateLimit($rateLimitKey);
+        if ($throttled instanceof JsonResponse) {
+            return $throttled;
+        }
+
         if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.invalid_user_feature_payload')],
@@ -304,6 +314,12 @@ final class AuthController
     public function webauthnAuthenticateVerify(Request $request): JsonResponse
     {
         $payload = $this->payload($request);
+        $remoteAddress = (string) ($request->getClientIp() ?? 'unknown');
+        $throttled = $this->consumeWebauthnAuthenticateRateLimit('verify|'.$remoteAddress);
+        if ($throttled instanceof JsonResponse) {
+            return $throttled;
+        }
+
         if (!is_array($payload['credential'] ?? null)) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.invalid_user_feature_payload')],
@@ -1030,6 +1046,29 @@ final class AuthController
         $user = $this->entityManager->getRepository(User::class)->findOneBy(['email' => $normalized]);
 
         return $user instanceof User ? $user : null;
+    }
+
+    private function consumeWebauthnAuthenticateRateLimit(string $key): ?JsonResponse
+    {
+        $limit = $this->webauthnAuthenticateRateLimiter->create($key)->consume(1);
+        if ($limit->isAccepted()) {
+            return null;
+        }
+
+        $retryAfter = $limit->getRetryAfter();
+        $retryInSeconds = max(
+            1,
+            $retryAfter instanceof \DateTimeImmutable ? $retryAfter->getTimestamp() - time() : 1
+        );
+
+        return new JsonResponse(
+            [
+                'code' => 'TOO_MANY_ATTEMPTS',
+                'message' => $this->translator->trans('auth.error.too_many_client_token_requests'),
+                'retry_in_seconds' => $retryInSeconds,
+            ],
+            Response::HTTP_TOO_MANY_REQUESTS
+        );
     }
 
 }
