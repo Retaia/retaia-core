@@ -222,9 +222,6 @@ Core docs:
 - local implementation guides: `docs/*.md`
 - functional operations runbooks: `retaia-docs/ops/*.md`
 - normative product/API rules: `specs/*`
-
-- local implementation docs: `docs/*.md`
-- functional ops runbooks: `specs/ops/*.md`
 - `docs/OBSERVABILITY-RUNBOOK.md`
 - `docs/OPS-READINESS-CHECKLIST.md`
 - `docs/BOOTSTRAP-TECHNIQUE.md`
