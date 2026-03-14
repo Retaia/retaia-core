@@ -33,6 +33,7 @@ use App\Controller\RequestPayloadTrait;
 use App\Domain\AuthClient\ClientKind;
 use App\Domain\AuthClient\DeviceFlowStatus;
 use App\Entity\User;
+use Doctrine\DBAL\Connection;
 use App\Observability\MetricName;
 use App\Observability\Repository\MetricEventRepository;
 use Doctrine\ORM\EntityManagerInterface;
@@ -65,6 +66,7 @@ final class AuthController
         private MetricEventRepository $metrics,
         #[Autowire(service: 'cache.app')]
         private CacheItemPoolInterface $cache,
+        private Connection $connection,
         #[Autowire(service: 'limiter.webauthn_authenticate')]
         private RateLimiterFactory $webauthnAuthenticateRateLimiter,
         private EntityManagerInterface $entityManager,
@@ -144,6 +146,7 @@ final class AuthController
         $cacheItem->set([
             'user_id' => $userId,
             'email' => $userEmail,
+            'challenge' => $challenge,
             'expires_at' => time() + 300,
             'used' => false,
         ]);
@@ -224,12 +227,17 @@ final class AuthController
         if ($deviceLabel === '') {
             $deviceLabel = 'Passkey';
         }
+        $credentialId = trim((string) ($payload['credential']['id'] ?? ''));
+        if ($credentialId === '') {
+            $credentialId = $deviceId;
+        }
 
         $fingerprintSource = json_encode($payload['credential'], JSON_UNESCAPED_SLASHES);
         $fingerprint = hash('sha256', is_string($fingerprintSource) ? $fingerprintSource : '');
         $this->storeWebauthnDevice((string) $me->id(), [
             'device_id' => $deviceId,
             'device_label' => $deviceLabel,
+            'credential_id' => $credentialId,
             'webauthn_fingerprint' => $fingerprint,
         ]);
 
@@ -292,7 +300,7 @@ final class AuthController
                 foreach ($devices as $device) {
                     $allowCredentials[] = [
                         'type' => 'public-key',
-                        'id' => (string) ($device['device_id'] ?? ''),
+                        'id' => (string) ($device['credential_id'] ?? ''),
                     ];
                 }
             }
@@ -366,6 +374,25 @@ final class AuthController
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.invalid_credentials')],
                 Response::HTTP_UNAUTHORIZED
             );
+        }
+        $credentialId = trim((string) ($payload['credential']['id'] ?? ''));
+        if ($credentialId !== '') {
+            $userDevices = $this->loadWebauthnDevices($user->getId());
+            if ($userDevices !== []) {
+                $knownCredential = false;
+                foreach ($userDevices as $device) {
+                    if (hash_equals((string) ($device['credential_id'] ?? ''), $credentialId)) {
+                        $knownCredential = true;
+                        break;
+                    }
+                }
+                if (!$knownCredential) {
+                    return new JsonResponse(
+                        ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.invalid_credentials')],
+                        Response::HTTP_UNAUTHORIZED
+                    );
+                }
+            }
         }
 
         $clientId = trim((string) ($payload['client_id'] ?? ($state['client_id'] ?? 'interactive-default')));
@@ -1013,14 +1040,27 @@ final class AuthController
      */
     private function storeWebauthnDevice(string $userId, array $device): void
     {
-        $item = $this->cache->getItem($this->devicesCacheKey($userId));
-        $devices = $item->get();
-        if (!is_array($devices)) {
-            $devices = [];
+        $credentialId = (string) ($device['credential_id'] ?? '');
+        if ($credentialId === '') {
+            return;
         }
-        $devices[] = $device;
-        $item->set($devices);
-        $this->cache->save($item);
+
+        $exists = $this->connection->fetchOne(
+            'SELECT 1 FROM webauthn_device WHERE user_id = :userId AND credential_id = :credentialId',
+            ['userId' => $userId, 'credentialId' => $credentialId]
+        );
+        if ($exists !== false) {
+            return;
+        }
+
+        $this->connection->insert('webauthn_device', [
+            'id' => (string) ($device['device_id'] ?? $this->normalizeUuid('')),
+            'user_id' => $userId,
+            'credential_id' => $credentialId,
+            'device_label' => (string) ($device['device_label'] ?? 'Passkey'),
+            'webauthn_fingerprint' => (string) ($device['webauthn_fingerprint'] ?? ''),
+            'created_at' => (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d H:i:s'),
+        ]);
     }
 
     /**
@@ -1028,12 +1068,20 @@ final class AuthController
      */
     private function loadWebauthnDevices(string $userId): array
     {
-        $devices = $this->cache->getItem($this->devicesCacheKey($userId))->get();
-        if (!is_array($devices)) {
-            return [];
-        }
+        $rows = $this->connection->fetchAllAssociative(
+            'SELECT id AS device_id, credential_id, device_label, webauthn_fingerprint FROM webauthn_device WHERE user_id = :userId ORDER BY created_at ASC',
+            ['userId' => $userId]
+        );
 
-        return array_values(array_filter($devices, static fn ($entry): bool => is_array($entry)));
+        return array_map(
+            static fn (array $row): array => [
+                'device_id' => (string) ($row['device_id'] ?? ''),
+                'credential_id' => (string) ($row['credential_id'] ?? ''),
+                'device_label' => (string) ($row['device_label'] ?? ''),
+                'webauthn_fingerprint' => (string) ($row['webauthn_fingerprint'] ?? ''),
+            ],
+            $rows
+        );
     }
 
     private function findUserByEmail(string $email): ?User
