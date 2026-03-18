@@ -69,6 +69,8 @@ final class AuthController
         private Connection $connection,
         #[Autowire(service: 'limiter.webauthn_authenticate')]
         private RateLimiterFactory $webauthnAuthenticateRateLimiter,
+        #[Autowire(service: 'limiter.auth_refresh')]
+        private RateLimiterFactory $refreshRateLimiter,
         private EntityManagerInterface $entityManager,
         private LoggerInterface $logger,
     ) {
@@ -78,6 +80,50 @@ final class AuthController
     public function login(): JsonResponse
     {
         throw new \LogicException('This endpoint is handled by the security authenticator.');
+    }
+
+    #[Route('/refresh', name: 'api_auth_refresh', methods: ['POST'])]
+    public function refresh(Request $request): JsonResponse
+    {
+        $payload = $this->payload($request);
+        $refreshToken = trim((string) ($payload['refresh_token'] ?? ''));
+        if ($refreshToken === '') {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.refresh_token_required')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        $clientId = trim((string) ($payload['client_id'] ?? ''));
+        $clientId = $clientId !== '' ? $clientId : null;
+
+        $clientKind = trim((string) ($payload['client_kind'] ?? ''));
+        if ($clientKind !== '' && !ClientKind::isInteractive($clientKind)) {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.client_kind_required')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        $remoteAddress = (string) ($request->getClientIp() ?? 'unknown');
+        $throttled = $this->consumeRefreshRateLimit(hash('sha256', $refreshToken.'|'.$remoteAddress));
+        if ($throttled instanceof JsonResponse) {
+            return $throttled;
+        }
+
+        $tokenPayload = $this->userAccessTokenService->refresh(
+            $refreshToken,
+            $clientId,
+            $clientKind !== '' ? $clientKind : null
+        );
+        if (!is_array($tokenPayload)) {
+            return new JsonResponse(
+                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.invalid_or_expired_token')],
+                Response::HTTP_UNAUTHORIZED
+            );
+        }
+
+        return new JsonResponse($tokenPayload, Response::HTTP_OK);
     }
 
     #[Route('/logout', name: 'api_auth_logout', methods: ['POST'])]
@@ -1125,6 +1171,29 @@ final class AuthController
             [
                 'code' => 'TOO_MANY_ATTEMPTS',
                 'message' => $this->translator->trans('auth.error.too_many_client_token_requests'),
+                'retry_in_seconds' => $retryInSeconds,
+            ],
+            Response::HTTP_TOO_MANY_REQUESTS
+        );
+    }
+
+    private function consumeRefreshRateLimit(string $key): ?JsonResponse
+    {
+        $limit = $this->refreshRateLimiter->create($key)->consume(1);
+        if ($limit->isAccepted()) {
+            return null;
+        }
+
+        $retryAfter = $limit->getRetryAfter();
+        $retryInSeconds = max(
+            1,
+            $retryAfter instanceof \DateTimeImmutable ? $retryAfter->getTimestamp() - time() : 1
+        );
+
+        return new JsonResponse(
+            [
+                'code' => 'TOO_MANY_ATTEMPTS',
+                'message' => $this->translator->trans('auth.error.too_many_refresh_requests'),
                 'retry_in_seconds' => $retryInSeconds,
             ],
             Response::HTTP_TOO_MANY_REQUESTS

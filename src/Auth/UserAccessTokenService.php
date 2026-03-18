@@ -24,6 +24,8 @@ final class UserAccessTokenService
         string $secret,
         #[Autowire('%app.user_token_ttl_seconds%')]
         private int $ttlSeconds,
+        #[Autowire('%app.user_refresh_token_ttl_seconds%')]
+        private int $refreshTtlSeconds = 2592000,
     ) {
         $keyMaterial = hash('sha256', $secret);
         $this->jwt = Configuration::forSymmetricSigner(
@@ -33,20 +35,84 @@ final class UserAccessTokenService
     }
 
     /**
-     * @return array{access_token: string, token_type: string, client_id: string, client_kind: string}
+     * @return array{access_token: string, token_type: string, expires_in: int, refresh_token: string, client_id: string, client_kind: string}
      */
     public function issue(User $user, string $clientId, string $clientKind): array
     {
+        return $this->issueForPrincipal($user->getId(), $user->getEmail(), $clientId, $clientKind);
+    }
+
+    /**
+     * @return array{access_token: string, token_type: string, expires_in: int, refresh_token: string, client_id: string, client_kind: string}|null
+     */
+    public function refresh(string $refreshToken, ?string $clientId = null, ?string $clientKind = null): ?array
+    {
+        $normalizedRefreshToken = trim($refreshToken);
+        if ($normalizedRefreshToken === '') {
+            return null;
+        }
+
+        $activeTokens = $this->activeTokens();
+        $now = time();
+
+        foreach ($activeTokens as $index => $active) {
+            if (!is_array($active)) {
+                continue;
+            }
+
+            $storedRefreshToken = (string) ($active['refresh_token'] ?? '');
+            if ($storedRefreshToken === '' || !hash_equals($storedRefreshToken, $normalizedRefreshToken)) {
+                continue;
+            }
+
+            $refreshExpiresAt = (int) ($active['refresh_expires_at'] ?? 0);
+            if ($refreshExpiresAt <= $now) {
+                unset($activeTokens[$index]);
+                $this->saveActiveTokens($activeTokens);
+
+                return null;
+            }
+
+            $activeClientId = (string) ($active['client_id'] ?? '');
+            $activeClientKind = (string) ($active['client_kind'] ?? '');
+
+            if ($clientId !== null && $clientId !== '' && !hash_equals($activeClientId, $clientId)) {
+                return null;
+            }
+
+            if ($clientKind !== null && $clientKind !== '' && !hash_equals($activeClientKind, $clientKind)) {
+                return null;
+            }
+
+            $userId = (string) ($active['user_id'] ?? '');
+            $email = (string) ($active['email'] ?? '');
+            if ($userId === '' || $email === '' || $activeClientId === '' || $activeClientKind === '') {
+                return null;
+            }
+
+            return $this->issueForPrincipal($userId, $email, $activeClientId, $activeClientKind);
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array{access_token: string, token_type: string, expires_in: int, refresh_token: string, client_id: string, client_kind: string}
+     */
+    private function issueForPrincipal(string $userId, string $email, string $clientId, string $clientKind): array
+    {
         $now = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->setTimestamp(time());
         $expiresAt = $now->modify(sprintf('+%d seconds', $this->ttlSeconds));
+        $refreshExpiresAt = $now->modify(sprintf('+%d seconds', $this->refreshTtlSeconds));
+        $refreshToken = rtrim(strtr(base64_encode(random_bytes(48)), '+/', '-_'), '=');
 
         $token = $this->jwt->builder()
             ->issuedBy('retaia-core')
             ->issuedAt($now)
             ->expiresAt($expiresAt)
             ->identifiedBy(bin2hex(random_bytes(16)))
-            ->relatedTo($user->getId())
-            ->withClaim('email', $user->getEmail())
+            ->relatedTo($userId)
+            ->withClaim('email', $email)
             ->withClaim('client_id', $clientId)
             ->withClaim('client_kind', $clientKind)
             ->withClaim('actor_kind', 'USER_INTERACTIVE')
@@ -54,10 +120,12 @@ final class UserAccessTokenService
             ->toString();
 
         $activeTokens = $this->activeTokens();
-        $activeTokens[$this->tokenIndex($user->getId(), $clientId)] = [
+        $activeTokens[$this->tokenIndex($userId, $clientId)] = [
             'access_token' => $token,
-            'user_id' => $user->getId(),
-            'email' => $user->getEmail(),
+            'refresh_token' => $refreshToken,
+            'refresh_expires_at' => $refreshExpiresAt->getTimestamp(),
+            'user_id' => $userId,
+            'email' => $email,
             'client_id' => $clientId,
             'client_kind' => $clientKind,
             'issued_at' => time(),
@@ -67,6 +135,8 @@ final class UserAccessTokenService
         return [
             'access_token' => $token,
             'token_type' => 'Bearer',
+            'expires_in' => $this->ttlSeconds,
+            'refresh_token' => $refreshToken,
             'client_id' => $clientId,
             'client_kind' => $clientKind,
         ];

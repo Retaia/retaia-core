@@ -80,6 +80,8 @@ final class ApiLoginAuthenticatorTest extends TestCase
         self::assertSame(true, $payload['authenticated']);
         self::assertSame('u-1', $payload['user']['id']);
         self::assertSame('user@example.test', $payload['user']['email']);
+        self::assertIsString($payload['refresh_token'] ?? null);
+        self::assertSame(3600, $payload['expires_in'] ?? null);
     }
 
     public function testOnAuthenticationSuccessAcceptsAgentClientKind(): void

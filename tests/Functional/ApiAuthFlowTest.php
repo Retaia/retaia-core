@@ -56,6 +56,71 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
     }
 
+    public function testRefreshRotatesInteractiveTokens(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.121');
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => FixtureUsers::ADMIN_EMAIL,
+            'password' => FixtureUsers::DEFAULT_PASSWORD,
+            'client_id' => 'interactive-refresh',
+            'client_kind' => 'UI_WEB',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $loginPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($loginPayload);
+        $firstAccessToken = $loginPayload['access_token'] ?? null;
+        $refreshToken = $loginPayload['refresh_token'] ?? null;
+        self::assertIsString($firstAccessToken);
+        self::assertIsString($refreshToken);
+
+        $client->jsonRequest('POST', '/api/v1/auth/refresh', [
+            'refresh_token' => $refreshToken,
+            'client_id' => 'interactive-refresh',
+            'client_kind' => 'UI_WEB',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $refreshPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($refreshPayload);
+        self::assertIsString($refreshPayload['access_token'] ?? null);
+        self::assertIsString($refreshPayload['refresh_token'] ?? null);
+        self::assertNotSame($firstAccessToken, $refreshPayload['access_token']);
+        self::assertNotSame($refreshToken, $refreshPayload['refresh_token']);
+
+        $client->setServerParameter('HTTP_AUTHORIZATION', 'Bearer '.$firstAccessToken);
+        $client->request('GET', '/api/v1/auth/me');
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+
+        $client->setServerParameter('HTTP_AUTHORIZATION', 'Bearer '.$refreshPayload['access_token']);
+        $client->request('GET', '/api/v1/auth/me');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+    }
+
+    public function testRefreshValidatesPayloadAndRejectsInvalidToken(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.122');
+
+        $client->jsonRequest('POST', '/api/v1/auth/refresh', []);
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $missingPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $missingPayload['code'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/auth/refresh', [
+            'refresh_token' => 'invalid-refresh-token',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $invalidPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('UNAUTHORIZED', $invalidPayload['code'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/auth/refresh', [
+            'refresh_token' => 'any-token',
+            'client_kind' => 'MCP',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $invalidKindPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $invalidKindPayload['code'] ?? null);
+    }
+
     public function testLostPasswordResetFlow(): void
     {
         $client = $this->createIsolatedClient('10.0.0.13');
