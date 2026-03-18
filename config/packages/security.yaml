@@ -42,10 +42,13 @@ security:
         - { path: '^/api/v[0-9]+(?:\.[0-9]+)?/openapi$', roles: PUBLIC_ACCESS }
         - { path: ^/api/v1/health, roles: PUBLIC_ACCESS }
         - { path: ^/api/v1/auth/login$, roles: PUBLIC_ACCESS }
+        - { path: ^/api/v1/auth/refresh$, roles: PUBLIC_ACCESS }
         - { path: ^/api/v1/auth/lost-password/request$, roles: PUBLIC_ACCESS }
         - { path: ^/api/v1/auth/lost-password/reset$, roles: PUBLIC_ACCESS }
         - { path: ^/api/v1/auth/verify-email/request$, roles: PUBLIC_ACCESS }
         - { path: ^/api/v1/auth/verify-email/confirm$, roles: PUBLIC_ACCESS }
+        - { path: ^/api/v1/auth/webauthn/authenticate/options$, roles: PUBLIC_ACCESS }
+        - { path: ^/api/v1/auth/webauthn/authenticate/verify$, roles: PUBLIC_ACCESS }
         - { path: ^/api/v1/auth/clients/token$, roles: PUBLIC_ACCESS }
         - { path: ^/api/v1/auth/clients/device/start$, roles: PUBLIC_ACCESS }
         - { path: ^/api/v1/auth/clients/device/poll$, roles: PUBLIC_ACCESS }

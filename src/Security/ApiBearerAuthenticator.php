@@ -36,6 +36,7 @@ final class ApiBearerAuthenticator extends AbstractAuthenticator
             '/api/v1/docs',
             '/api/v1/openapi',
             '/api/v1/auth/login',
+            '/api/v1/auth/refresh',
             '/api/v1/auth/lost-password/request',
             '/api/v1/auth/lost-password/reset',
             '/api/v1/auth/verify-email/request',

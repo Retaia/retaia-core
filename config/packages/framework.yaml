@@ -26,6 +26,14 @@ framework:
             policy: 'fixed_window'
             limit: '%env(int:APP_AUTH_DEVICE_START_LIMIT)%'
             interval: '%env(string:APP_AUTH_DEVICE_START_INTERVAL)%'
+        auth_refresh:
+            policy: 'fixed_window'
+            limit: '%env(int:APP_AUTH_REFRESH_LIMIT)%'
+            interval: '%env(string:APP_AUTH_REFRESH_INTERVAL)%'
+        webauthn_authenticate:
+            policy: 'fixed_window'
+            limit: 20
+            interval: '1 minute'
 
     #esi: true
     #fragments: true

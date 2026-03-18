@@ -144,6 +144,8 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
                 'user' => $this->normalizeUser($user),
                 'access_token' => $accessToken['access_token'],
                 'token_type' => $accessToken['token_type'],
+                'expires_in' => $accessToken['expires_in'],
+                'refresh_token' => $accessToken['refresh_token'],
                 'client_id' => $accessToken['client_id'],
                 'client_kind' => $accessToken['client_kind'],
             ],
