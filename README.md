@@ -52,29 +52,47 @@ It manages authentication, policy/runtime feature governance, asset lifecycle, j
 
 ## Quick Start
 
-1. Install dependencies:
+Par defaut, le demarrage dev se fait avec Docker Compose (`docker-compose.yml`).
+
+1. Lancer la stack dev:
+
+```bash
+composer dev:up
+```
+
+Pre-requis: un reverse proxy Traefik local doit etre actif sur le reseau Docker externe `web` et router `api.retaia.test`.
+
+2. Installer les dependances PHP:
+
+```bash
+docker compose run --rm composer install --no-interaction --prefer-dist --optimize-autoloader
+```
+
+3. Appliquer les migrations:
+
+```bash
+composer dev:migrate
+```
+
+4. Verifier la sante API:
+
+```bash
+composer dev:health
+```
+
+Docs Swagger:
+
+```text
+https://api.retaia.test/api/v1/docs
+```
+
+Pour le detail des commandes dev Docker, voir `docs/DOCKER-DEVELOPMENT.md`.
+
+Alternative non-Docker (optionnelle):
 
 ```bash
 composer install --no-interaction --prefer-dist --optimize-autoloader
-```
-
-2. Configure environment:
-
-- Copy/update `.env` values as needed (especially `DATABASE_URL`)
-- Configure security/reverse proxy variables when relevant:
-  - `SYMFONY_TRUSTED_PROXIES`
-  - `APP_AUTH_LOST_PASSWORD_LIMIT`, `APP_AUTH_LOST_PASSWORD_INTERVAL`
-  - `APP_AUTH_VERIFY_EMAIL_LIMIT`, `APP_AUTH_VERIFY_EMAIL_INTERVAL`
-
-3. Run migrations:
-
-```bash
 php bin/console doctrine:migrations:migrate --no-interaction
-```
-
-4. Start the app (example):
-
-```bash
 symfony server:start
 ```
 

@@ -6,7 +6,7 @@
 
 - `app`: `fullfrontend/php-fpm:latest`
 - `ingest-cron`: worker dédié ingest (polling + déplacement fichiers), séparé de `app`
-- `caddy`: reverse proxy HTTP local vers `app` (upload max `10GB`)
+- `caddy`: backend HTTP interne pour Traefik, vers `app` (upload max `10GB`)
 - `composer`: même image, profil `tools`
 - `database`: `postgres:16-alpine`
 
@@ -17,8 +17,13 @@ Les dossiers locaux disponibles sont aussi `/docker/RETAIA/ARCHIVE` et `/docker/
 
 ## Démarrage
 
+Pre-requis:
+
+- Traefik local actif (ou équivalent) sur le réseau Docker externe `web`
+- DNS local/hosts pour `api.retaia.test`
+
 ```bash
-docker compose up -d app ingest-cron caddy database
+docker compose up -d
 ```
 
 Le déplacement de fichiers ingest est exécuté par `ingest-cron`, donc il ne bloque pas les workers API/UI du service `app`.
@@ -61,10 +66,16 @@ Ouvrir un shell dans le conteneur app :
 docker compose exec app sh
 ```
 
-Smoke test API (via Caddy) :
+Smoke test API (via Traefik) :
 
 ```bash
-curl -H "Host: api.retaia.test" http://localhost:8080/api/v1/health
+curl -k https://api.retaia.test/api/v1/health
+```
+
+Swagger UI:
+
+```bash
+open https://api.retaia.test/api/v1/docs
 ```
 
 Lancer un poll manuel des fichiers à ingérer :
