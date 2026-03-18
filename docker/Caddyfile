@@ -2,14 +2,19 @@
 	auto_https off
 }
 
-api.retaia.test {
+http://api.retaia.test {
 	request_body {
 		max_size 10GB
 	}
+
+	@docsSlash path /api/v1/docs/
+	redir @docsSlash /api/v1/docs 308
+
+	@openapiSlash path /api/v1/openapi/
+	redir @openapiSlash /api/v1/openapi 308
 
 	root * /var/www/html/public
 	encode zstd gzip
 	php_fastcgi app:9000
 	file_server
 }
-
