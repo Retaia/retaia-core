@@ -542,6 +542,7 @@ final class JobApiTest extends WebTestCase
     private function loginAgent(KernelBrowser $client): void
     {
         $this->loginAs($client, 'agent@retaia.local');
+        $this->attachDefaultAgentSignatureHeaders($client);
     }
 
     private function loginAs(KernelBrowser $client, string $email): void

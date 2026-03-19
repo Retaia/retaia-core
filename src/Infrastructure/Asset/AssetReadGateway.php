@@ -3,6 +3,7 @@
 namespace App\Infrastructure\Asset;
 
 use App\Application\Asset\Port\AssetReadGateway as AssetReadGatewayPort;
+use App\Asset\AssetRevisionTag;
 use App\Asset\Repository\AssetRepositoryInterface;
 use App\Entity\Asset;
 
@@ -114,6 +115,7 @@ final class AssetReadGateway implements AssetReadGatewayPort
             'state' => $asset->getState()->value,
             'created_at' => $asset->getCreatedAt()->format(DATE_ATOM),
             'updated_at' => $asset->getUpdatedAt()->format(DATE_ATOM),
+            'revision_etag' => AssetRevisionTag::fromAsset($asset),
             'captured_at' => is_string($fields['captured_at'] ?? null) ? $fields['captured_at'] : null,
             'duration' => is_numeric($fields['duration'] ?? null) ? (float) $fields['duration'] : null,
             'tags' => $asset->getTags(),

@@ -6,6 +6,7 @@ use App\Application\Asset\DecideAssetResult;
 use App\Application\Asset\Port\AssetWorkflowGateway as AssetWorkflowGatewayPort;
 use App\Application\Asset\ReopenAssetResult;
 use App\Application\Asset\ReprocessAssetResult;
+use App\Asset\AssetRevisionTag;
 use App\Asset\AssetState;
 use App\Asset\Repository\AssetRepositoryInterface;
 use App\Asset\Service\AssetStateMachine;
@@ -49,6 +50,8 @@ final class AssetWorkflowGateway implements AssetWorkflowGatewayPort
             'payload' => [
                 'uuid' => $asset->getUuid(),
                 'state' => $asset->getState()->value,
+                'updated_at' => $asset->getUpdatedAt()->format(DATE_ATOM),
+                'revision_etag' => AssetRevisionTag::fromAsset($asset),
             ],
         ];
     }
@@ -76,6 +79,8 @@ final class AssetWorkflowGateway implements AssetWorkflowGatewayPort
             'payload' => [
                 'uuid' => $asset->getUuid(),
                 'state' => $asset->getState()->value,
+                'updated_at' => $asset->getUpdatedAt()->format(DATE_ATOM),
+                'revision_etag' => AssetRevisionTag::fromAsset($asset),
             ],
         ];
     }
@@ -104,6 +109,8 @@ final class AssetWorkflowGateway implements AssetWorkflowGatewayPort
             'payload' => [
                 'uuid' => $asset->getUuid(),
                 'state' => $asset->getState()->value,
+                'updated_at' => $asset->getUpdatedAt()->format(DATE_ATOM),
+                'revision_etag' => AssetRevisionTag::fromAsset($asset),
             ],
         ];
     }

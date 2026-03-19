@@ -2,6 +2,7 @@
 
 namespace App\Controller\Api;
 
+use App\Api\Service\AssetRequestPreconditionService;
 use App\Api\Service\IdempotencyService;
 use App\Application\Asset\AssetEndpointResult;
 use App\Application\Asset\AssetEndpointsHandler;
@@ -21,6 +22,7 @@ final class AssetController
         private AssetEndpointsHandler $assetEndpointsHandler,
         private TranslatorInterface $translator,
         private IdempotencyService $idempotency,
+        private AssetRequestPreconditionService $assetPreconditions,
     ) {
     }
 
@@ -78,10 +80,15 @@ final class AssetController
     #[Route('/{uuid}', name: 'api_assets_patch', methods: ['PATCH'])]
     public function patch(string $uuid, Request $request): JsonResponse
     {
-        $result = $this->assetEndpointsHandler->patch($uuid, $this->payload($request));
-        if ($result->status() === AssetEndpointResult::STATUS_FORBIDDEN_ACTOR) {
+        if ($this->assetEndpointsHandler->isForbiddenAgentActor()) {
             return $this->forbiddenActorResponse();
         }
+        $preconditionViolation = $this->assetPreconditions->violationResponse($request, $uuid);
+        if ($preconditionViolation instanceof JsonResponse) {
+            return $preconditionViolation;
+        }
+
+        $result = $this->assetEndpointsHandler->patch($uuid, $this->payload($request));
         if ($result->status() === AssetEndpointResult::STATUS_NOT_FOUND) {
             return new JsonResponse([
                 'code' => 'NOT_FOUND',
@@ -103,12 +110,23 @@ final class AssetController
             ], Response::HTTP_CONFLICT);
         }
 
-        return new JsonResponse($result->payload() ?? [], Response::HTTP_OK);
+        return $this->assetPreconditions->attachResponseEtagFromPayload(
+            new JsonResponse($result->payload() ?? [], Response::HTTP_OK),
+            $result->payload() ?? []
+        );
     }
 
     #[Route('/{uuid}/reopen', name: 'api_assets_reopen', methods: ['POST'])]
-    public function reopen(string $uuid): JsonResponse
+    public function reopen(string $uuid, Request $request): JsonResponse
     {
+        if ($this->assetEndpointsHandler->isForbiddenAgentActor()) {
+            return $this->forbiddenActorResponse();
+        }
+        $preconditionViolation = $this->assetPreconditions->violationResponse($request, $uuid);
+        if ($preconditionViolation instanceof JsonResponse) {
+            return $preconditionViolation;
+        }
+
         return $this->assetActionResponse($this->assetEndpointsHandler->reopen($uuid));
     }
 
@@ -117,6 +135,10 @@ final class AssetController
     {
         if ($this->assetEndpointsHandler->isForbiddenAgentActor()) {
             return $this->forbiddenActorResponse();
+        }
+        $preconditionViolation = $this->assetPreconditions->violationResponse($request, $uuid);
+        if ($preconditionViolation instanceof JsonResponse) {
+            return $preconditionViolation;
         }
 
         return $this->idempotency->execute($request, $this->actorId(), function () use ($uuid): JsonResponse {
@@ -143,7 +165,10 @@ final class AssetController
             ], Response::HTTP_CONFLICT);
         }
 
-        return new JsonResponse($result->payload() ?? [], Response::HTTP_OK);
+        return $this->assetPreconditions->attachResponseEtagFromPayload(
+            new JsonResponse($result->payload() ?? [], Response::HTTP_OK),
+            $result->payload() ?? []
+        );
     }
 
     private function forbiddenActorResponse(): JsonResponse

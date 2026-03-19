@@ -19,6 +19,7 @@ final class DerivedUploadApiTest extends WebTestCase
     {
         $client = $this->login('agent@retaia.local');
         $this->seedAsset();
+        $client->setServerParameter('HTTP_IF_MATCH', $this->currentRevisionEtag($client, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'));
 
         $client->jsonRequest('POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/init', [
             'kind' => 'proxy_video',
@@ -59,6 +60,7 @@ final class DerivedUploadApiTest extends WebTestCase
     {
         $client = $this->login('admin@retaia.local');
         $this->seedAsset();
+        $client->setServerParameter('HTTP_IF_MATCH', $this->currentRevisionEtag($client, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'));
 
         $client->jsonRequest('POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/init', [
             'kind' => 'proxy_video',
@@ -75,6 +77,7 @@ final class DerivedUploadApiTest extends WebTestCase
     {
         $client = $this->login('agent@retaia.local');
         $this->seedAsset();
+        $client->setServerParameter('HTTP_IF_MATCH', $this->currentRevisionEtag($client, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'));
 
         $client->jsonRequest('POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/init', [
             'kind' => 'proxy_video',
@@ -99,6 +102,7 @@ final class DerivedUploadApiTest extends WebTestCase
     {
         $client = $this->login('agent@retaia.local');
         $this->seedAsset();
+        $client->setServerParameter('HTTP_IF_MATCH', $this->currentRevisionEtag($client, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'));
 
         $client->jsonRequest('POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/part', []);
         self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
@@ -189,7 +193,26 @@ final class DerivedUploadApiTest extends WebTestCase
         $token = $payload['access_token'] ?? null;
         self::assertIsString($token);
         $client->setServerParameter('HTTP_AUTHORIZATION', 'Bearer '.$token);
+        if ($email === 'agent@retaia.local') {
+            $client->setServerParameter('HTTP_X_RETAIA_AGENT_ID', '11111111-1111-4111-8111-111111111111');
+            $client->setServerParameter('HTTP_X_RETAIA_OPENPGP_FINGERPRINT', 'ABCD1234EF567890ABCD1234EF567890ABCD1234');
+            $client->setServerParameter('HTTP_X_RETAIA_SIGNATURE', 'test-signature');
+            $client->setServerParameter('HTTP_X_RETAIA_SIGNATURE_TIMESTAMP', '2026-03-19T12:00:00+00:00');
+            $client->setServerParameter('HTTP_X_RETAIA_SIGNATURE_NONCE', 'test-nonce');
+        }
 
         return $client;
+    }
+
+    private function currentRevisionEtag(KernelBrowser $client, string $uuid): string
+    {
+        $client->request('GET', '/api/v1/assets/'.$uuid);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        $etag = $payload['summary']['revision_etag'] ?? null;
+        self::assertIsString($etag);
+
+        return $etag;
     }
 }

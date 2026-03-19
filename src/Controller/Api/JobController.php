@@ -2,6 +2,7 @@
 
 namespace App\Controller\Api;
 
+use App\Api\Service\SignedAgentRequestValidator;
 use App\Application\Job\JobEndpointResult;
 use App\Application\Job\JobEndpointsHandler;
 use App\Api\Service\IdempotencyService;
@@ -24,6 +25,7 @@ final class JobController
         private JobEndpointsHandler $jobEndpointsHandler,
         private LoggerInterface $logger,
         private TranslatorInterface $translator,
+        private SignedAgentRequestValidator $signedAgentRequestValidator,
     ) {
     }
 
@@ -44,8 +46,13 @@ final class JobController
     }
 
     #[Route('/{jobId}/claim', name: 'api_jobs_claim', methods: ['POST'])]
-    public function claim(string $jobId): JsonResponse
+    public function claim(string $jobId, Request $request): JsonResponse
     {
+        $signatureViolation = $this->signedAgentRequestValidator->violationResponse($request);
+        if ($signatureViolation instanceof JsonResponse) {
+            return $signatureViolation;
+        }
+
         $result = $this->jobEndpointsHandler->claim($jobId);
         if ($result->status() === JobEndpointResult::STATUS_STATE_CONFLICT) {
             $this->logger->warning('jobs.claim.conflict', [
@@ -74,6 +81,11 @@ final class JobController
     #[Route('/{jobId}/heartbeat', name: 'api_jobs_heartbeat', methods: ['POST'])]
     public function heartbeat(string $jobId, Request $request): JsonResponse
     {
+        $signatureViolation = $this->signedAgentRequestValidator->violationResponse($request);
+        if ($signatureViolation instanceof JsonResponse) {
+            return $signatureViolation;
+        }
+
         $result = $this->jobEndpointsHandler->heartbeat($jobId, $this->payload($request));
         if ($result->status() === JobEndpointResult::STATUS_LOCK_REQUIRED) {
             return $this->lockRequiredResponse();
@@ -101,6 +113,11 @@ final class JobController
     #[Route('/{jobId}/submit', name: 'api_jobs_submit', methods: ['POST'])]
     public function submit(string $jobId, Request $request): JsonResponse
     {
+        $signatureViolation = $this->signedAgentRequestValidator->violationResponse($request);
+        if ($signatureViolation instanceof JsonResponse) {
+            return $signatureViolation;
+        }
+
         return $this->idempotency->execute($request, $this->actorId(), function () use ($jobId, $request): JsonResponse {
             $submission = $this->jobEndpointsHandler->submit($jobId, $this->payload($request));
             if ($submission->status() === JobEndpointResult::STATUS_LOCK_REQUIRED) {
@@ -139,6 +156,11 @@ final class JobController
     #[Route('/{jobId}/fail', name: 'api_jobs_fail', methods: ['POST'])]
     public function fail(string $jobId, Request $request): JsonResponse
     {
+        $signatureViolation = $this->signedAgentRequestValidator->violationResponse($request);
+        if ($signatureViolation instanceof JsonResponse) {
+            return $signatureViolation;
+        }
+
         return $this->idempotency->execute($request, $this->actorId(), function () use ($jobId, $request): JsonResponse {
             $failure = $this->jobEndpointsHandler->fail($jobId, $this->payload($request));
             if ($failure->status() === JobEndpointResult::STATUS_LOCK_REQUIRED) {

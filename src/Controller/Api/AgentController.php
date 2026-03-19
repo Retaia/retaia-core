@@ -2,6 +2,7 @@
 
 namespace App\Controller\Api;
 
+use App\Api\Service\SignedAgentRequestValidator;
 use App\Application\Agent\RegisterAgentEndpointHandler;
 use App\Application\Agent\RegisterAgentEndpointResult;
 use App\Controller\RequestPayloadTrait;
@@ -19,13 +20,20 @@ final class AgentController
     public function __construct(
         private TranslatorInterface $translator,
         private RegisterAgentEndpointHandler $registerAgentEndpointHandler,
+        private SignedAgentRequestValidator $signedAgentRequestValidator,
     ) {
     }
 
     #[Route('/register', name: 'api_agents_register', methods: ['POST'])]
     public function register(Request $request): JsonResponse
     {
-        $result = $this->registerAgentEndpointHandler->handle($this->payload($request));
+        $payload = $this->payload($request);
+        $signatureViolation = $this->signedAgentRequestValidator->violationResponse($request, $payload);
+        if ($signatureViolation instanceof JsonResponse) {
+            return $signatureViolation;
+        }
+
+        $result = $this->registerAgentEndpointHandler->handle($payload);
         if ($result->status() === RegisterAgentEndpointResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
                 [

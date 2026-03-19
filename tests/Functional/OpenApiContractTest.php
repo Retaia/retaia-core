@@ -42,6 +42,7 @@ final class OpenApiContractTest extends WebTestCase
         $this->seedAsset('11111111-1111-1111-1111-111111111111', AssetState::PROCESSED);
 
         $client->jsonRequest('POST', '/api/v1/assets/11111111-1111-1111-1111-111111111111/purge', [], [
+            'HTTP_IF_MATCH' => $this->currentAssetRevisionEtag($client, '11111111-1111-1111-1111-111111111111'),
             'HTTP_IDEMPOTENCY_KEY' => 'contract-purge-conflict-1',
             'HTTP_X_CORRELATION_ID' => 'contract-correlation-id',
         ]);
@@ -170,7 +171,9 @@ final class OpenApiContractTest extends WebTestCase
         $this->ensureAuxiliaryTables();
         $this->seedAsset('22222222-2222-2222-2222-222222222222', AssetState::DECISION_PENDING);
 
-        $client->jsonRequest('POST', '/api/v1/assets/22222222-2222-2222-2222-222222222222/reprocess');
+        $client->jsonRequest('POST', '/api/v1/assets/22222222-2222-2222-2222-222222222222/reprocess', [], [
+            'HTTP_IF_MATCH' => $this->currentAssetRevisionEtag($client, '22222222-2222-2222-2222-222222222222'),
+        ]);
 
         self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
         $payload = json_decode((string) $client->getResponse()->getContent(), true);
@@ -287,7 +290,10 @@ final class OpenApiContractTest extends WebTestCase
                 'method' => 'POST',
                 'url' => '/api/v1/assets/33333333-3333-3333-3333-333333333333/purge',
                 'payload' => [],
-                'headers' => ['HTTP_IDEMPOTENCY_KEY' => 'contract-purge-conflict-2'],
+                'headers' => [
+                    'HTTP_IF_MATCH' => $this->currentAssetRevisionEtag($client, '33333333-3333-3333-3333-333333333333'),
+                    'HTTP_IDEMPOTENCY_KEY' => 'contract-purge-conflict-2',
+                ],
                 'status' => Response::HTTP_CONFLICT,
                 'openapi_path' => '/assets/{uuid}/purge',
                 'openapi_method' => 'post',
@@ -474,6 +480,18 @@ final class OpenApiContractTest extends WebTestCase
         $this->authenticateClient($client, 'admin@retaia.local');
 
         return $client;
+    }
+
+    private function currentAssetRevisionEtag(KernelBrowser $client, string $uuid): string
+    {
+        $client->request('GET', '/api/v1/assets/'.$uuid);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        $etag = $payload['summary']['revision_etag'] ?? null;
+        self::assertIsString($etag);
+
+        return $etag;
     }
 
     private function ensureAuxiliaryTables(): void

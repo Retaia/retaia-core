@@ -2,6 +2,8 @@
 
 namespace App\Tests\Unit\Controller;
 
+use App\Api\Service\AssetRequestPreconditionService;
+use App\Api\Service\SignedAgentRequestValidator;
 use App\Application\Auth\Port\AgentActorGateway;
 use App\Application\Auth\ResolveAgentActorHandler;
 use App\Application\Derived\CheckDerivedAssetExistsHandler;
@@ -13,6 +15,7 @@ use App\Application\Derived\ListDerivedFilesHandler;
 use App\Application\Derived\Port\DerivedGateway;
 use App\Application\Derived\UploadDerivedPartHandler;
 use App\Controller\Api\DerivedController;
+use App\Entity\Asset;
 use App\Tests\Support\InMemoryDerivedGateway;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
@@ -30,13 +33,13 @@ final class DerivedControllerTest extends TestCase
         $notFoundGateway = new InMemoryDerivedGateway();
         $notFoundGateway->assetExists = false;
         $controller = $this->controller(true, $notFoundGateway);
-        self::assertSame(Response::HTTP_NOT_FOUND, $controller->initUpload('a2', Request::create('/x', 'POST'))->getStatusCode());
+        self::assertSame(Response::HTTP_NOT_FOUND, $controller->initUpload('a2', $this->signedJsonRequest('{}'))->getStatusCode());
 
         $validationGateway = new InMemoryDerivedGateway();
         $controller = $this->controller(true, $validationGateway);
         self::assertSame(
             Response::HTTP_UNPROCESSABLE_ENTITY,
-            $controller->initUpload('a3', Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{}'))->getStatusCode()
+            $controller->initUpload('a3', $this->signedJsonRequest('{}'))->getStatusCode()
         );
     }
 
@@ -49,20 +52,20 @@ final class DerivedControllerTest extends TestCase
 
         self::assertSame(
             Response::HTTP_UNPROCESSABLE_ENTITY,
-            $controller->uploadPart('a4', Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{}'))->getStatusCode()
+            $controller->uploadPart('a4', $this->signedJsonRequest('{}'))->getStatusCode()
         );
         self::assertSame(
             Response::HTTP_CONFLICT,
-            $controller->uploadPart('a4', Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{"upload_id":"up","part_number":1}'))->getStatusCode()
+            $controller->uploadPart('a4', $this->signedJsonRequest('{"upload_id":"up","part_number":1}'))->getStatusCode()
         );
 
         self::assertSame(
             Response::HTTP_UNPROCESSABLE_ENTITY,
-            $controller->completeUpload('a4', Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{}'))->getStatusCode()
+            $controller->completeUpload('a4', $this->signedJsonRequest('{}'))->getStatusCode()
         );
         self::assertSame(
             Response::HTTP_CONFLICT,
-            $controller->completeUpload('a4', Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{"upload_id":"up","total_parts":1}'))->getStatusCode()
+            $controller->completeUpload('a4', $this->signedJsonRequest('{"upload_id":"up","total_parts":1}'))->getStatusCode()
         );
     }
 
@@ -105,8 +108,36 @@ final class DerivedControllerTest extends TestCase
                 new ListDerivedFilesHandler($gateway),
                 new GetDerivedByKindHandler($gateway),
             ),
-            $this->translator()
+            $this->translator(),
+            new AssetRequestPreconditionService(new class implements \App\Asset\Repository\AssetRepositoryInterface {
+                public function findByUuid(string $uuid): ?Asset
+                {
+                    return null;
+                }
+
+                public function listAssets(?string $state, ?string $mediaType, ?string $query, int $limit): array
+                {
+                    return [];
+                }
+
+                public function save(Asset $asset): void
+                {
+                }
+            }),
+            new SignedAgentRequestValidator(),
         );
+    }
+
+    private function signedJsonRequest(string $content): Request
+    {
+        $request = Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: $content);
+        $request->headers->set('X-Retaia-Agent-Id', '11111111-1111-4111-8111-111111111111');
+        $request->headers->set('X-Retaia-OpenPGP-Fingerprint', 'ABCD1234EF567890ABCD1234EF567890ABCD1234');
+        $request->headers->set('X-Retaia-Signature', 'test-signature');
+        $request->headers->set('X-Retaia-Signature-Timestamp', '2026-03-19T12:00:00+00:00');
+        $request->headers->set('X-Retaia-Signature-Nonce', 'test-nonce');
+
+        return $request;
     }
 
     private function translator(): TranslatorInterface
