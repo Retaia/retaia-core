@@ -21,8 +21,14 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
         $resolver->expects(self::never())->method('handle');
 
         $result = (new RegisterAgentEndpointHandler($register, $resolver))->handle([
+            'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'worker',
             'agent_version' => '',
+            'openpgp_public_key' => 'public-key',
+            'openpgp_fingerprint' => 'fingerprint',
+            'os_name' => 'linux',
+            'os_version' => '6.8',
+            'arch' => 'x86_64',
             'capabilities' => ['extract_facts'],
         ]);
 
@@ -32,8 +38,8 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
     public function testHandleUsesAuthenticatedActorAndReturnsRegisteredPayload(): void
     {
         $register = $this->createMock(RegisterAgentUseCase::class);
-        $register->expects(self::once())->method('handle')->with('u1', 'ffmpeg', '1.0.0')->willReturn(
-            new RegisterAgentResult(RegisterAgentResult::STATUS_REGISTERED, ['1.0.0'], ['agent_id' => 'u1:ffmpeg'])
+        $register->expects(self::once())->method('handle')->with('u1', '11111111-1111-4111-8111-111111111111', 'ffmpeg', '1.0.0')->willReturn(
+            new RegisterAgentResult(RegisterAgentResult::STATUS_REGISTERED, ['1.0.0'], ['agent_id' => '11111111-1111-4111-8111-111111111111'])
         );
 
         $resolver = $this->createMock(ResolveAuthenticatedUserUseCase::class);
@@ -42,20 +48,26 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
         );
 
         $result = (new RegisterAgentEndpointHandler($register, $resolver))->handle([
+            'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'ffmpeg',
             'agent_version' => '2.1.0',
+            'openpgp_public_key' => 'public-key',
+            'openpgp_fingerprint' => 'fingerprint',
+            'os_name' => 'linux',
+            'os_version' => '6.8',
+            'arch' => 'x86_64',
             'capabilities' => ['extract_facts'],
             'client_feature_flags_contract_version' => '1.0.0',
         ]);
 
         self::assertSame(RegisterAgentEndpointResult::STATUS_REGISTERED, $result->status());
-        self::assertSame(['agent_id' => 'u1:ffmpeg'], $result->payload());
+        self::assertSame(['agent_id' => '11111111-1111-4111-8111-111111111111'], $result->payload());
     }
 
     public function testHandleReturnsUnsupportedContractVersionWhenRegisterHandlerRejects(): void
     {
         $register = $this->createMock(RegisterAgentUseCase::class);
-        $register->expects(self::once())->method('handle')->with('unknown', 'ffmpeg', '2.0.0')->willReturn(
+        $register->expects(self::once())->method('handle')->with('unknown', '11111111-1111-4111-8111-111111111111', 'ffmpeg', '2.0.0')->willReturn(
             new RegisterAgentResult(RegisterAgentResult::STATUS_UNSUPPORTED_CONTRACT_VERSION, ['1.0.0', '0.9.0'])
         );
 
@@ -65,8 +77,14 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
         );
 
         $result = (new RegisterAgentEndpointHandler($register, $resolver))->handle([
+            'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'ffmpeg',
             'agent_version' => '2.1.0',
+            'openpgp_public_key' => 'public-key',
+            'openpgp_fingerprint' => 'fingerprint',
+            'os_name' => 'linux',
+            'os_version' => '6.8',
+            'arch' => 'x86_64',
             'capabilities' => ['extract_facts'],
             'client_feature_flags_contract_version' => '2.0.0',
         ]);

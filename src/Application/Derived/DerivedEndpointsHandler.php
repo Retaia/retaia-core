@@ -130,7 +130,7 @@ final class DerivedEndpointsHandler
         return new DerivedEndpointResult(DerivedEndpointResult::STATUS_SUCCESS, $result->derived());
     }
 
-    private function isForbiddenAgentActor(): bool
+    public function isForbiddenAgentActor(): bool
     {
         return $this->resolveAgentActorHandler->handle()->status() === ResolveAgentActorResult::STATUS_FORBIDDEN_ACTOR;
     }

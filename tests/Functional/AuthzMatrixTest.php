@@ -91,9 +91,21 @@ final class AuthzMatrixTest extends WebTestCase
         $client = $this->createOperatorClient();
 
         $client->jsonRequest('POST', '/api/v1/agents/register', [
+            'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'ffmpeg-worker',
             'agent_version' => '1.0.0',
+            'openpgp_public_key' => '-----BEGIN PGP PUBLIC KEY BLOCK----- test -----END PGP PUBLIC KEY BLOCK-----',
+            'openpgp_fingerprint' => 'ABCD1234EF567890ABCD1234EF567890ABCD1234',
+            'os_name' => 'linux',
+            'os_version' => '6.8',
+            'arch' => 'x86_64',
             'capabilities' => ['extract_facts'],
+        ], [
+            'HTTP_X_RETAIA_AGENT_ID' => '11111111-1111-4111-8111-111111111111',
+            'HTTP_X_RETAIA_OPENPGP_FINGERPRINT' => 'ABCD1234EF567890ABCD1234EF567890ABCD1234',
+            'HTTP_X_RETAIA_SIGNATURE' => 'test-signature',
+            'HTTP_X_RETAIA_SIGNATURE_TIMESTAMP' => '2026-03-19T12:00:00+00:00',
+            'HTTP_X_RETAIA_SIGNATURE_NONCE' => 'test-nonce',
         ]);
 
         self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
@@ -159,7 +171,14 @@ final class AuthzMatrixTest extends WebTestCase
 
     private function createAgentClient(): KernelBrowser
     {
-        return $this->loginClient(FixtureUsers::AGENT_EMAIL, FixtureUsers::DEFAULT_PASSWORD);
+        $client = $this->loginClient(FixtureUsers::AGENT_EMAIL, FixtureUsers::DEFAULT_PASSWORD);
+        $client->setServerParameter('HTTP_X_RETAIA_AGENT_ID', '11111111-1111-4111-8111-111111111111');
+        $client->setServerParameter('HTTP_X_RETAIA_OPENPGP_FINGERPRINT', 'ABCD1234EF567890ABCD1234EF567890ABCD1234');
+        $client->setServerParameter('HTTP_X_RETAIA_SIGNATURE', 'test-signature');
+        $client->setServerParameter('HTTP_X_RETAIA_SIGNATURE_TIMESTAMP', '2026-03-19T12:00:00+00:00');
+        $client->setServerParameter('HTTP_X_RETAIA_SIGNATURE_NONCE', 'test-nonce');
+
+        return $client;
     }
 
     private function createOperatorClient(): KernelBrowser

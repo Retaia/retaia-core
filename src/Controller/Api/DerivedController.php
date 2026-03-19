@@ -2,6 +2,8 @@
 
 namespace App\Controller\Api;
 
+use App\Api\Service\AssetRequestPreconditionService;
+use App\Api\Service\SignedAgentRequestValidator;
 use App\Application\Derived\DerivedEndpointResult;
 use App\Application\Derived\DerivedEndpointsHandler;
 use App\Controller\RequestPayloadTrait;
@@ -20,16 +22,27 @@ final class DerivedController
     public function __construct(
         private DerivedEndpointsHandler $derivedEndpointsHandler,
         private TranslatorInterface $translator,
+        private AssetRequestPreconditionService $assetPreconditions,
+        private SignedAgentRequestValidator $signedAgentRequestValidator,
     ) {
     }
 
     #[Route('/upload/init', name: 'api_assets_derived_upload_init', methods: ['POST'])]
     public function initUpload(string $uuid, Request $request): JsonResponse
     {
-        $result = $this->derivedEndpointsHandler->initUpload($uuid, $this->payload($request));
-        if ($result->status() === DerivedEndpointResult::STATUS_FORBIDDEN_ACTOR) {
+        if ($this->derivedEndpointsHandler->isForbiddenAgentActor()) {
             return $this->forbiddenActor();
         }
+        $preconditionViolation = $this->assetPreconditions->violationResponse($request, $uuid);
+        if ($preconditionViolation instanceof JsonResponse) {
+            return $preconditionViolation;
+        }
+        $signatureViolation = $this->signedAgentRequestValidator->violationResponse($request);
+        if ($signatureViolation instanceof JsonResponse) {
+            return $signatureViolation;
+        }
+
+        $result = $this->derivedEndpointsHandler->initUpload($uuid, $this->payload($request));
         if ($result->status() === DerivedEndpointResult::STATUS_NOT_FOUND) {
             return $this->notFound();
         }
@@ -46,10 +59,19 @@ final class DerivedController
     #[Route('/upload/part', name: 'api_assets_derived_upload_part', methods: ['POST'])]
     public function uploadPart(string $uuid, Request $request): JsonResponse
     {
-        $result = $this->derivedEndpointsHandler->uploadPart($uuid, $this->payload($request));
-        if ($result->status() === DerivedEndpointResult::STATUS_FORBIDDEN_ACTOR) {
+        if ($this->derivedEndpointsHandler->isForbiddenAgentActor()) {
             return $this->forbiddenActor();
         }
+        $preconditionViolation = $this->assetPreconditions->violationResponse($request, $uuid);
+        if ($preconditionViolation instanceof JsonResponse) {
+            return $preconditionViolation;
+        }
+        $signatureViolation = $this->signedAgentRequestValidator->violationResponse($request);
+        if ($signatureViolation instanceof JsonResponse) {
+            return $signatureViolation;
+        }
+
+        $result = $this->derivedEndpointsHandler->uploadPart($uuid, $this->payload($request));
         if ($result->status() === DerivedEndpointResult::STATUS_NOT_FOUND) {
             return $this->notFound();
         }
@@ -72,10 +94,19 @@ final class DerivedController
     #[Route('/upload/complete', name: 'api_assets_derived_upload_complete', methods: ['POST'])]
     public function completeUpload(string $uuid, Request $request): JsonResponse
     {
-        $result = $this->derivedEndpointsHandler->completeUpload($uuid, $this->payload($request));
-        if ($result->status() === DerivedEndpointResult::STATUS_FORBIDDEN_ACTOR) {
+        if ($this->derivedEndpointsHandler->isForbiddenAgentActor()) {
             return $this->forbiddenActor();
         }
+        $preconditionViolation = $this->assetPreconditions->violationResponse($request, $uuid);
+        if ($preconditionViolation instanceof JsonResponse) {
+            return $preconditionViolation;
+        }
+        $signatureViolation = $this->signedAgentRequestValidator->violationResponse($request);
+        if ($signatureViolation instanceof JsonResponse) {
+            return $signatureViolation;
+        }
+
+        $result = $this->derivedEndpointsHandler->completeUpload($uuid, $this->payload($request));
         if ($result->status() === DerivedEndpointResult::STATUS_NOT_FOUND) {
             return $this->notFound();
         }

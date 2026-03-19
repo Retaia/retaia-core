@@ -20,11 +20,11 @@ final class RegisterAgentHandlerTest extends TestCase
             ['1.0.0', '0.9.0']
         );
 
-        $result = $handler->handle('user-1', 'ffmpeg-worker', '');
+        $result = $handler->handle('user-1', '11111111-1111-4111-8111-111111111111', 'ffmpeg-worker', '');
 
         self::assertSame(RegisterAgentResult::STATUS_REGISTERED, $result->status());
         self::assertSame(['1.0.0', '0.9.0'], $result->acceptedFeatureFlagsContractVersions());
-        self::assertSame('user-1:ffmpeg-worker', $result->payload()['agent_id'] ?? null);
+        self::assertSame('11111111-1111-4111-8111-111111111111', $result->payload()['agent_id'] ?? null);
         self::assertSame('1.0.0', $result->payload()['server_policy']['effective_feature_flags_contract_version'] ?? null);
         self::assertSame('STRICT', $result->payload()['server_policy']['feature_flags_compatibility_mode'] ?? null);
     }
@@ -40,7 +40,7 @@ final class RegisterAgentHandlerTest extends TestCase
             ['0.9.0']
         );
 
-        $result = $handler->handle('user-1', 'ffmpeg-worker', '0.9.0');
+        $result = $handler->handle('user-1', '11111111-1111-4111-8111-111111111111', 'ffmpeg-worker', '0.9.0');
 
         self::assertSame(RegisterAgentResult::STATUS_REGISTERED, $result->status());
         self::assertSame('0.9.0', $result->payload()['server_policy']['effective_feature_flags_contract_version'] ?? null);
@@ -59,7 +59,7 @@ final class RegisterAgentHandlerTest extends TestCase
             ['0.9.0']
         );
 
-        $result = $handler->handle('user-1', 'ffmpeg-worker', '2.0.0');
+        $result = $handler->handle('user-1', '11111111-1111-4111-8111-111111111111', 'ffmpeg-worker', '2.0.0');
 
         self::assertSame(RegisterAgentResult::STATUS_UNSUPPORTED_CONTRACT_VERSION, $result->status());
         self::assertNull($result->payload());

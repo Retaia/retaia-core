@@ -80,11 +80,14 @@ final class AssetStateMachineApiTest extends WebTestCase
     {
         $client = $this->createAuthenticatedClient(true);
 
-        $client->jsonRequest('POST', '/api/v1/assets/33333333-3333-3333-3333-333333333333/reopen');
+        $client->jsonRequest('POST', '/api/v1/assets/33333333-3333-3333-3333-333333333333/reopen', [], [
+            'HTTP_IF_MATCH' => $this->currentAssetRevisionEtag($client, '33333333-3333-3333-3333-333333333333'),
+        ]);
 
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $payload = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertSame('DECISION_PENDING', $payload['state'] ?? null);
+        self::assertSame($payload['revision_etag'] ?? null, $client->getResponse()->headers->get('ETag'));
     }
 
     public function testReprocessTransitionsArchivedAssetBackToReady(): void
@@ -92,6 +95,7 @@ final class AssetStateMachineApiTest extends WebTestCase
         $client = $this->createAuthenticatedClient(true);
 
         $client->jsonRequest('POST', '/api/v1/assets/33333333-3333-3333-3333-333333333333/reprocess', [], [
+            'HTTP_IF_MATCH' => $this->currentAssetRevisionEtag($client, '33333333-3333-3333-3333-333333333333'),
             'HTTP_IDEMPOTENCY_KEY' => 'asset-reprocess-ok-1',
         ]);
 
@@ -131,6 +135,8 @@ final class AssetStateMachineApiTest extends WebTestCase
             'tags' => ['updated', 'updated', 'news'],
             'notes' => 'patched note',
             'fields' => ['camera' => 'fx3', 'fps' => 25],
+        ], [
+            'HTTP_IF_MATCH' => $this->currentAssetRevisionEtag($client, '11111111-1111-1111-1111-111111111111'),
         ]);
 
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
@@ -160,6 +166,8 @@ final class AssetStateMachineApiTest extends WebTestCase
 
         $client->jsonRequest('PATCH', '/api/v1/assets/44444444-4444-4444-4444-444444444444', [
             'notes' => 'should fail',
+        ], [
+            'HTTP_IF_MATCH' => $this->currentAssetRevisionEtag($client, '44444444-4444-4444-4444-444444444444'),
         ]);
 
         self::assertResponseStatusCodeSame(Response::HTTP_GONE);
@@ -264,6 +272,18 @@ final class AssetStateMachineApiTest extends WebTestCase
         $this->authenticateClient($client, 'admin@retaia.local');
 
         return $client;
+    }
+
+    private function currentAssetRevisionEtag(KernelBrowser $client, string $uuid): string
+    {
+        $client->request('GET', '/api/v1/assets/'.$uuid);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        $etag = $payload['summary']['revision_etag'] ?? null;
+        self::assertIsString($etag);
+
+        return $etag;
     }
 
     private function ensureAuxiliaryTables(): void

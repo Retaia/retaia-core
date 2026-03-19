@@ -135,6 +135,7 @@ final class WorkflowApiTest extends WebTestCase
         self::assertSame(true, $preview['allowed'] ?? null);
 
         $client->jsonRequest('POST', '/api/v1/assets/44444444-dddd-4ddd-8ddd-444444444444/purge', [], [
+            'HTTP_IF_MATCH' => $this->currentAssetRevisionEtag($client, '44444444-dddd-4ddd-8ddd-444444444444'),
             'HTTP_IDEMPOTENCY_KEY' => 'purge-1',
         ]);
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
@@ -142,6 +143,7 @@ final class WorkflowApiTest extends WebTestCase
         self::assertSame('PURGED', $payload['state'] ?? null);
 
         $client->jsonRequest('POST', '/api/v1/assets/55555555-eeee-4eee-8eee-555555555555/purge', [], [
+            'HTTP_IF_MATCH' => $this->currentAssetRevisionEtag($client, '55555555-eeee-4eee-8eee-555555555555'),
             'HTTP_IDEMPOTENCY_KEY' => 'purge-2',
         ]);
         self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
@@ -537,6 +539,7 @@ final class WorkflowApiTest extends WebTestCase
         ]);
 
         $client->jsonRequest('POST', '/api/v1/assets/'.$uuid.'/purge', [], [
+            'HTTP_IF_MATCH' => $this->currentAssetRevisionEtag($client, $uuid),
             'HTTP_IDEMPOTENCY_KEY' => 'purge-locked-1',
         ]);
         self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
@@ -591,6 +594,7 @@ final class WorkflowApiTest extends WebTestCase
         ]);
 
         $client->jsonRequest('POST', '/api/v1/assets/'.$uuid.'/purge', [], [
+            'HTTP_IF_MATCH' => $this->currentAssetRevisionEtag($client, $uuid),
             'HTTP_IDEMPOTENCY_KEY' => 'purge-derived-1',
         ]);
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
@@ -611,6 +615,18 @@ final class WorkflowApiTest extends WebTestCase
         $this->authenticateClient($client, $email);
 
         return $client;
+    }
+
+    private function currentAssetRevisionEtag(KernelBrowser $client, string $uuid): string
+    {
+        $client->request('GET', '/api/v1/assets/'.$uuid);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        $etag = $payload['summary']['revision_etag'] ?? null;
+        self::assertIsString($etag);
+
+        return $etag;
     }
 
     private function seedAsset(string $uuid, AssetState $state, string $filename): void

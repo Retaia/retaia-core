@@ -5,6 +5,7 @@ namespace App\Infrastructure\Asset;
 use App\Application\Asset\PatchAssetResult;
 use App\Application\Asset\Port\AssetPatchGateway as AssetPatchGatewayPort;
 use App\Asset\AssetState;
+use App\Asset\AssetRevisionTag;
 use App\Asset\Repository\AssetRepositoryInterface;
 use App\Entity\Asset;
 use App\Lock\Repository\OperationLockRepository;
@@ -58,6 +59,7 @@ final class AssetPatchGateway implements AssetPatchGatewayPort
                 'fields' => $asset->getFields(),
                 'created_at' => $asset->getCreatedAt()->format(DATE_ATOM),
                 'updated_at' => $asset->getUpdatedAt()->format(DATE_ATOM),
+                'revision_etag' => AssetRevisionTag::fromAsset($asset),
             ],
         ];
     }

@@ -4,5 +4,5 @@ namespace App\Application\Agent;
 
 interface RegisterAgentUseCase
 {
-    public function handle(string $actorId, string $agentName, string $clientContractVersion): RegisterAgentResult;
+    public function handle(string $actorId, string $agentId, string $agentName, string $clientContractVersion): RegisterAgentResult;
 }

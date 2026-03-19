@@ -1579,10 +1579,16 @@ final class ApiAuthFlowTest extends WebTestCase
         ]);
 
         $client->jsonRequest('POST', '/api/v1/agents/register', [
+            'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'ffmpeg-worker',
             'agent_version' => '1.0.0',
+            'openpgp_public_key' => '-----BEGIN PGP PUBLIC KEY BLOCK----- test -----END PGP PUBLIC KEY BLOCK-----',
+            'openpgp_fingerprint' => 'ABCD1234EF567890ABCD1234EF567890ABCD1234',
+            'os_name' => 'linux',
+            'os_version' => '6.8',
+            'arch' => 'x86_64',
             'capabilities' => ['extract_facts'],
-        ]);
+        ], $this->agentSignatureHeaders());
         self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
         $payload = json_decode($client->getResponse()->getContent(), true);
         self::assertSame('FORBIDDEN_SCOPE', $payload['code'] ?? null);
@@ -1600,7 +1606,7 @@ final class ApiAuthFlowTest extends WebTestCase
         $client->jsonRequest('POST', '/api/v1/agents/register', [
             'agent_name' => 'ffmpeg-worker',
             'agent_version' => '1.0.0',
-        ]);
+        ], $this->agentSignatureHeaders());
 
         self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
         $payload = json_decode($client->getResponse()->getContent(), true);
@@ -1617,15 +1623,21 @@ final class ApiAuthFlowTest extends WebTestCase
         ]);
 
         $client->jsonRequest('POST', '/api/v1/agents/register', [
+            'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'ffmpeg-worker',
             'agent_version' => '1.0.0',
+            'openpgp_public_key' => '-----BEGIN PGP PUBLIC KEY BLOCK----- test -----END PGP PUBLIC KEY BLOCK-----',
+            'openpgp_fingerprint' => 'ABCD1234EF567890ABCD1234EF567890ABCD1234',
+            'os_name' => 'linux',
+            'os_version' => '6.8',
+            'arch' => 'x86_64',
             'capabilities' => ['extract_facts', 'generate_proxy'],
-        ]);
+        ], $this->agentSignatureHeaders());
 
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $payload = json_decode($client->getResponse()->getContent(), true);
         self::assertIsArray($payload);
-        self::assertIsString($payload['agent_id'] ?? null);
+        self::assertSame('11111111-1111-4111-8111-111111111111', $payload['agent_id'] ?? null);
         self::assertSame(5, $payload['server_policy']['min_poll_interval_seconds'] ?? null);
         self::assertSame(false, $payload['server_policy']['features']['ai']['suggest_tags'] ?? null);
         self::assertSame('1.0.0', $payload['server_policy']['feature_flags_contract_version'] ?? null);
@@ -1644,11 +1656,17 @@ final class ApiAuthFlowTest extends WebTestCase
         ]);
 
         $client->jsonRequest('POST', '/api/v1/agents/register', [
+            'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'ffmpeg-worker',
             'agent_version' => '1.0.0',
+            'openpgp_public_key' => '-----BEGIN PGP PUBLIC KEY BLOCK----- test -----END PGP PUBLIC KEY BLOCK-----',
+            'openpgp_fingerprint' => 'ABCD1234EF567890ABCD1234EF567890ABCD1234',
+            'os_name' => 'linux',
+            'os_version' => '6.8',
+            'arch' => 'x86_64',
             'client_feature_flags_contract_version' => '0.9.0',
             'capabilities' => ['extract_facts', 'generate_proxy'],
-        ]);
+        ], $this->agentSignatureHeaders());
 
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $payload = json_decode($client->getResponse()->getContent(), true);
@@ -1666,11 +1684,17 @@ final class ApiAuthFlowTest extends WebTestCase
         ]);
 
         $client->jsonRequest('POST', '/api/v1/agents/register', [
+            'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'ffmpeg-worker',
             'agent_version' => '1.0.0',
+            'openpgp_public_key' => '-----BEGIN PGP PUBLIC KEY BLOCK----- test -----END PGP PUBLIC KEY BLOCK-----',
+            'openpgp_fingerprint' => 'ABCD1234EF567890ABCD1234EF567890ABCD1234',
+            'os_name' => 'linux',
+            'os_version' => '6.8',
+            'arch' => 'x86_64',
             'client_feature_flags_contract_version' => '2.0.0',
             'capabilities' => ['extract_facts', 'generate_proxy'],
-        ]);
+        ], $this->agentSignatureHeaders());
 
         self::assertResponseStatusCodeSame(Response::HTTP_UPGRADE_REQUIRED);
         $payload = json_decode($client->getResponse()->getContent(), true);
@@ -1750,6 +1774,20 @@ final class ApiAuthFlowTest extends WebTestCase
         $client->disableReboot();
 
         return $client;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function agentSignatureHeaders(): array
+    {
+        return [
+            'HTTP_X_RETAIA_AGENT_ID' => '11111111-1111-4111-8111-111111111111',
+            'HTTP_X_RETAIA_OPENPGP_FINGERPRINT' => 'ABCD1234EF567890ABCD1234EF567890ABCD1234',
+            'HTTP_X_RETAIA_SIGNATURE' => 'test-signature',
+            'HTTP_X_RETAIA_SIGNATURE_TIMESTAMP' => '2026-03-19T12:00:00+00:00',
+            'HTTP_X_RETAIA_SIGNATURE_NONCE' => 'test-nonce',
+        ];
     }
 
     /**

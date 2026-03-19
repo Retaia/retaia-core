@@ -19,7 +19,7 @@ final class RegisterAgentHandler implements RegisterAgentUseCase
     ) {
     }
 
-    public function handle(string $actorId, string $agentName, string $clientContractVersion): RegisterAgentResult
+    public function handle(string $actorId, string $agentId, string $agentName, string $clientContractVersion): RegisterAgentResult
     {
         $acceptedVersions = $this->contractPolicy->normalizedAcceptedVersions(
             $this->featureFlagsContractVersion,
@@ -37,11 +37,11 @@ final class RegisterAgentHandler implements RegisterAgentUseCase
         $compatibilityMode = $this->contractPolicy->compatibilityMode($effectiveVersion, $this->featureFlagsContractVersion);
 
         return new RegisterAgentResult(
-            RegisterAgentResult::STATUS_REGISTERED,
-            $acceptedVersions,
-            [
-                'agent_id' => sprintf('%s:%s', $actorId, $agentName),
-                'server_policy' => [
+                RegisterAgentResult::STATUS_REGISTERED,
+                $acceptedVersions,
+                [
+                    'agent_id' => $agentId,
+                    'server_policy' => [
                     'min_poll_interval_seconds' => 5,
                     'max_parallel_jobs_allowed' => 8,
                     'allowed_job_types' => [

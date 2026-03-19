@@ -2,6 +2,7 @@
 
 namespace App\Controller\Api;
 
+use App\Api\Service\AssetRequestPreconditionService;
 use App\Application\Workflow\WorkflowEndpointsHandler;
 use App\Application\Workflow\WorkflowEndpointResult;
 use App\Api\Service\IdempotencyService;
@@ -21,6 +22,7 @@ final class WorkflowController
         private IdempotencyService $idempotency,
         private WorkflowEndpointsHandler $workflowEndpointsHandler,
         private TranslatorInterface $translator,
+        private AssetRequestPreconditionService $assetPreconditions,
     ) {
     }
 
@@ -140,6 +142,10 @@ final class WorkflowController
     {
         if ($this->workflowEndpointsHandler->isForbiddenAgentActor()) {
             return $this->forbiddenActor();
+        }
+        $preconditionViolation = $this->assetPreconditions->violationResponse($request, $uuid);
+        if ($preconditionViolation instanceof JsonResponse) {
+            return $preconditionViolation;
         }
 
         return $this->idempotency->execute($request, $this->actorId(), function () use ($uuid): JsonResponse {

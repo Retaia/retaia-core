@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Controller;
 
+use App\Api\Service\AssetRequestPreconditionService;
 use App\Application\Auth\Port\AgentActorGateway;
 use App\Application\Auth\Port\AuthenticatedUserGateway;
 use App\Application\Auth\ResolveAgentActorHandler;
@@ -16,6 +17,7 @@ use App\Application\Workflow\PreviewPurgeHandler;
 use App\Application\Workflow\PurgeAssetHandler;
 use App\Application\Workflow\WorkflowEndpointsHandler;
 use App\Api\Service\IdempotencyService;
+use App\Asset\AssetRevisionTag;
 use App\Asset\AssetState;
 use App\Asset\Repository\AssetRepositoryInterface;
 use App\Asset\Service\AssetStateMachine;
@@ -125,9 +127,11 @@ final class WorkflowControllerTest extends TestCase
         self::assertSame(Response::HTTP_OK, $controller->previewPurge('a2')->getStatusCode());
         $purgeConflictRequest = Request::create('/x', 'POST');
         $purgeConflictRequest->headers->set('Idempotency-Key', 'idem-p2');
+        $purgeConflictRequest->headers->set('If-Match', AssetRevisionTag::fromAsset($ready));
         self::assertSame(Response::HTTP_CONFLICT, $controller->purge('a3', $purgeConflictRequest)->getStatusCode());
         $purgeOkRequest = Request::create('/x', 'POST');
         $purgeOkRequest->headers->set('Idempotency-Key', 'idem-p3');
+        $purgeOkRequest->headers->set('If-Match', AssetRevisionTag::fromAsset($rejected));
         self::assertSame(Response::HTTP_OK, $controller->purge('a2', $purgeOkRequest)->getStatusCode());
     }
 
@@ -230,7 +234,8 @@ final class WorkflowControllerTest extends TestCase
                 new PreviewPurgeHandler($workflowGateway),
                 new PurgeAssetHandler($workflowGateway),
             ),
-            $translator
+            $translator,
+            new AssetRequestPreconditionService($assets)
         );
     }
 }
