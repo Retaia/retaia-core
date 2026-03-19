@@ -121,6 +121,224 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('VALIDATION_FAILED', $invalidKindPayload['code'] ?? null);
     }
 
+    public function testMcpRegisterChallengeAndTokenFlow(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.123');
+        $publicKey = '-----BEGIN PGP PUBLIC KEY BLOCK----- test -----END PGP PUBLIC KEY BLOCK-----';
+        $fingerprint = 'ABCD1234EF567890ABCD1234EF567890ABCD1234';
+
+        $this->loginAndAttachBearer($client, [
+            'email' => FixtureUsers::ADMIN_EMAIL,
+            'password' => FixtureUsers::DEFAULT_PASSWORD,
+        ]);
+        $this->setAppAiFeature($client, true);
+
+        $client->jsonRequest('POST', '/api/v1/auth/mcp/register', [
+            'client_label' => 'Claude Desktop',
+            'openpgp_public_key' => $publicKey,
+            'openpgp_fingerprint' => $fingerprint,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $registerPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($registerPayload);
+        self::assertSame('MCP', $registerPayload['client_kind'] ?? null);
+        $clientId = $registerPayload['client_id'] ?? null;
+        self::assertIsString($clientId);
+
+        $client->setServerParameter('HTTP_AUTHORIZATION', '');
+        $client->jsonRequest('POST', '/api/v1/auth/mcp/challenge', [
+            'client_id' => $clientId,
+            'openpgp_fingerprint' => $fingerprint,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $challengePayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($challengePayload);
+        $challengeId = $challengePayload['challenge_id'] ?? null;
+        $challenge = $challengePayload['challenge'] ?? null;
+        self::assertIsString($challengeId);
+        self::assertIsString($challenge);
+
+        $client->jsonRequest('POST', '/api/v1/auth/mcp/token', [
+            'client_id' => $clientId,
+            'openpgp_fingerprint' => $fingerprint,
+            'challenge_id' => $challengeId,
+            'signature' => $this->mcpSignature($challenge, $publicKey, $fingerprint),
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $tokenPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($tokenPayload);
+        self::assertSame('Bearer', $tokenPayload['token_type'] ?? null);
+        self::assertSame($clientId, $tokenPayload['client_id'] ?? null);
+        self::assertSame('MCP', $tokenPayload['client_kind'] ?? null);
+    }
+
+    public function testMcpRegisterReusesExistingClientFingerprint(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.1231');
+        $fingerprint = 'AAAA1234EF567890ABCD1234EF567890ABCD1234';
+
+        $firstClientId = $this->registerMcpClient(
+            $client,
+            '-----BEGIN PGP PUBLIC KEY BLOCK----- first -----END PGP PUBLIC KEY BLOCK-----',
+            $fingerprint,
+        );
+
+        $this->loginAndAttachBearer($client, [
+            'email' => FixtureUsers::ADMIN_EMAIL,
+            'password' => FixtureUsers::DEFAULT_PASSWORD,
+        ]);
+        $client->jsonRequest('POST', '/api/v1/auth/mcp/register', [
+            'client_label' => 'Updated label',
+            'openpgp_public_key' => '-----BEGIN PGP PUBLIC KEY BLOCK----- updated -----END PGP PUBLIC KEY BLOCK-----',
+            'openpgp_fingerprint' => $fingerprint,
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame($firstClientId, $payload['client_id'] ?? null);
+        self::assertIsString($payload['rotated_at'] ?? null);
+    }
+
+    public function testMcpRegisterForbiddenWhenAiFeatureIsDisabled(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.1232');
+
+        $this->loginAndAttachBearer($client, [
+            'email' => FixtureUsers::ADMIN_EMAIL,
+            'password' => FixtureUsers::DEFAULT_PASSWORD,
+        ]);
+        $client->jsonRequest('PATCH', '/api/v1/app/features', [
+            'app_feature_enabled' => [
+                'features.ai' => false,
+            ],
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/mcp/register', [
+            'openpgp_public_key' => '-----BEGIN PGP PUBLIC KEY BLOCK----- disabled -----END PGP PUBLIC KEY BLOCK-----',
+            'openpgp_fingerprint' => 'BBBB1234EF567890ABCD1234EF567890ABCD1234',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('FORBIDDEN_SCOPE', $payload['code'] ?? null);
+    }
+
+    public function testMcpTokenRejectsChallengeReplay(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.124');
+        $publicKey = '-----BEGIN PGP PUBLIC KEY BLOCK----- replay -----END PGP PUBLIC KEY BLOCK-----';
+        $fingerprint = 'DCBA1234EF567890ABCD1234EF567890ABCD1234';
+        $clientId = $this->registerMcpClient($client, $publicKey, $fingerprint);
+
+        $client->setServerParameter('HTTP_AUTHORIZATION', '');
+        $client->jsonRequest('POST', '/api/v1/auth/mcp/challenge', [
+            'client_id' => $clientId,
+            'openpgp_fingerprint' => $fingerprint,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $challengePayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($challengePayload);
+        $challengeId = (string) ($challengePayload['challenge_id'] ?? '');
+        $challenge = (string) ($challengePayload['challenge'] ?? '');
+
+        $signature = $this->mcpSignature($challenge, $publicKey, $fingerprint);
+        $payload = [
+            'client_id' => $clientId,
+            'openpgp_fingerprint' => $fingerprint,
+            'challenge_id' => $challengeId,
+            'signature' => $signature,
+        ];
+
+        $client->jsonRequest('POST', '/api/v1/auth/mcp/token', $payload);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/mcp/token', $payload);
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $errorPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('UNAUTHORIZED', $errorPayload['code'] ?? null);
+    }
+
+    public function testMcpChallengeValidatesPayloadAndRejectsUnknownClient(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.1241');
+
+        $client->jsonRequest('POST', '/api/v1/auth/mcp/challenge', []);
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+
+        $this->loginAndAttachBearer($client, [
+            'email' => FixtureUsers::ADMIN_EMAIL,
+            'password' => FixtureUsers::DEFAULT_PASSWORD,
+        ]);
+        $this->setAppAiFeature($client, true);
+        $client->setServerParameter('HTTP_AUTHORIZATION', '');
+
+        $client->jsonRequest('POST', '/api/v1/auth/mcp/challenge', [
+            'client_id' => 'mcp-missing',
+            'openpgp_fingerprint' => 'CCCC1234EF567890ABCD1234EF567890ABCD1234',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+    }
+
+    public function testMcpTokenValidatesPayload(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.1242');
+
+        $client->jsonRequest('POST', '/api/v1/auth/mcp/token', []);
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
+    }
+
+    public function testMcpRotateKeyUpdatesFingerprint(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.125');
+        $clientId = $this->registerMcpClient(
+            $client,
+            '-----BEGIN PGP PUBLIC KEY BLOCK----- initial -----END PGP PUBLIC KEY BLOCK-----',
+            'EEEE1234EF567890ABCD1234EF567890ABCD1234',
+        );
+
+        $client->jsonRequest('POST', sprintf('/api/v1/auth/mcp/%s/rotate-key', $clientId), [
+            'client_label' => 'Claude Desktop rotated',
+            'openpgp_public_key' => '-----BEGIN PGP PUBLIC KEY BLOCK----- rotated -----END PGP PUBLIC KEY BLOCK-----',
+            'openpgp_fingerprint' => 'FFFF1234EF567890ABCD1234EF567890ABCD1234',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame($clientId, $payload['client_id'] ?? null);
+        self::assertSame('FFFF1234EF567890ABCD1234EF567890ABCD1234', $payload['openpgp_fingerprint'] ?? null);
+        self::assertIsString($payload['rotated_at'] ?? null);
+    }
+
+    public function testMcpRotateKeyRejectsFingerprintConflict(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.1251');
+        $firstClientId = $this->registerMcpClient(
+            $client,
+            '-----BEGIN PGP PUBLIC KEY BLOCK----- first-conflict -----END PGP PUBLIC KEY BLOCK-----',
+            '11111234EF567890ABCD1234EF567890ABCD1234',
+        );
+        $this->registerMcpClient(
+            $client,
+            '-----BEGIN PGP PUBLIC KEY BLOCK----- second-conflict -----END PGP PUBLIC KEY BLOCK-----',
+            '22221234EF567890ABCD1234EF567890ABCD1234',
+        );
+
+        $this->loginAndAttachBearer($client, [
+            'email' => FixtureUsers::ADMIN_EMAIL,
+            'password' => FixtureUsers::DEFAULT_PASSWORD,
+        ]);
+        $client->jsonRequest('POST', sprintf('/api/v1/auth/mcp/%s/rotate-key', $firstClientId), [
+            'openpgp_public_key' => '-----BEGIN PGP PUBLIC KEY BLOCK----- conflicting -----END PGP PUBLIC KEY BLOCK-----',
+            'openpgp_fingerprint' => '22221234EF567890ABCD1234EF567890ABCD1234',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('STATE_CONFLICT', $payload['code'] ?? null);
+    }
+
     public function testLostPasswordResetFlow(): void
     {
         $client = $this->createIsolatedClient('10.0.0.13');
@@ -927,6 +1145,67 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame(false, $patched['app_feature_enabled']['features.ai.suggest_tags'] ?? null);
     }
 
+    public function testAdminCanUpdateAppPolicyThroughOpenApiRoute(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.581');
+
+        $this->loginAndAttachBearer($client, [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+        ]);
+
+        $client->jsonRequest('POST', '/api/v1/app/policy', [
+            'feature_flags' => [
+                'features.ai' => false,
+            ],
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        self::assertSame(false, $payload['server_policy']['feature_flags']['features.ai.suggest_tags'] ?? null);
+    }
+
+    public function testAppPolicyUpdateRejectsUnknownFeatureFlagsWithConflict(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.582');
+
+        $this->loginAndAttachBearer($client, [
+            'email' => FixtureUsers::ADMIN_EMAIL,
+            'password' => 'change-me',
+        ]);
+
+        $client->jsonRequest('POST', '/api/v1/app/policy', [
+            'feature_flags' => [
+                'features.unknown.flag' => true,
+            ],
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('STATE_CONFLICT', $payload['code'] ?? null);
+    }
+
+    public function testAppPolicyUpdateRejectsNonBooleanValue(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.583');
+
+        $this->loginAndAttachBearer($client, [
+            'email' => FixtureUsers::ADMIN_EMAIL,
+            'password' => 'change-me',
+        ]);
+
+        $client->jsonRequest('POST', '/api/v1/app/policy', [
+            'feature_flags' => [
+                'features.ai' => 'disabled',
+            ],
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
+    }
+
     public function testAdminPatchAppFeaturesRejectsUnknownFeatureKey(): void
     {
         $client = $this->createIsolatedClient('10.0.1.58');
@@ -1117,28 +1396,16 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('FORBIDDEN_ACTOR', $payload['code'] ?? null);
     }
 
-    public function testDeviceFlowStartRejectsMcpWhenAiFeatureIsDisabled(): void
+    public function testDeviceFlowStartRejectsMcpClientKind(): void
     {
         $client = $this->createIsolatedClient('10.0.0.642');
-
-        $this->loginAndAttachBearer($client, [
-            'email' => 'admin@retaia.local',
-            'password' => 'change-me',
-        ]);
-
-        $client->jsonRequest('PATCH', '/api/v1/app/features', [
-            'app_feature_enabled' => [
-                'features.ai' => false,
-            ],
-        ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
         $client->jsonRequest('POST', '/api/v1/auth/clients/device/start', [
             'client_kind' => 'MCP',
         ]);
         self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
         $payload = json_decode($client->getResponse()->getContent(), true);
-        self::assertSame('FORBIDDEN_SCOPE', $payload['code'] ?? null);
+        self::assertSame('FORBIDDEN_ACTOR', $payload['code'] ?? null);
     }
 
     public function testDeviceFlowPollRejectsInvalidCode(): void
@@ -1788,6 +2055,41 @@ final class ApiAuthFlowTest extends WebTestCase
             'HTTP_X_RETAIA_SIGNATURE_TIMESTAMP' => '2026-03-19T12:00:00+00:00',
             'HTTP_X_RETAIA_SIGNATURE_NONCE' => 'test-nonce',
         ];
+    }
+
+    private function registerMcpClient(\Symfony\Bundle\FrameworkBundle\KernelBrowser $client, string $publicKey, string $fingerprint): string
+    {
+        $this->loginAndAttachBearer($client, [
+            'email' => FixtureUsers::ADMIN_EMAIL,
+            'password' => FixtureUsers::DEFAULT_PASSWORD,
+        ]);
+        $this->setAppAiFeature($client, true);
+
+        $client->jsonRequest('POST', '/api/v1/auth/mcp/register', [
+            'client_label' => 'MCP test client',
+            'openpgp_public_key' => $publicKey,
+            'openpgp_fingerprint' => $fingerprint,
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+
+        return (string) ($payload['client_id'] ?? '');
+    }
+
+    private function setAppAiFeature(\Symfony\Bundle\FrameworkBundle\KernelBrowser $client, bool $enabled): void
+    {
+        $client->jsonRequest('PATCH', '/api/v1/app/features', [
+            'app_feature_enabled' => [
+                'features.ai' => $enabled,
+            ],
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+    }
+
+    private function mcpSignature(string $challenge, string $publicKey, string $fingerprint): string
+    {
+        return rtrim(strtr(base64_encode(hash_hmac('sha256', $challenge, trim($publicKey).'|'.strtoupper($fingerprint), true)), '+/', '-_'), '=');
     }
 
     /**

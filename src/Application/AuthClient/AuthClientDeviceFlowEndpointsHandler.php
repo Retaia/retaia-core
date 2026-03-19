@@ -40,10 +40,6 @@ final class AuthClientDeviceFlowEndpointsHandler
             return new StartDeviceFlowEndpointResult(StartDeviceFlowEndpointResult::STATUS_FORBIDDEN_ACTOR);
         }
 
-        if ($result->status() === StartDeviceFlowResult::STATUS_FORBIDDEN_SCOPE) {
-            return new StartDeviceFlowEndpointResult(StartDeviceFlowEndpointResult::STATUS_FORBIDDEN_SCOPE);
-        }
-
         return new StartDeviceFlowEndpointResult(StartDeviceFlowEndpointResult::STATUS_SUCCESS, $result->payload());
     }
 

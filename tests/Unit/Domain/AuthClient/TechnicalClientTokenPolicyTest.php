@@ -13,7 +13,7 @@ final class TechnicalClientTokenPolicyTest extends TestCase
 
         self::assertTrue($policy->isForbiddenActor('UI_WEB'));
         self::assertFalse($policy->isForbiddenActor('AGENT'));
-        self::assertFalse($policy->isForbiddenActor('MCP'));
+        self::assertTrue($policy->isForbiddenActor('MCP'));
     }
 
     public function testMcpCanBeForbiddenByAppSwitch(): void

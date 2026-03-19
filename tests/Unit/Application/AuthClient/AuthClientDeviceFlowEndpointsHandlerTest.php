@@ -35,10 +35,10 @@ final class AuthClientDeviceFlowEndpointsHandlerTest extends TestCase
         self::assertSame(StartDeviceFlowEndpointResult::STATUS_VALIDATION_FAILED, $result->status());
     }
 
-    public function testStartReturnsForbiddenScopeWhenMcpPolicyDisabled(): void
+    public function testStartReturnsForbiddenActorWhenMcpClientKindIsRejected(): void
     {
         $gateway = $this->createMock(DeviceFlowGateway::class);
-        $gateway->expects(self::once())->method('isMcpDisabledByAppPolicy')->willReturn(true);
+        $gateway->expects(self::never())->method('isMcpDisabledByAppPolicy');
         $gateway->expects(self::never())->method('startDeviceFlow');
         $startRateLimiter = $this->createMock(DeviceFlowStartRateLimiterGateway::class);
         $startRateLimiter->expects(self::once())
@@ -55,7 +55,7 @@ final class AuthClientDeviceFlowEndpointsHandlerTest extends TestCase
 
         $result = $handler->start(['client_kind' => 'MCP'], '10.0.0.2');
 
-        self::assertSame(StartDeviceFlowEndpointResult::STATUS_FORBIDDEN_SCOPE, $result->status());
+        self::assertSame(StartDeviceFlowEndpointResult::STATUS_FORBIDDEN_ACTOR, $result->status());
     }
 
     public function testPollReturnsThrottledWithRetryInSeconds(): void

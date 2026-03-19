@@ -20,15 +20,15 @@ final class StartDeviceFlowHandlerTest extends TestCase
         self::assertSame(StartDeviceFlowResult::STATUS_FORBIDDEN_ACTOR, $result->status());
     }
 
-    public function testReturnsForbiddenScopeForMcpWhenAppDisabled(): void
+    public function testReturnsForbiddenActorForMcp(): void
     {
         $gateway = $this->createMock(DeviceFlowGateway::class);
-        $gateway->expects(self::once())->method('isMcpDisabledByAppPolicy')->willReturn(true);
+        $gateway->expects(self::never())->method('isMcpDisabledByAppPolicy');
 
         $handler = new StartDeviceFlowHandler(new TechnicalClientTokenPolicy(), $gateway);
         $result = $handler->handle('MCP');
 
-        self::assertSame(StartDeviceFlowResult::STATUS_FORBIDDEN_SCOPE, $result->status());
+        self::assertSame(StartDeviceFlowResult::STATUS_FORBIDDEN_ACTOR, $result->status());
     }
 
     public function testReturnsSuccessWithFlowPayload(): void

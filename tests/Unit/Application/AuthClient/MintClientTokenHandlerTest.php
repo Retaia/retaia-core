@@ -20,15 +20,15 @@ final class MintClientTokenHandlerTest extends TestCase
         self::assertSame(MintClientTokenResult::STATUS_FORBIDDEN_ACTOR, $result->status());
     }
 
-    public function testReturnsForbiddenScopeForMcpWhenAppDisabled(): void
+    public function testReturnsForbiddenActorForMcp(): void
     {
         $gateway = $this->createMock(AuthClientGateway::class);
-        $gateway->expects(self::once())->method('isMcpDisabledByAppPolicy')->willReturn(true);
+        $gateway->expects(self::never())->method('isMcpDisabledByAppPolicy');
 
         $handler = new MintClientTokenHandler(new TechnicalClientTokenPolicy(), $gateway);
         $result = $handler->handle('mcp-default', 'MCP', 'secret');
 
-        self::assertSame(MintClientTokenResult::STATUS_FORBIDDEN_SCOPE, $result->status());
+        self::assertSame(MintClientTokenResult::STATUS_FORBIDDEN_ACTOR, $result->status());
     }
 
     public function testReturnsUnauthorizedWhenCredentialsAreInvalid(): void
