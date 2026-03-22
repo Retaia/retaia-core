@@ -90,4 +90,25 @@ final class AuthClientStateStore
         $item->set($flows);
         $this->cache->save($item);
     }
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    public function mcpChallenges(): array
+    {
+        $item = $this->cache->getItem('auth_mcp_challenges');
+        $value = $item->get();
+
+        return is_array($value) ? $value : [];
+    }
+
+    /**
+     * @param array<string, array<string, mixed>> $challenges
+     */
+    public function saveMcpChallenges(array $challenges): void
+    {
+        $item = $this->cache->getItem('auth_mcp_challenges');
+        $item->set($challenges);
+        $this->cache->save($item);
+    }
 }

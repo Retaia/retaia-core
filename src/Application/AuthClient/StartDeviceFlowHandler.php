@@ -24,10 +24,6 @@ final class StartDeviceFlowHandler
             return new StartDeviceFlowResult(StartDeviceFlowResult::STATUS_FORBIDDEN_ACTOR);
         }
 
-        if ($this->policy->isForbiddenScope($clientKind, $this->deviceFlowGateway->isMcpDisabledByAppPolicy())) {
-            return new StartDeviceFlowResult(StartDeviceFlowResult::STATUS_FORBIDDEN_SCOPE);
-        }
-
         $payload = $this->deviceFlowGateway->startDeviceFlow($clientKind);
 
         return new StartDeviceFlowResult(StartDeviceFlowResult::STATUS_SUCCESS, $payload);

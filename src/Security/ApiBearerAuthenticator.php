@@ -45,6 +45,8 @@ final class ApiBearerAuthenticator extends AbstractAuthenticator
             '/api/v1/auth/clients/device/start',
             '/api/v1/auth/clients/device/poll',
             '/api/v1/auth/clients/device/cancel',
+            '/api/v1/auth/mcp/challenge',
+            '/api/v1/auth/mcp/token',
         ], true)) {
             return false;
         }

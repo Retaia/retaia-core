@@ -19,10 +19,6 @@ final class MintClientTokenHandler
             return new MintClientTokenResult(MintClientTokenResult::STATUS_FORBIDDEN_ACTOR);
         }
 
-        if ($this->policy->isForbiddenScope($clientKind, $this->authClientGateway->isMcpDisabledByAppPolicy())) {
-            return new MintClientTokenResult(MintClientTokenResult::STATUS_FORBIDDEN_SCOPE);
-        }
-
         $token = $this->authClientGateway->mintToken($clientId, $clientKind, $secretKey);
         if (!is_array($token)) {
             return new MintClientTokenResult(MintClientTokenResult::STATUS_UNAUTHORIZED);

@@ -74,6 +74,18 @@ final class OpenApiContractTest extends WebTestCase
         $this->assertPathStatusUsesErrorResponse($openApi, '/auth/verify-email/request', 'post', '429');
         $this->assertPathStatusUsesErrorResponse($openApi, '/auth/verify-email/confirm', 'post', '400');
         $this->assertPathStatusUsesErrorResponse($openApi, '/auth/verify-email/confirm', 'post', '422');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/mcp/register', 'post', '403');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/mcp/register', 'post', '422');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/mcp/challenge', 'post', '401');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/mcp/challenge', 'post', '422');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/mcp/challenge', 'post', '429');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/mcp/token', 'post', '401');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/mcp/token', 'post', '403');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/mcp/token', 'post', '422');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/mcp/token', 'post', '429');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/mcp/{client_id}/rotate-key', 'post', '403');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/mcp/{client_id}/rotate-key', 'post', '409');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/mcp/{client_id}/rotate-key', 'post', '422');
     }
 
     public function testJobEndpointsDeclareLockErrorModelInOpenApi(): void
@@ -139,6 +151,10 @@ final class OpenApiContractTest extends WebTestCase
         self::assertIsArray($paths);
         self::assertArrayHasKey('/app/policy', $paths);
         self::assertArrayHasKey('/auth/clients/device/poll', $paths);
+        self::assertArrayHasKey('/auth/mcp/register', $paths);
+        self::assertArrayHasKey('/auth/mcp/challenge', $paths);
+        self::assertArrayHasKey('/auth/mcp/token', $paths);
+        self::assertArrayHasKey('/auth/mcp/{client_id}/rotate-key', $paths);
 
         $methods = [];
         foreach ($paths as $operations) {

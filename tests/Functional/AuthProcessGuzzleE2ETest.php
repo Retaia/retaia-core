@@ -803,7 +803,7 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
             'secret_key' => 'mcp-secret',
         ]);
         self::assertSame(403, $mcpToken['status']);
-        self::assertSame('FORBIDDEN_SCOPE', $mcpToken['json']['code'] ?? null);
+        self::assertSame('FORBIDDEN_ACTOR', $mcpToken['json']['code'] ?? null);
     }
 
     public function testSpecMeFeaturesSupportsUserPatchEscalationAndCoreProtection(): void
@@ -1167,7 +1167,7 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
             'client_kind' => 'MCP',
         ]);
         self::assertSame(403, $mcpForbiddenByScope['status']);
-        self::assertSame('FORBIDDEN_SCOPE', $mcpForbiddenByScope['json']['code'] ?? null);
+        self::assertSame('FORBIDDEN_ACTOR', $mcpForbiddenByScope['json']['code'] ?? null);
     }
 
     public function testSpecClientTokenValidatesPayloadRejectsInvalidCredentialsAndRateLimits(): void

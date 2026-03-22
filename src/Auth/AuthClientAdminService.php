@@ -30,6 +30,33 @@ final class AuthClientAdminService
             return null;
         }
 
+        return $this->issueToken($clientId, $clientKind);
+    }
+
+    /**
+     * @return array{access_token: string, token_type: string, client_id: string, client_kind: string}|null
+     */
+    public function mintRegisteredClientToken(string $clientId): ?array
+    {
+        $registry = $this->stateStore->registry();
+        $client = $registry[$clientId] ?? null;
+        if (!is_array($client)) {
+            return null;
+        }
+
+        $clientKind = (string) ($client['client_kind'] ?? '');
+        if ($clientKind === '') {
+            return null;
+        }
+
+        return $this->issueToken($clientId, $clientKind);
+    }
+
+    /**
+     * @return array{access_token: string, token_type: string, client_id: string, client_kind: string}
+     */
+    private function issueToken(string $clientId, string $clientKind): array
+    {
         $token = $this->clientAccessTokenFactory->issue($clientId, $clientKind);
         $tokens = $this->stateStore->activeTokens();
         $tokens[$clientId] = [

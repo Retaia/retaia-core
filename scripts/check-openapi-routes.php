@@ -16,6 +16,13 @@ if (!is_file($openApiPath)) {
 /** @var array<string, mixed> $openApi */
 $openApi = Yaml::parseFile($openApiPath);
 $paths = is_array($openApi['paths'] ?? null) ? $openApi['paths'] : [];
+$targetPathPrefixes = [
+    '/api/v1/assets',
+    '/api/v1/jobs',
+    '/api/v1/agents',
+    '/api/v1/auth',
+    '/api/v1/app',
+];
 
 /** @var array<string, bool> $openApiMethods */
 $openApiMethods = [];
@@ -35,6 +42,23 @@ foreach ($paths as $path => $pathConfig) {
         }
 
         $openApiMethods[$methodUpper.' '.normalizePath('/api/v1'.$path)] = true;
+    }
+}
+
+/** @var array<string, bool> $targetOpenApiMethods */
+$targetOpenApiMethods = [];
+foreach ($openApiMethods as $signature => $_) {
+    $parts = explode(' ', $signature, 2);
+    if (count($parts) !== 2) {
+        continue;
+    }
+
+    [, $path] = $parts;
+    foreach ($targetPathPrefixes as $prefix) {
+        if (str_starts_with($path, $prefix)) {
+            $targetOpenApiMethods[$signature] = true;
+            break;
+        }
     }
 }
 
@@ -101,7 +125,19 @@ if ($missingInOpenApi !== []) {
     exit(1);
 }
 
-fwrite(STDOUT, "OpenAPI route coverage OK for implemented assets/jobs/agents/auth/app endpoints\n");
+$missingInRuntime = array_values(array_diff(array_keys($targetOpenApiMethods), array_keys($implementedMethods)));
+sort($missingInRuntime);
+
+if ($missingInRuntime !== []) {
+    fwrite(STDERR, "OpenAPI routes missing in runtime:\n");
+    foreach ($missingInRuntime as $signature) {
+        fwrite(STDERR, " - {$signature}\n");
+    }
+
+    exit(1);
+}
+
+fwrite(STDOUT, "OpenAPI route coverage OK for assets/jobs/agents/auth/app endpoints\n");
 exit(0);
 
 function normalizePath(string $path): string

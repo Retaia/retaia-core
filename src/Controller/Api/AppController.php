@@ -31,6 +31,44 @@ final class AppController
         $clientContractVersion = trim((string) $request->query->get('client_feature_flags_contract_version', ''));
         $result = $this->appPolicyEndpointsHandler->policy($clientContractVersion);
 
+        return $this->policyResponse($result);
+    }
+
+    #[Route('/policy', name: 'api_app_policy_update', methods: ['POST'])]
+    public function updatePolicy(Request $request): JsonResponse
+    {
+        $payload = $this->payload($request);
+        $featureFlags = $payload['feature_flags'] ?? null;
+        if (!is_array($featureFlags)) {
+            return $this->errorResponse('VALIDATION_FAILED', $this->translator->trans('auth.error.invalid_app_feature_payload'), Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $result = $this->appPolicyEndpointsHandler->patchFeatures([
+            'app_feature_enabled' => $featureFlags,
+        ]);
+        if ($result->status() === PatchAppFeaturesEndpointResult::STATUS_UNAUTHORIZED) {
+            return $this->errorResponse('UNAUTHORIZED', $this->translator->trans('auth.error.authentication_required'), Response::HTTP_UNAUTHORIZED);
+        }
+        if ($result->status() === PatchAppFeaturesEndpointResult::STATUS_FORBIDDEN_ACTOR) {
+            return $this->errorResponse('FORBIDDEN_ACTOR', $this->translator->trans('auth.error.forbidden_actor'), Response::HTTP_FORBIDDEN);
+        }
+        if ($result->status() === PatchAppFeaturesEndpointResult::STATUS_VALIDATION_FAILED_PAYLOAD) {
+            return $this->errorResponse('VALIDATION_FAILED', $this->translator->trans('auth.error.invalid_app_feature_payload'), Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+        if ($result->status() === PatchAppFeaturesEndpointResult::STATUS_VALIDATION_FAILED) {
+            $details = $result->validationDetails() ?? ['unknown_keys' => [], 'non_boolean_keys' => []];
+            if (($details['unknown_keys'] ?? []) !== []) {
+                return $this->errorResponse('STATE_CONFLICT', $this->translator->trans('auth.error.forbidden_scope'), Response::HTTP_CONFLICT, $details);
+            }
+
+            return $this->errorResponse('VALIDATION_FAILED', $this->translator->trans('auth.error.invalid_app_feature_payload'), Response::HTTP_UNPROCESSABLE_ENTITY, $details);
+        }
+
+        return $this->policyResponse($this->appPolicyEndpointsHandler->policy(''));
+    }
+
+    private function policyResponse(AppPolicyEndpointResult $result): JsonResponse
+    {
         if ($result->status() === AppPolicyEndpointResult::STATUS_UNSUPPORTED_CONTRACT_VERSION) {
             return new JsonResponse(
                 [

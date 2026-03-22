@@ -41,9 +41,6 @@ final class MintClientTokenEndpointHandler
         if ($result->status() === MintClientTokenResult::STATUS_FORBIDDEN_ACTOR) {
             return new MintClientTokenEndpointResult(MintClientTokenEndpointResult::STATUS_FORBIDDEN_ACTOR, null, null, $clientId, $clientKind);
         }
-        if ($result->status() === MintClientTokenResult::STATUS_FORBIDDEN_SCOPE) {
-            return new MintClientTokenEndpointResult(MintClientTokenEndpointResult::STATUS_FORBIDDEN_SCOPE, null, null, $clientId, $clientKind);
-        }
         if ($result->status() === MintClientTokenResult::STATUS_UNAUTHORIZED || !is_array($result->token())) {
             return new MintClientTokenEndpointResult(MintClientTokenEndpointResult::STATUS_UNAUTHORIZED, null, null, $clientId, $clientKind);
         }

@@ -28,6 +28,7 @@ use App\Application\AuthClient\PollDeviceFlowEndpointResult;
 use App\Application\AuthClient\RevokeClientTokenEndpointResult;
 use App\Application\AuthClient\RotateClientSecretEndpointResult;
 use App\Application\AuthClient\StartDeviceFlowEndpointResult;
+use App\Auth\AuthMcpService;
 use App\Auth\UserAccessTokenService;
 use App\Controller\RequestPayloadTrait;
 use App\Domain\AuthClient\ClientKind;
@@ -59,6 +60,7 @@ final class AuthController
         private VerifyEmailEndpointsHandler $verifyEmailEndpointsHandler,
         private AuthSelfServiceEndpointsHandler $authSelfServiceEndpointsHandler,
         private TranslatorInterface $translator,
+        private AuthMcpService $authMcpService,
         private MintClientTokenEndpointHandler $mintClientTokenEndpointHandler,
         private AuthClientAdminEndpointsHandler $authClientAdminEndpointsHandler,
         private AuthClientDeviceFlowEndpointsHandler $authClientDeviceFlowEndpointsHandler,
@@ -71,6 +73,8 @@ final class AuthController
         private RateLimiterFactory $webauthnAuthenticateRateLimiter,
         #[Autowire(service: 'limiter.auth_refresh')]
         private RateLimiterFactory $refreshRateLimiter,
+        #[Autowire(service: 'limiter.client_token_mint')]
+        private RateLimiterFactory $clientTokenMintRateLimiter,
         private EntityManagerInterface $entityManager,
         private LoggerInterface $logger,
     ) {
@@ -818,12 +822,6 @@ final class AuthController
                 Response::HTTP_FORBIDDEN
             );
         }
-        if ($result->status() === MintClientTokenEndpointResult::STATUS_FORBIDDEN_SCOPE) {
-            return new JsonResponse(
-                ['code' => 'FORBIDDEN_SCOPE', 'message' => $this->translator->trans('auth.error.forbidden_scope')],
-                Response::HTTP_FORBIDDEN
-            );
-        }
         if ($result->status() === MintClientTokenEndpointResult::STATUS_UNAUTHORIZED) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.invalid_client_credentials')],
@@ -831,7 +829,7 @@ final class AuthController
             );
         }
         $token = $result->token();
-        if ($result->status() !== MintClientTokenEndpointResult::STATUS_SUCCESS || !is_array($token)) {
+        if (!is_array($token)) {
             return new JsonResponse(
                 ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.invalid_client_credentials')],
                 Response::HTTP_UNAUTHORIZED
@@ -844,6 +842,149 @@ final class AuthController
         ]);
 
         return new JsonResponse($token, Response::HTTP_OK);
+    }
+
+    #[Route('/mcp/register', name: 'api_auth_mcp_register', methods: ['POST'])]
+    public function registerMcp(Request $request): JsonResponse
+    {
+        $payload = $this->payload($request);
+        $result = $this->authMcpService->register(
+            trim((string) ($payload['openpgp_public_key'] ?? '')),
+            trim((string) ($payload['openpgp_fingerprint'] ?? '')),
+            isset($payload['client_label']) ? (string) $payload['client_label'] : null,
+        );
+
+        if ($result['status'] === 'VALIDATION_FAILED') {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.client_credentials_required')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+        if ($result['status'] === 'FORBIDDEN_SCOPE') {
+            return new JsonResponse(
+                ['code' => 'FORBIDDEN_SCOPE', 'message' => $this->translator->trans('auth.error.forbidden_scope')],
+                Response::HTTP_FORBIDDEN
+            );
+        }
+
+        return new JsonResponse($result['payload'] ?? [], Response::HTTP_OK);
+    }
+
+    #[Route('/mcp/challenge', name: 'api_auth_mcp_challenge', methods: ['POST'])]
+    public function challengeMcp(Request $request): JsonResponse
+    {
+        $payload = $this->payload($request);
+        $clientId = trim((string) ($payload['client_id'] ?? ''));
+        $fingerprint = trim((string) ($payload['openpgp_fingerprint'] ?? ''));
+        if ($clientId === '' || $fingerprint === '') {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.client_credentials_required')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        $throttled = $this->consumeClientTokenRateLimit($clientId, ClientKind::MCP, (string) ($request->getClientIp() ?? 'unknown'));
+        if ($throttled instanceof JsonResponse) {
+            return $throttled;
+        }
+
+        $result = $this->authMcpService->createChallenge($clientId, $fingerprint);
+        if ($result['status'] === 'FORBIDDEN_SCOPE') {
+            return new JsonResponse(
+                ['code' => 'FORBIDDEN_SCOPE', 'message' => $this->translator->trans('auth.error.forbidden_scope')],
+                Response::HTTP_FORBIDDEN
+            );
+        }
+        if ($result['status'] === 'VALIDATION_FAILED') {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.client_credentials_required')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+        if ($result['status'] !== 'SUCCESS') {
+            return new JsonResponse(
+                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.invalid_client_credentials')],
+                Response::HTTP_UNAUTHORIZED
+            );
+        }
+
+        return new JsonResponse($result['payload'] ?? [], Response::HTTP_OK);
+    }
+
+    #[Route('/mcp/{clientId}/rotate-key', name: 'api_auth_mcp_rotate_key', methods: ['POST'])]
+    public function rotateMcpKey(string $clientId, Request $request): JsonResponse
+    {
+        $payload = $this->payload($request);
+        $result = $this->authMcpService->rotateKey(
+            $clientId,
+            trim((string) ($payload['openpgp_public_key'] ?? '')),
+            trim((string) ($payload['openpgp_fingerprint'] ?? '')),
+            isset($payload['client_label']) ? (string) $payload['client_label'] : null,
+        );
+
+        if ($result['status'] === 'VALIDATION_FAILED') {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.client_credentials_required')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+        if ($result['status'] === 'FORBIDDEN_SCOPE') {
+            return new JsonResponse(
+                ['code' => 'FORBIDDEN_SCOPE', 'message' => $this->translator->trans('auth.error.forbidden_scope')],
+                Response::HTTP_FORBIDDEN
+            );
+        }
+        if ($result['status'] === 'STATE_CONFLICT') {
+            return new JsonResponse(
+                ['code' => 'STATE_CONFLICT', 'message' => $this->translator->trans('auth.error.invalid_client_id')],
+                Response::HTTP_CONFLICT
+            );
+        }
+
+        return new JsonResponse($result['payload'] ?? [], Response::HTTP_OK);
+    }
+
+    #[Route('/mcp/token', name: 'api_auth_mcp_token', methods: ['POST'])]
+    public function tokenMcp(Request $request): JsonResponse
+    {
+        $payload = $this->payload($request);
+        $clientId = trim((string) ($payload['client_id'] ?? ''));
+        $fingerprint = trim((string) ($payload['openpgp_fingerprint'] ?? ''));
+        $challengeId = trim((string) ($payload['challenge_id'] ?? ''));
+        $signature = trim((string) ($payload['signature'] ?? ''));
+        if ($clientId === '' || $fingerprint === '' || $challengeId === '' || $signature === '') {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.client_credentials_required')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        $throttled = $this->consumeClientTokenRateLimit($clientId, ClientKind::MCP, (string) ($request->getClientIp() ?? 'unknown'));
+        if ($throttled instanceof JsonResponse) {
+            return $throttled;
+        }
+
+        $result = $this->authMcpService->mintToken($clientId, $fingerprint, $challengeId, $signature);
+        if ($result['status'] === 'FORBIDDEN_SCOPE') {
+            return new JsonResponse(
+                ['code' => 'FORBIDDEN_SCOPE', 'message' => $this->translator->trans('auth.error.forbidden_scope')],
+                Response::HTTP_FORBIDDEN
+            );
+        }
+        if ($result['status'] === 'VALIDATION_FAILED') {
+            return new JsonResponse(
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.client_credentials_required')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+        if ($result['status'] !== 'SUCCESS') {
+            return new JsonResponse(
+                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.invalid_client_credentials')],
+                Response::HTTP_UNAUTHORIZED
+            );
+        }
+
+        return new JsonResponse($result['payload'] ?? [], Response::HTTP_OK);
     }
 
     #[Route('/clients/{clientId}/revoke-token', name: 'api_auth_clients_revoke_token', methods: ['POST'])]
@@ -952,13 +1093,6 @@ final class AuthController
                 Response::HTTP_FORBIDDEN
             );
         }
-        if ($result->status() === StartDeviceFlowEndpointResult::STATUS_FORBIDDEN_SCOPE) {
-            return new JsonResponse(
-                ['code' => 'FORBIDDEN_SCOPE', 'message' => $this->translator->trans('auth.error.forbidden_scope')],
-                Response::HTTP_FORBIDDEN
-            );
-        }
-
         return new JsonResponse($result->payload(), Response::HTTP_OK);
     }
 
@@ -1194,6 +1328,31 @@ final class AuthController
             [
                 'code' => 'TOO_MANY_ATTEMPTS',
                 'message' => $this->translator->trans('auth.error.too_many_refresh_requests'),
+                'retry_in_seconds' => $retryInSeconds,
+            ],
+            Response::HTTP_TOO_MANY_REQUESTS
+        );
+    }
+
+    private function consumeClientTokenRateLimit(string $clientId, string $clientKind, string $remoteAddress): ?JsonResponse
+    {
+        $limit = $this->clientTokenMintRateLimiter
+            ->create(hash('sha256', $clientId.'|'.$clientKind.'|'.$remoteAddress))
+            ->consume(1);
+        if ($limit->isAccepted()) {
+            return null;
+        }
+
+        $retryAfter = $limit->getRetryAfter();
+        $retryInSeconds = max(
+            1,
+            $retryAfter instanceof \DateTimeImmutable ? $retryAfter->getTimestamp() - time() : 1
+        );
+
+        return new JsonResponse(
+            [
+                'code' => 'TOO_MANY_ATTEMPTS',
+                'message' => $this->translator->trans('auth.error.too_many_client_token_requests'),
                 'retry_in_seconds' => $retryInSeconds,
             ],
             Response::HTTP_TOO_MANY_REQUESTS
