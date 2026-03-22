@@ -79,7 +79,7 @@ final class MintClientTokenEndpointHandlerTest extends TestCase
     public function testHandleReturnsSuccessWithToken(): void
     {
         $gateway = $this->createMock(AuthClientGateway::class);
-        $gateway->expects(self::once())->method('isMcpDisabledByAppPolicy')->willReturn(false);
+        $gateway->expects(self::never())->method('isMcpDisabledByAppPolicy');
         $gateway->expects(self::once())->method('mintToken')->with('agent-default', 'AGENT', 'secret')->willReturn([
             'access_token' => 'tok_123',
             'token_type' => 'Bearer',
