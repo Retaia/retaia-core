@@ -22,6 +22,11 @@ final class FeatureGovernanceGateway implements FeatureGovernanceGatewayPort
         return $this->service->effectiveFeatureEnabledForUser($userId);
     }
 
+    public function effectiveFeatureExplanationsForUser(string $userId): array
+    {
+        return $this->service->effectiveFeatureExplanationsForUser($userId);
+    }
+
     public function featureGovernanceRules(): array
     {
         return $this->service->featureGovernanceRules();

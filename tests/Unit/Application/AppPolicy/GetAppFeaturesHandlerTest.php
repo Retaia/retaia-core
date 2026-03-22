@@ -12,6 +12,7 @@ final class GetAppFeaturesHandlerTest extends TestCase
     {
         $gateway = $this->createMock(AppFeatureGovernanceGateway::class);
         $gateway->expects(self::once())->method('appFeatureEnabled')->willReturn(['features.ai' => true]);
+        $gateway->expects(self::once())->method('appFeatureExplanations')->willReturn(['features.ai' => ['effective_value' => true]]);
         $gateway->expects(self::once())->method('featureGovernanceRules')->willReturn([['key' => 'features.ai']]);
         $gateway->expects(self::once())->method('coreV1GlobalFeatures')->willReturn(['features.core.auth']);
 
@@ -19,6 +20,7 @@ final class GetAppFeaturesHandlerTest extends TestCase
         $result = $handler->handle();
 
         self::assertSame(['features.ai' => true], $result->appFeatureEnabled());
+        self::assertSame(['features.ai' => ['effective_value' => true]], $result->appFeatureExplanations());
         self::assertSame([['key' => 'features.ai']], $result->featureGovernance());
         self::assertSame(['features.core.auth'], $result->coreV1GlobalFeatures());
     }

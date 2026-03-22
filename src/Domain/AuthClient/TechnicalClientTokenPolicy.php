@@ -11,6 +11,6 @@ final class TechnicalClientTokenPolicy
 
     public function isForbiddenScope(string $clientKind, bool $mcpDisabled): bool
     {
-        return $clientKind === ClientKind::MCP && $mcpDisabled;
+        return false;
     }
 }

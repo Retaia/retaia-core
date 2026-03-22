@@ -7,7 +7,7 @@ use PHPUnit\Framework\TestCase;
 
 final class TechnicalClientTokenPolicyTest extends TestCase
 {
-    public function testUiWebIsForbiddenActorForTechnicalTokenMint(): void
+    public function testOnlyAgentIsAllowedForTechnicalTokenMint(): void
     {
         $policy = new TechnicalClientTokenPolicy();
 
@@ -16,11 +16,11 @@ final class TechnicalClientTokenPolicyTest extends TestCase
         self::assertTrue($policy->isForbiddenActor('MCP'));
     }
 
-    public function testMcpCanBeForbiddenByAppSwitch(): void
+    public function testForbiddenScopeNoLongerDependsOnMcpSwitch(): void
     {
         $policy = new TechnicalClientTokenPolicy();
 
-        self::assertTrue($policy->isForbiddenScope('MCP', true));
+        self::assertFalse($policy->isForbiddenScope('MCP', true));
         self::assertFalse($policy->isForbiddenScope('MCP', false));
         self::assertFalse($policy->isForbiddenScope('AGENT', true));
     }

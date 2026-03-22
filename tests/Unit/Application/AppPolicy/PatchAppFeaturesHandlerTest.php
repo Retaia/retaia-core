@@ -37,6 +37,7 @@ final class PatchAppFeaturesHandlerTest extends TestCase
         ]);
         $gateway->expects(self::once())->method('setAppFeatureEnabled')->with(['features.ai' => false]);
         $gateway->expects(self::once())->method('appFeatureEnabled')->willReturn(['features.ai' => false]);
+        $gateway->expects(self::once())->method('appFeatureExplanations')->willReturn(['features.ai' => ['effective_value' => false, 'reason_code' => 'ADMIN_DISABLED']]);
         $gateway->expects(self::once())->method('featureGovernanceRules')->willReturn([['key' => 'features.ai']]);
         $gateway->expects(self::once())->method('coreV1GlobalFeatures')->willReturn(['features.core.auth']);
 

@@ -7,12 +7,14 @@ final class MyFeaturesResult
     /**
      * @param array<string, bool>              $userFeatureEnabled
      * @param array<string, bool>              $effectiveFeatureEnabled
+     * @param array<string, array<string, mixed>> $effectiveFeatureExplanations
      * @param array<int, array<string, mixed>> $featureGovernance
      * @param array<int, string>               $coreV1GlobalFeatures
      */
     public function __construct(
         private array $userFeatureEnabled,
         private array $effectiveFeatureEnabled,
+        private array $effectiveFeatureExplanations,
         private array $featureGovernance,
         private array $coreV1GlobalFeatures,
     ) {
@@ -32,6 +34,14 @@ final class MyFeaturesResult
     public function effectiveFeatureEnabled(): array
     {
         return $this->effectiveFeatureEnabled;
+    }
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    public function effectiveFeatureExplanations(): array
+    {
+        return $this->effectiveFeatureExplanations;
     }
 
     /**

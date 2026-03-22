@@ -43,7 +43,7 @@ final class ErrorResponseContractSubscriber implements EventSubscriberInterface
     private function isRetryableCode(string $code): bool
     {
         return in_array($code, [
-            'RATE_LIMITED',
+            'TOO_MANY_ATTEMPTS',
             'TEMPORARY_UNAVAILABLE',
         ], true);
     }
@@ -58,4 +58,3 @@ final class ErrorResponseContractSubscriber implements EventSubscriberInterface
         return bin2hex(random_bytes(16));
     }
 }
-

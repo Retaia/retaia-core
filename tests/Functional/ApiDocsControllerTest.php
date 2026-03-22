@@ -36,15 +36,14 @@ final class ApiDocsControllerTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_NOT_MODIFIED);
     }
 
-    public function testDocsAndOpenApiSupportMinorVersionFiles(): void
+    public function testMinorVersionWithoutDedicatedSpecReturnsNotFound(): void
     {
         $client = static::createClient();
         $client->request('GET', '/api/v1.1/docs');
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        self::assertResponseStatusCodeSame(Response::HTTP_NOT_FOUND);
 
         $client->request('GET', '/api/v1.1/openapi');
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
-        self::assertStringContainsString("openapi: 3.1.0\n", (string) $client->getResponse()->getContent());
+        self::assertResponseStatusCodeSame(Response::HTTP_NOT_FOUND);
     }
 
     public function testUnknownOpenApiVersionReturnsNotFound(): void

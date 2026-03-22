@@ -10,6 +10,11 @@ interface AppFeatureGovernanceGateway
     public function appFeatureEnabled(): array;
 
     /**
+     * @return array<string, array<string, mixed>>
+     */
+    public function appFeatureExplanations(): array;
+
+    /**
      * @return array<int, array<string, mixed>>
      */
     public function featureGovernanceRules(): array;

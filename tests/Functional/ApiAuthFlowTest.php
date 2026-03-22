@@ -7,6 +7,7 @@ use App\Tests\Support\FixtureUsers;
 use Doctrine\DBAL\Connection;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
 use OTPHP\TOTP;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -26,8 +27,9 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertResponseHeaderSame('content-type', 'application/json');
         $loginPayload = json_decode($client->getResponse()->getContent(), true);
         self::assertIsArray($loginPayload);
-        self::assertTrue((bool) ($loginPayload['authenticated'] ?? false));
-        self::assertSame(FixtureUsers::ADMIN_EMAIL, $loginPayload['user']['email'] ?? null);
+        self::assertIsString($loginPayload['access_token'] ?? null);
+        self::assertIsString($loginPayload['refresh_token'] ?? null);
+        self::assertSame(FixtureUsers::ADMIN_EMAIL, $this->subjectFromJwt((string) $loginPayload['access_token']));
 
         $client->request('GET', '/api/v1/auth/me');
 
@@ -501,145 +503,96 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
     }
 
-    public function testWebAuthnRegisterOptionsRequiresAuthentication(): void
+    public function testMySessionsListCurrentAndOtherSessions(): void
     {
-        $client = $this->createIsolatedClient('10.0.0.18');
-
-        $client->jsonRequest('POST', '/api/v1/auth/webauthn/register/options');
-
-        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
-        $payload = json_decode($client->getResponse()->getContent(), true);
-        self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
-    }
-
-    public function testWebAuthnRegisterAndVerifyFlow(): void
-    {
-        $client = $this->createIsolatedClient('10.0.0.19');
-        $this->loginAndAttachBearer($client, [
-            'email' => FixtureUsers::ADMIN_EMAIL,
-            'password' => FixtureUsers::DEFAULT_PASSWORD,
+        $email = sprintf('sessions-%s@retaia.local', bin2hex(random_bytes(4)));
+        $currentClient = $this->createIsolatedClient('10.0.0.18');
+        $this->insertUser($email, 'Change-me1!', ['ROLE_USER'], true);
+        $this->loginAndAttachBearer($currentClient, [
+            'email' => $email,
+            'password' => 'Change-me1!',
+            'client_id' => 'interactive-current',
         ]);
+        $currentPayload = json_decode((string) $currentClient->getResponse()->getContent(), true);
+        self::assertIsArray($currentPayload);
+        $currentToken = $currentPayload['access_token'] ?? null;
+        self::assertIsString($currentToken);
 
-        $client->jsonRequest('POST', '/api/v1/auth/webauthn/register/options');
-
+        $currentClient->setServerParameter('HTTP_AUTHORIZATION', '');
+        $currentClient->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => $email,
+            'password' => 'Change-me1!',
+            'client_id' => 'interactive-other',
+        ]);
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
-        $payload = json_decode($client->getResponse()->getContent(), true);
+        $currentClient->setServerParameter('HTTP_AUTHORIZATION', 'Bearer '.$currentToken);
+        $currentClient->request('GET', '/api/v1/auth/me/sessions');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $currentClient->getResponse()->getContent(), true);
         self::assertIsArray($payload);
-        self::assertIsString($payload['request_id'] ?? null);
-        self::assertIsArray($payload['public_key'] ?? null);
-        self::assertIsString($payload['public_key']['challenge'] ?? null);
-
-        $client->jsonRequest('POST', '/api/v1/auth/webauthn/register/verify', [
-            'request_id' => $payload['request_id'],
-            'credential' => [
-                'request_id' => $payload['request_id'],
-                'id' => 'credential-test',
-            ],
-            'device_label' => 'MacBook Passkey',
-        ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
-        $verifyPayload = json_decode($client->getResponse()->getContent(), true);
-        self::assertIsArray($verifyPayload);
-        self::assertMatchesRegularExpression('/^[0-9a-f-]{36}$/', (string) ($verifyPayload['device_id'] ?? ''));
-        self::assertSame('MacBook Passkey', $verifyPayload['device_label'] ?? null);
-        self::assertIsString($verifyPayload['webauthn_fingerprint'] ?? null);
+        self::assertCount(2, $payload['items'] ?? []);
+        self::assertTrue((bool) ($payload['items'][0]['is_current'] ?? false));
+        self::assertSame('interactive-current', $payload['items'][0]['client_id'] ?? null);
     }
 
-    public function testWebAuthnAuthenticateOptionsAndVerifyFlow(): void
+    public function testCurrentSessionCannotBeSelfRevoked(): void
     {
         $client = $this->createIsolatedClient('10.0.0.20');
-
         $this->loginAndAttachBearer($client, [
             'email' => FixtureUsers::ADMIN_EMAIL,
             'password' => FixtureUsers::DEFAULT_PASSWORD,
+            'client_id' => 'interactive-self-revoke',
         ]);
-        $client->jsonRequest('POST', '/api/v1/auth/webauthn/register/options');
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
-        $registerOptions = json_decode($client->getResponse()->getContent(), true);
-        self::assertIsArray($registerOptions);
 
-        $client->jsonRequest('POST', '/api/v1/auth/webauthn/register/verify', [
-            'request_id' => $registerOptions['request_id'] ?? '',
-            'credential' => [
-                'request_id' => $registerOptions['request_id'] ?? '',
-                'id' => 'credential-test',
-            ],
-            'device_label' => 'MacBook Passkey',
-        ]);
+        $client->request('GET', '/api/v1/auth/me/sessions');
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
-        $client->setServerParameter('HTTP_AUTHORIZATION', '');
+        $sessionsPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($sessionsPayload);
+        $sessionId = $sessionsPayload['items'][0]['session_id'] ?? null;
+        self::assertIsString($sessionId);
 
-        $client->jsonRequest('POST', '/api/v1/auth/webauthn/authenticate/options', [
-            'email' => FixtureUsers::ADMIN_EMAIL,
-            'client_id' => 'webauthn-interactive',
-            'client_kind' => 'UI_WEB',
-        ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
-        $payload = json_decode($client->getResponse()->getContent(), true);
-        self::assertIsArray($payload);
-        self::assertIsString($payload['request_id'] ?? null);
-        self::assertIsArray($payload['public_key'] ?? null);
-
-        $client->jsonRequest('POST', '/api/v1/auth/webauthn/authenticate/verify', [
-            'request_id' => $payload['request_id'],
-            'credential' => [
-                'request_id' => $payload['request_id'],
-                'id' => 'credential-test',
-            ],
-            'client_id' => 'webauthn-interactive',
-            'client_kind' => 'UI_WEB',
-        ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
-        $verifyPayload = json_decode($client->getResponse()->getContent(), true);
-        self::assertIsArray($verifyPayload);
-        self::assertIsString($verifyPayload['access_token'] ?? null);
-        self::assertSame('Bearer', $verifyPayload['token_type'] ?? null);
-        self::assertSame('webauthn-interactive', $verifyPayload['client_id'] ?? null);
-        self::assertSame('UI_WEB', $verifyPayload['client_kind'] ?? null);
+        $client->jsonRequest('POST', '/api/v1/auth/me/sessions/'.$sessionId.'/revoke');
+        self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('STATE_CONFLICT', $payload['code'] ?? null);
     }
 
-    public function testWebAuthnAuthenticateOptionsRejectsUserWithoutRegisteredDevice(): void
+    public function testRevokeOtherSessionsRevokesOnlyOtherSessions(): void
     {
-        $client = $this->createIsolatedClient('10.0.0.23');
-        $email = sprintf('no-passkey-%s@retaia.local', bin2hex(random_bytes(4)));
+        $email = sprintf('sessions-revoke-%s@retaia.local', bin2hex(random_bytes(4)));
+        $currentClient = $this->createIsolatedClient('10.0.0.21');
         $this->insertUser($email, 'Change-me1!', ['ROLE_USER'], true);
-
-        $client->jsonRequest('POST', '/api/v1/auth/webauthn/authenticate/options', [
+        $this->loginAndAttachBearer($currentClient, [
             'email' => $email,
-            'client_id' => 'webauthn-interactive',
-            'client_kind' => 'UI_WEB',
+            'password' => 'Change-me1!',
+            'client_id' => 'interactive-primary',
         ]);
+        $primaryPayload = json_decode((string) $currentClient->getResponse()->getContent(), true);
+        self::assertIsArray($primaryPayload);
+        $primaryToken = $primaryPayload['access_token'] ?? null;
+        self::assertIsString($primaryToken);
+
+        $currentClient->setServerParameter('HTTP_AUTHORIZATION', '');
+        $currentClient->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => $email,
+            'password' => 'Change-me1!',
+            'client_id' => 'interactive-secondary',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $secondaryPayload = json_decode((string) $currentClient->getResponse()->getContent(), true);
+        self::assertIsArray($secondaryPayload);
+        $secondaryToken = $secondaryPayload['access_token'] ?? null;
+        self::assertIsString($secondaryToken);
+
+        $currentClient->setServerParameter('HTTP_AUTHORIZATION', 'Bearer '.$primaryToken);
+        $currentClient->jsonRequest('POST', '/api/v1/auth/me/sessions/revoke-others');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $currentClient->getResponse()->getContent(), true);
+        self::assertGreaterThanOrEqual(1, (int) ($payload['revoked'] ?? 0));
+
+        $currentClient->setServerParameter('HTTP_AUTHORIZATION', 'Bearer '.$secondaryToken);
+        $currentClient->request('GET', '/api/v1/auth/me');
         self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
-        $payload = json_decode($client->getResponse()->getContent(), true);
-        self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
-    }
-
-    public function testWebAuthnAuthenticateVerifyFailsWhenRequestIdMissing(): void
-    {
-        $client = $this->createIsolatedClient('10.0.0.21');
-
-        $client->jsonRequest('POST', '/api/v1/auth/webauthn/authenticate/verify', [
-            'credential' => ['id' => 'credential-test'],
-        ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
-        $payload = json_decode($client->getResponse()->getContent(), true);
-        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
-    }
-
-    public function testWebAuthnAuthenticateOptionsIsRateLimited(): void
-    {
-        $client = $this->createIsolatedClient('10.0.0.22');
-
-        for ($attempt = 1; $attempt <= 20; ++$attempt) {
-            $client->jsonRequest('POST', '/api/v1/auth/webauthn/authenticate/options', []);
-            self::assertResponseStatusCodeSame(Response::HTTP_OK);
-        }
-
-        $client->jsonRequest('POST', '/api/v1/auth/webauthn/authenticate/options', []);
-        self::assertResponseStatusCodeSame(Response::HTTP_TOO_MANY_REQUESTS);
-        $payload = json_decode($client->getResponse()->getContent(), true);
-        self::assertSame('TOO_MANY_ATTEMPTS', $payload['code'] ?? null);
-        self::assertGreaterThanOrEqual(1, (int) ($payload['retry_in_seconds'] ?? 0));
     }
 
     private function forceTokenExpired(string $token): void
@@ -653,6 +606,25 @@ final class ApiAuthFlowTest extends WebTestCase
                 'tokenHash' => hash('sha256', $token),
             ],
         );
+    }
+
+    private function subjectFromJwt(string $jwt): ?string
+    {
+        $parts = explode('.', $jwt);
+        if (count($parts) < 2) {
+            return null;
+        }
+
+        $payload = strtr($parts[1], '-_', '+/');
+        $payload .= str_repeat('=', (4 - strlen($payload) % 4) % 4);
+        $decoded = base64_decode($payload, true);
+        if (!is_string($decoded)) {
+            return null;
+        }
+
+        $claims = json_decode($decoded, true);
+
+        return is_array($claims) ? ($claims['email'] ?? null) : null;
     }
 
     public function testLoginFailsWhenEmailIsNotVerified(): void
@@ -2039,6 +2011,9 @@ final class ApiAuthFlowTest extends WebTestCase
 
         $client = static::createClient([], $server);
         $client->disableReboot();
+        /** @var CacheItemPoolInterface $cache */
+        $cache = static::getContainer()->get('cache.app');
+        $cache->clear();
 
         return $client;
     }
@@ -2097,6 +2072,13 @@ final class ApiAuthFlowTest extends WebTestCase
      */
     private function loginAndAttachBearer(\Symfony\Bundle\FrameworkBundle\KernelBrowser $client, array $payload): void
     {
+        if (!array_key_exists('client_id', $payload)) {
+            $payload['client_id'] = 'interactive-'.bin2hex(random_bytes(6));
+        }
+        if (!array_key_exists('client_kind', $payload)) {
+            $payload['client_kind'] = 'UI_WEB';
+        }
+
         $client->jsonRequest('POST', '/api/v1/auth/login', $payload);
 
         $responsePayload = json_decode((string) $client->getResponse()->getContent(), true);

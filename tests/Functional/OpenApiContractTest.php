@@ -117,7 +117,6 @@ final class OpenApiContractTest extends WebTestCase
             'LOCK_REQUIRED',
             'LOCK_INVALID',
             'TOO_MANY_ATTEMPTS',
-            'RATE_LIMITED',
             'TEMPORARY_UNAVAILABLE',
         ];
 
