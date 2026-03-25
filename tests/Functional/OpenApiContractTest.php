@@ -131,6 +131,22 @@ final class OpenApiContractTest extends WebTestCase
         self::assertNotContains('waveform_url', $required);
     }
 
+    public function testAssetDetailProjectsAreDeclaredInOpenApi(): void
+    {
+        $openApi = $this->openApi();
+
+        $assetDetail = $openApi['components']['schemas']['AssetDetail'] ?? null;
+        self::assertIsArray($assetDetail);
+        $projects = $assetDetail['properties']['projects'] ?? null;
+        self::assertIsArray($projects);
+        self::assertSame('array', $projects['type'] ?? null);
+        self::assertSame('#/components/schemas/AssetProjectRef', $projects['items']['$ref'] ?? null);
+
+        $projectRef = $openApi['components']['schemas']['AssetProjectRef'] ?? null;
+        self::assertIsArray($projectRef);
+        self::assertSame(['project_id', 'project_name', 'created_at'], $projectRef['required'] ?? null);
+    }
+
     public function testRuntimeContractKeepsPollingAsSourceOfTruth(): void
     {
         $openApi = $this->openApi();

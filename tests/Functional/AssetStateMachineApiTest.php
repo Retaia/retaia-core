@@ -146,6 +146,87 @@ final class AssetStateMachineApiTest extends WebTestCase
         self::assertSame('fx3', $payload['fields']['camera'] ?? null);
     }
 
+    public function testGetAssetExposesProjectsOutsideFields(): void
+    {
+        $client = $this->createAuthenticatedClient(true);
+
+        $client->request('GET', '/api/v1/assets/11111111-1111-1111-1111-111111111111');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        self::assertSame('Project Alpha', $payload['projects'][0]['project_name'] ?? null);
+        self::assertSame('Main edit', $payload['projects'][0]['description'] ?? null);
+        self::assertArrayNotHasKey('projects', $payload['fields'] ?? []);
+    }
+
+    public function testPatchUpdatesProjectsAndDeduplicatesByProjectId(): void
+    {
+        $client = $this->createAuthenticatedClient(true);
+
+        $client->jsonRequest('PATCH', '/api/v1/assets/11111111-1111-1111-1111-111111111111', [
+            'projects' => [
+                [
+                    'project_id' => 'proj-beta',
+                    'project_name' => 'Project Beta',
+                    'created_at' => '2026-02-02T08:30:00Z',
+                    'description' => 'Secondary use',
+                ],
+                [
+                    'project_id' => 'proj-beta',
+                    'project_name' => 'Project Beta Duplicate',
+                    'created_at' => '2026-02-02T08:31:00Z',
+                ],
+                [
+                    'project_id' => 'proj-gamma',
+                    'project_name' => 'Project Gamma',
+                    'created_at' => '2026-03-02T08:30:00Z',
+                ],
+            ],
+        ], [
+            'HTTP_IF_MATCH' => $this->currentAssetRevisionEtag($client, '11111111-1111-1111-1111-111111111111'),
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('proj-beta', $payload['projects'][0]['project_id'] ?? null);
+        self::assertSame('Secondary use', $payload['projects'][0]['description'] ?? null);
+        self::assertCount(2, $payload['projects'] ?? []);
+        self::assertArrayNotHasKey('projects', $payload['fields'] ?? []);
+
+        $client->request('GET', '/api/v1/assets/11111111-1111-1111-1111-111111111111');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $detailPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertCount(2, $detailPayload['projects'] ?? []);
+
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = self::getContainer()->get(EntityManagerInterface::class);
+        $entityManager->clear();
+        $asset = $entityManager->find(Asset::class, '11111111-1111-1111-1111-111111111111');
+        self::assertInstanceOf(Asset::class, $asset);
+        self::assertCount(2, $asset->getFields()['projects'] ?? []);
+    }
+
+    public function testPatchRejectsInvalidProjectsPayload(): void
+    {
+        $client = $this->createAuthenticatedClient(true);
+
+        $client->jsonRequest('PATCH', '/api/v1/assets/11111111-1111-1111-1111-111111111111', [
+            'projects' => [
+                [
+                    'project_id' => 'proj-invalid',
+                    'created_at' => 'not-a-date',
+                ],
+            ],
+        ], [
+            'HTTP_IF_MATCH' => $this->currentAssetRevisionEtag($client, '11111111-1111-1111-1111-111111111111'),
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
+    }
+
     public function testPatchReturnsNotFoundForUnknownAsset(): void
     {
         $client = $this->createAuthenticatedClient();
@@ -306,6 +387,14 @@ final class AssetStateMachineApiTest extends WebTestCase
             'camera' => 'a7s',
             'captured_at' => '2026-01-10T12:00:00Z',
             'duration' => 120,
+            'projects' => [
+                [
+                    'project_id' => 'proj-alpha',
+                    'project_name' => 'Project Alpha',
+                    'created_at' => '2026-01-05T09:00:00Z',
+                    'description' => 'Main edit',
+                ],
+            ],
             'suggestions' => [
                 'suggested_tags' => ['wedding', 'ceremony'],
             ],

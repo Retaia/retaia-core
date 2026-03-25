@@ -9,6 +9,8 @@ use App\Entity\Asset;
 
 final class AssetReadGateway implements AssetReadGatewayPort
 {
+    private const HIDDEN_FIELD_KEYS = ['projects'];
+
     public function __construct(
         private AssetRepositoryInterface $assets,
         private bool $featureSuggestedTagsFiltersEnabled,
@@ -64,9 +66,13 @@ final class AssetReadGateway implements AssetReadGatewayPort
         $source = $this->sourceFromFields($fields, $asset->getFilename());
         $derived = $this->derivedFromFields($fields);
         $summary = $this->summary($asset);
+        $projects = $this->projectsFromFields($fields);
 
         return [
             'summary' => $summary,
+            'notes' => $asset->getNotes(),
+            'fields' => $this->publicFields($fields),
+            'projects' => $projects,
             'paths' => $source,
             'processing' => [
                 'facts_done' => (bool) ($fields['facts_done'] ?? false),
@@ -378,6 +384,73 @@ final class AssetReadGateway implements AssetReadGatewayPort
         }
 
         return array_values(array_unique($result));
+    }
+
+    /**
+     * @param array<string, mixed> $fields
+     * @return array<string, mixed>
+     */
+    private function publicFields(array $fields): array
+    {
+        foreach (self::HIDDEN_FIELD_KEYS as $key) {
+            unset($fields[$key]);
+        }
+
+        return $fields;
+    }
+
+    /**
+     * @param array<string, mixed> $fields
+     * @return array<int, array<string, mixed>>
+     */
+    private function projectsFromFields(array $fields): array
+    {
+        $projects = $fields['projects'] ?? null;
+        if (!is_array($projects)) {
+            return [];
+        }
+
+        $normalized = [];
+        $seen = [];
+        foreach ($projects as $project) {
+            if (!is_array($project)) {
+                continue;
+            }
+
+            $projectId = trim((string) ($project['project_id'] ?? ''));
+            $projectName = trim((string) ($project['project_name'] ?? ''));
+            $createdAt = trim((string) ($project['created_at'] ?? ''));
+            if ($projectId === '' || $projectName === '' || !$this->isValidDateTime($createdAt) || isset($seen[$projectId])) {
+                continue;
+            }
+
+            $item = [
+                'project_id' => $projectId,
+                'project_name' => $projectName,
+                'created_at' => $createdAt,
+            ];
+
+            if (array_key_exists('description', $project)) {
+                $description = $project['description'];
+                $item['description'] = is_string($description) ? $description : null;
+            }
+
+            $normalized[] = $item;
+            $seen[$projectId] = true;
+        }
+
+        return $normalized;
+    }
+
+    private function isValidDateTime(string $value): bool
+    {
+        try {
+            new \DateTimeImmutable($value);
+
+            return true;
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     private function optionalString(mixed $value): ?string

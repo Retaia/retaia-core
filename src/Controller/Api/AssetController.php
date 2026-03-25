@@ -95,6 +95,12 @@ final class AssetController
                 'message' => $this->translator->trans('asset.error.not_found'),
             ], Response::HTTP_NOT_FOUND);
         }
+        if ($result->status() === AssetEndpointResult::STATUS_VALIDATION_FAILED) {
+            return new JsonResponse([
+                'code' => 'VALIDATION_FAILED',
+                'message' => 'invalid asset patch payload',
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
 
         if ($result->status() === AssetEndpointResult::STATUS_PURGED_READ_ONLY) {
             return new JsonResponse([
