@@ -17,6 +17,11 @@ final class AppFeatureGovernanceGateway implements AppFeatureGovernanceGatewayPo
         return $this->service->appFeatureEnabled();
     }
 
+    public function appFeatureExplanations(): array
+    {
+        return $this->service->appFeatureExplanations();
+    }
+
     public function featureGovernanceRules(): array
     {
         return $this->service->featureGovernanceRules();

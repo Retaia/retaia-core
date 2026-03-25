@@ -66,7 +66,7 @@ final class ApiLoginAuthenticatorTest extends TestCase
         $authenticator->authenticate($request);
     }
 
-    public function testOnAuthenticationSuccessReturnsNormalizedUserPayload(): void
+    public function testOnAuthenticationSuccessReturnsTokenPayload(): void
     {
         $authenticator = $this->authenticator();
         $token = $this->createStub(TokenInterface::class);
@@ -77,9 +77,9 @@ final class ApiLoginAuthenticatorTest extends TestCase
         self::assertNotNull($response);
         self::assertSame(Response::HTTP_OK, $response->getStatusCode());
         $payload = json_decode((string) $response->getContent(), true);
-        self::assertSame(true, $payload['authenticated']);
-        self::assertSame('u-1', $payload['user']['id']);
-        self::assertSame('user@example.test', $payload['user']['email']);
+        self::assertArrayNotHasKey('authenticated', $payload);
+        self::assertArrayNotHasKey('user', $payload);
+        self::assertIsString($payload['access_token'] ?? null);
         self::assertIsString($payload['refresh_token'] ?? null);
         self::assertSame(3600, $payload['expires_in'] ?? null);
     }

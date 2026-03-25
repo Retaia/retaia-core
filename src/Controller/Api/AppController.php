@@ -124,6 +124,7 @@ final class AppController
         return new JsonResponse(
             [
                 'app_feature_enabled' => $features?->appFeatureEnabled() ?? [],
+                'app_feature_explanations' => $features?->appFeatureExplanations() ?? [],
                 'feature_governance' => $features?->featureGovernance() ?? [],
                 'core_v1_global_features' => $features?->coreV1GlobalFeatures() ?? [],
             ],
@@ -158,6 +159,7 @@ final class AppController
         return new JsonResponse(
             [
                 'app_feature_enabled' => $features?->appFeatureEnabled() ?? [],
+                'app_feature_explanations' => $features?->appFeatureExplanations() ?? [],
                 'feature_governance' => $features?->featureGovernance() ?? [],
                 'core_v1_global_features' => $features?->coreV1GlobalFeatures() ?? [],
             ],

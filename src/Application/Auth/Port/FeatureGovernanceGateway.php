@@ -15,6 +15,11 @@ interface FeatureGovernanceGateway
     public function effectiveFeatureEnabledForUser(string $userId): array;
 
     /**
+     * @return array<string, array<string, mixed>>
+     */
+    public function effectiveFeatureExplanationsForUser(string $userId): array;
+
+    /**
      * @return array<int, array<string, mixed>>
      */
     public function featureGovernanceRules(): array;

@@ -15,6 +15,7 @@ final class GetAppFeaturesHandler
     {
         return new GetAppFeaturesResult(
             $this->gateway->appFeatureEnabled(),
+            $this->gateway->appFeatureExplanations(),
             $this->gateway->featureGovernanceRules(),
             $this->gateway->coreV1GlobalFeatures()
         );

@@ -138,19 +138,7 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
             'roles' => $user->getRoles(),
         ]);
 
-        return new JsonResponse(
-            [
-                'authenticated' => true,
-                'user' => $this->normalizeUser($user),
-                'access_token' => $accessToken['access_token'],
-                'token_type' => $accessToken['token_type'],
-                'expires_in' => $accessToken['expires_in'],
-                'refresh_token' => $accessToken['refresh_token'],
-                'client_id' => $accessToken['client_id'],
-                'client_kind' => $accessToken['client_kind'],
-            ],
-            Response::HTTP_OK
-        );
+        return new JsonResponse($accessToken, Response::HTTP_OK);
     }
 
     public function onAuthenticationFailure(Request $request, AuthenticationException $exception): ?Response
@@ -203,26 +191,6 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
             ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
             Response::HTTP_UNAUTHORIZED
         );
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function normalizeUser(UserInterface $user): array
-    {
-        if ($user instanceof User) {
-            return [
-                'id' => $user->getId(),
-                'email' => $user->getEmail(),
-                'roles' => $user->getRoles(),
-            ];
-        }
-
-        return [
-            'id' => null,
-            'email' => $user->getUserIdentifier(),
-            'roles' => $user->getRoles(),
-        ];
     }
 
     private function emailHashFromRequest(Request $request): string

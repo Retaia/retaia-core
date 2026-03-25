@@ -149,6 +149,30 @@ final class WorkflowApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
     }
 
+    public function testBatchPurgeReturnsPerAssetResults(): void
+    {
+        $client = $this->createAuthenticatedClient('admin@retaia.local');
+        $this->seedAsset('66666666-ffff-4fff-8fff-666666666666', AssetState::REJECTED, 'batch-purge-ok.mov');
+        $this->seedAsset('77777777-aaaa-4aaa-8aaa-777777777777', AssetState::ARCHIVED, 'batch-purge-conflict.mov');
+
+        $client->jsonRequest('POST', '/api/v1/assets/purge', [
+            'asset_uuids' => [
+                '66666666-ffff-4fff-8fff-666666666666',
+                '77777777-aaaa-4aaa-8aaa-777777777777',
+            ],
+            'confirm' => true,
+        ], [
+            'HTTP_IDEMPOTENCY_KEY' => 'purge-batch-1',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame(2, $payload['requested'] ?? null);
+        self::assertSame(1, $payload['purged'] ?? null);
+        self::assertSame(1, $payload['failed'] ?? null);
+        self::assertSame('PURGED', $payload['results'][0]['status'] ?? null);
+        self::assertSame('STATE_CONFLICT', $payload['results'][1]['status'] ?? null);
+    }
+
     public function testAgentCannotRunHumanWorkflowEndpoints(): void
     {
         $client = $this->createAuthenticatedClient('agent@retaia.local');

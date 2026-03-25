@@ -120,6 +120,63 @@ final class WorkflowController
         });
     }
 
+    #[Route('/api/v1/assets/purge', name: 'api_assets_purge_batch', methods: ['POST'])]
+    public function purgeBatch(Request $request): JsonResponse
+    {
+        if ($this->workflowEndpointsHandler->isForbiddenAgentActor()) {
+            return $this->forbiddenActor();
+        }
+
+        $payload = $this->payload($request);
+        $assetUuids = array_values(array_filter(
+            array_map(static fn ($value): string => trim((string) $value), (array) ($payload['asset_uuids'] ?? [])),
+            static fn (string $uuid): bool => $uuid !== ''
+        ));
+        $confirm = (bool) ($payload['confirm'] ?? false);
+
+        if ($assetUuids === [] || $confirm !== true) {
+            return $this->errorResponse('VALIDATION_FAILED', 'asset_uuids and confirm=true are required', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        return $this->idempotency->execute($request, $this->actorId(), function () use ($assetUuids): JsonResponse {
+            $results = [];
+            $purged = 0;
+            $failed = 0;
+
+            foreach ($assetUuids as $uuid) {
+                $result = $this->workflowEndpointsHandler->purge($uuid);
+                $status = match ($result->status()) {
+                    WorkflowEndpointResult::STATUS_SUCCESS => 'PURGED',
+                    WorkflowEndpointResult::STATUS_NOT_FOUND => 'NOT_FOUND',
+                    WorkflowEndpointResult::STATUS_STATE_CONFLICT => 'STATE_CONFLICT',
+                    default => 'FORBIDDEN_ACTOR',
+                };
+
+                if ($status === 'FORBIDDEN_ACTOR') {
+                    return $this->forbiddenActor();
+                }
+
+                if ($status === 'PURGED') {
+                    ++$purged;
+                } else {
+                    ++$failed;
+                }
+
+                $results[] = [
+                    'asset_uuid' => $uuid,
+                    'status' => $status,
+                ];
+            }
+
+            return new JsonResponse([
+                'requested' => count($assetUuids),
+                'purged' => $purged,
+                'failed' => $failed,
+                'results' => $results,
+            ], Response::HTTP_OK);
+        });
+    }
+
     #[Route('/api/v1/assets/{uuid}/purge/preview', name: 'api_assets_purge_preview', methods: ['POST'])]
     public function previewPurge(string $uuid): JsonResponse
     {

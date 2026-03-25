@@ -16,6 +16,7 @@ final class GetMyFeaturesHandler
         return new MyFeaturesResult(
             $this->gateway->userFeatureEnabled($userId),
             $this->gateway->effectiveFeatureEnabledForUser($userId),
+            $this->gateway->effectiveFeatureExplanationsForUser($userId),
             $this->gateway->featureGovernanceRules(),
             $this->gateway->coreV1GlobalFeatures()
         );

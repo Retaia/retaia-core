@@ -13,6 +13,7 @@ final class GetMyFeaturesHandlerTest extends TestCase
         $gateway = $this->createMock(FeatureGovernanceGateway::class);
         $gateway->expects(self::once())->method('userFeatureEnabled')->with('u-1')->willReturn(['features.ai.suggest_tags' => true]);
         $gateway->expects(self::once())->method('effectiveFeatureEnabledForUser')->with('u-1')->willReturn(['features.ai.suggest_tags' => true]);
+        $gateway->expects(self::once())->method('effectiveFeatureExplanationsForUser')->with('u-1')->willReturn(['features.ai.suggest_tags' => ['effective_value' => true]]);
         $gateway->expects(self::once())->method('featureGovernanceRules')->willReturn([['key' => 'features.ai.suggest_tags']]);
         $gateway->expects(self::once())->method('coreV1GlobalFeatures')->willReturn(['features.core.auth']);
 
@@ -21,6 +22,7 @@ final class GetMyFeaturesHandlerTest extends TestCase
 
         self::assertSame(['features.ai.suggest_tags' => true], $result->userFeatureEnabled());
         self::assertSame(['features.ai.suggest_tags' => true], $result->effectiveFeatureEnabled());
+        self::assertSame(['features.ai.suggest_tags' => ['effective_value' => true]], $result->effectiveFeatureExplanations());
         self::assertSame([['key' => 'features.ai.suggest_tags']], $result->featureGovernance());
         self::assertSame(['features.core.auth'], $result->coreV1GlobalFeatures());
     }
