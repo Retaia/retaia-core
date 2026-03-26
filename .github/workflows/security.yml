@@ -13,8 +13,50 @@ permissions:
   security-events: write
 
 jobs:
-  codeql:
-    name: CodeQL
+  phpstan:
+    name: PHPStan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache Composer
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.composer/cache
+            vendor
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: |
+            composer-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Dump Symfony container for PHPStan
+        env:
+          APP_ENV: test
+          APP_DEBUG: "1"
+        run: |
+          mkdir -p var/phpstan
+          php bin/console debug:container --env=test --format=xml > var/phpstan/container.xml
+
+      - name: Run PHPStan
+        run: composer check:phpstan
+
+  semgrep:
+    name: Semgrep
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -25,13 +67,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
+      - name: Run Semgrep
+        uses: semgrep/semgrep-action@v1
         with:
-          languages: php, actions
-
-      - name: Analyze
-        uses: github/codeql-action/analyze@v4
+          config: p/php
+          generateSarif: "1"
 
   secrets:
     name: Secret scan
@@ -51,8 +91,8 @@ jobs:
           docker run --rm \
             -v "$PWD:/repo" \
             zricethezav/gitleaks:latest \
-            detect \
-            --source=/repo \
+            dir \
+            /repo \
             --report-format sarif \
             --report-path /repo/gitleaks.sarif \
             --redact \
