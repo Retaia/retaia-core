@@ -209,3 +209,52 @@ jobs:
 
       - name: Composer security audit
         run: composer audit --no-interaction
+
+  ci-required:
+    if: always()
+    runs-on: ubuntu-latest
+    needs:
+      - branch-up-to-date
+      - pr-metadata
+      - no-black-magic
+      - lint
+      - test
+      - integration
+      - security-audit
+    steps:
+      - name: Validate required CI fan-in
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          BRANCH_UP_TO_DATE_RESULT: ${{ needs.branch-up-to-date.result }}
+          PR_METADATA_RESULT: ${{ needs.pr-metadata.result }}
+          NO_BLACK_MAGIC_RESULT: ${{ needs.no-black-magic.result }}
+          LINT_RESULT: ${{ needs.lint.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+          INTEGRATION_RESULT: ${{ needs.integration.result }}
+          SECURITY_AUDIT_RESULT: ${{ needs.security-audit.result }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            required_pr_results=(
+              "$BRANCH_UP_TO_DATE_RESULT"
+              "$PR_METADATA_RESULT"
+            )
+            for result in "${required_pr_results[@]}"; do
+              if [ "$result" != "success" ]; then
+                echo "Required PR CI dependency failed with result: $result" >&2
+                exit 1
+              fi
+            done
+          fi
+
+          for result in \
+            "$NO_BLACK_MAGIC_RESULT" \
+            "$LINT_RESULT" \
+            "$TEST_RESULT" \
+            "$INTEGRATION_RESULT" \
+            "$SECURITY_AUDIT_RESULT"
+          do
+            if [ "$result" != "success" ]; then
+              echo "Required CI dependency failed with result: $result" >&2
+              exit 1
+            fi
+          done

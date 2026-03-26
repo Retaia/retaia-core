@@ -73,6 +73,9 @@ final class AssetEndpointsHandler
         if ($result->status() === PatchAssetResult::STATUS_NOT_FOUND) {
             return new AssetEndpointResult(AssetEndpointResult::STATUS_NOT_FOUND);
         }
+        if ($result->status() === PatchAssetResult::STATUS_VALIDATION_FAILED) {
+            return new AssetEndpointResult(AssetEndpointResult::STATUS_VALIDATION_FAILED);
+        }
         if ($result->status() === PatchAssetResult::STATUS_PURGED_READ_ONLY) {
             return new AssetEndpointResult(AssetEndpointResult::STATUS_PURGED_READ_ONLY);
         }

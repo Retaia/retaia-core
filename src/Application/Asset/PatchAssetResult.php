@@ -5,6 +5,7 @@ namespace App\Application\Asset;
 final class PatchAssetResult
 {
     public const STATUS_NOT_FOUND = 'NOT_FOUND';
+    public const STATUS_VALIDATION_FAILED = 'VALIDATION_FAILED';
     public const STATUS_STATE_CONFLICT = 'STATE_CONFLICT';
     public const STATUS_PURGED_READ_ONLY = 'PURGED_READ_ONLY';
     public const STATUS_PATCHED = 'PATCHED';
