@@ -7,6 +7,8 @@ use App\Application\Asset\Port\AssetPatchGateway as AssetPatchGatewayPort;
 use App\Asset\AssetState;
 use App\Asset\AssetRevisionTag;
 use App\Asset\Repository\AssetRepositoryInterface;
+use App\Asset\Service\AssetStateMachine;
+use App\Asset\Service\StateConflictException;
 use App\Entity\Asset;
 use App\Lock\Repository\OperationLockRepository;
 
@@ -18,6 +20,7 @@ final class AssetPatchGateway implements AssetPatchGatewayPort
     public function __construct(
         private AssetRepositoryInterface $assets,
         private OperationLockRepository $locks,
+        private AssetStateMachine $stateMachine,
     ) {
     }
 
@@ -74,6 +77,11 @@ final class AssetPatchGateway implements AssetPatchGatewayPort
             } else {
                 $fields['projects'] = $projects;
             }
+        }
+
+        $stateResult = $this->applyMutableState($asset, $payload);
+        if ($stateResult !== PatchAssetResult::STATUS_PATCHED) {
+            return ['status' => $stateResult, 'payload' => null];
         }
 
         if (!$this->applyMutableMetadataFields($fields, $payload)) {
@@ -159,11 +167,46 @@ final class AssetPatchGateway implements AssetPatchGatewayPort
             $fields['processing_profile'] = $value;
         }
 
-        if (array_key_exists('state', $payload)) {
-            return false;
+        return true;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function applyMutableState(Asset $asset, array $payload): string
+    {
+        if (!array_key_exists('state', $payload)) {
+            return PatchAssetResult::STATUS_PATCHED;
         }
 
-        return true;
+        $value = $payload['state'];
+        if (!is_string($value)) {
+            return PatchAssetResult::STATUS_VALIDATION_FAILED;
+        }
+
+        $normalized = strtoupper(trim($value));
+        if (!in_array($normalized, [
+            AssetState::DECISION_PENDING->value,
+            AssetState::DECIDED_KEEP->value,
+            AssetState::DECIDED_REJECT->value,
+            AssetState::ARCHIVED->value,
+            AssetState::REJECTED->value,
+        ], true)) {
+            return PatchAssetResult::STATUS_VALIDATION_FAILED;
+        }
+
+        $target = AssetState::tryFrom($normalized);
+        if (!$target instanceof AssetState) {
+            return PatchAssetResult::STATUS_VALIDATION_FAILED;
+        }
+
+        try {
+            $this->stateMachine->transition($asset, $target);
+        } catch (StateConflictException) {
+            return PatchAssetResult::STATUS_STATE_CONFLICT;
+        }
+
+        return PatchAssetResult::STATUS_PATCHED;
     }
 
     private function isValidTagsPayload(mixed $tags): bool

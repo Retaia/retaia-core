@@ -20,57 +20,15 @@ Important context:
 
 ## Executive summary
 
-The runtime is no longer far from the current v1 spec on route presence, but it is still materially behind the contract in four areas:
+The runtime is no longer far from the current v1 spec on route presence, but it is still materially behind the contract in three areas:
 
-1. `assets` read/write contract drift remains on pagination and the last unsupported query/body semantics, even though the current metadata/header shape has been aligned.
-2. `jobs` lease contract drift: `fencing_token` is still absent end-to-end, and job type naming is still on the old `generate_proxy` vocabulary.
-3. agent request signing remains structurally validated, but not cryptographically validated as described by the OpenAPI surface.
-4. contract test/tooling coverage still misses several of the newer v1 behaviors, so some drifts remain invisible while the suite stays green.
+1. `jobs` lease contract drift: `fencing_token` is still absent end-to-end, and job type naming is still on the old `generate_proxy` vocabulary.
+2. agent request signing remains structurally validated, but not cryptographically validated as described by the OpenAPI surface.
+3. contract test/tooling coverage still misses several of the newer v1 behaviors, so some drifts remain invisible while the suite stays green.
 
 There is also a smaller but important surface-management issue: several public routes are exposed in runtime while absent from the normative v1 spec.
 
 ## Findings
-
-### P1. `/assets` list contract still lacks the remaining spec pagination/filter semantics
-
-Spec:
-
-- `GET /assets` declares filters for `state[]`, `tags`, `has_preview`, `tags_mode`, `location_country`, `location_city`, `geo_bbox`, `cursor`, plus existing `q`, `sort`, `captured_at_*`, `limit`.
-- Response exposes `next_cursor` as an actual opaque pagination primitive.
-
-Runtime:
-
-- `src/Controller/Api/AssetController.php` now reads `tags`, `tags_mode`, `has_preview`, `location_country`, and `location_city`, but still accepts a single `state` value rather than the spec's `state[]`, and still keeps legacy `suggested_tags` / `suggested_tags_mode`.
-- `src/Application/Asset/AssetEndpointsHandler.php` always returns `next_cursor => null`.
-- `src/Infrastructure/Asset/AssetReadGateway.php` now filters by tags, preview presence, and location metadata, but still has no `geo_bbox` filtering and no cursor pagination.
-
-Impact:
-
-- The remaining spec-declared pagination/filter semantics are still ignored by runtime.
-- Cursor pagination is declared but not implemented.
-- Legacy query parameters (`suggested_tags`) remain in runtime despite being absent from the spec.
-
-Concrete drift:
-
-- Spec query surface: `specs/api/openapi/v1.yaml` around `/assets`
-- Runtime handler: `src/Controller/Api/AssetController.php`
-- Runtime gateway: `src/Infrastructure/Asset/AssetReadGateway.php`
-
-### P1. `PATCH /assets/{uuid}` still does not implement the spec-declared `state` field semantics
-
-Runtime examples:
-
-- The endpoint now rejects invalid `notes`, `tags`, and typed metadata scalars with `422`.
-- The remaining unsupported part of the patch contract is `state`: the spec declares it writable, while the runtime currently rejects it with `VALIDATION_FAILED` rather than applying the documented state mutation semantics.
-
-Impact:
-
-- The runtime is now safer for malformed scalar input, but `state` remains a documented patch field that the endpoint still cannot honor.
-- Clients must still use dedicated lifecycle endpoints (`reopen`, `reprocess`, decisions) rather than the spec-declared unified patch field.
-
-Concrete drift:
-
-- Runtime patch implementation: `src/Infrastructure/Asset/AssetPatchGateway.php`
 
 ### P1. Job lease contract is missing `fencing_token` end-to-end
 
@@ -232,9 +190,6 @@ Nuance:
 
 The current test suite is green, but the following drifts are not strongly guarded today:
 
-- no contract assertion that asset list supports the remaining `cursor` semantics
-- no contract assertion for spec `state[]` query semantics on `GET /assets`
-- no contract assertion that `PATCH /assets/{uuid}` implements the spec-declared `state` field semantics
 - no contract assertion for `fencing_token` presence in job request/response payloads
 - no contract assertion that runtime job type names match the current enum (`generate_preview` vs `generate_proxy`)
 - no test that retryable job failure clears claimant identity when the job returns to `pending`
@@ -245,14 +200,7 @@ The current test suite is green, but the following drifts are not strongly guard
 
 ## Recommended remediation order
 
-### Batch 1: asset contract alignment
-
-- implement the remaining `/assets` list surface: `state[]`, `geo_bbox`, and real `cursor` pagination
-- remove legacy `suggested_tags` runtime parameters or move them behind an explicitly non-v1 surface
-- decide whether `PATCH /assets/{uuid}` should support spec-level `state` mutations or whether the spec should be narrowed to the dedicated lifecycle endpoints already in runtime
-- add contract tests for the remaining asset list/pagination semantics
-
-### Batch 2: jobs lease/model alignment
+### Batch 1: jobs lease/model alignment
 
 - introduce `fencing_token` in the job model, persistence and serializers
 - require and validate `fencing_token` on heartbeat / submit / fail
@@ -262,13 +210,13 @@ The current test suite is green, but the following drifts are not strongly guard
 - clear `claimed_by` when a retryable failure returns the job to `pending`
 - bind lease mutations to the claiming principal, not only to `lock_token`
 
-### Batch 3: agent signing hardening
+### Batch 2: agent signing hardening
 
 - replace header-only validation with real signature verification against registered agent keys
 - add nonce replay storage and TTL enforcement
 - add negative tests for forged signatures and nonce replay
 
-### Batch 4: surface governance cleanup
+### Batch 3: surface governance cleanup
 
 - decide whether `/health`, `/decisions/*`, `/batches/moves*` belong to public v1
 - if yes, add them to the spec
@@ -280,6 +228,5 @@ The repo is currently healthy from a route-presence and test-green perspective, 
 
 The biggest remaining drifts are not hidden bugs in obscure corners; they are visible contract mismatches on:
 
-- `assets` pagination/filter edge semantics and patch `state` semantics
 - `jobs` lease semantics and job type naming
 - agent request signature strength

@@ -339,6 +339,36 @@ final class AssetStateMachineApiTest extends WebTestCase
         self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
     }
 
+    public function testPatchAppliesSupportedStateTransition(): void
+    {
+        $client = $this->createAuthenticatedClient(true);
+
+        $client->jsonRequest('PATCH', '/api/v1/assets/33333333-3333-3333-3333-333333333333', [
+            'state' => 'DECISION_PENDING',
+        ], [
+            'HTTP_IF_MATCH' => $this->currentAssetRevisionEtag($client, '33333333-3333-3333-3333-333333333333'),
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('DECISION_PENDING', $payload['state'] ?? null);
+    }
+
+    public function testPatchReturnsConflictForInvalidStateTransition(): void
+    {
+        $client = $this->createAuthenticatedClient(true);
+
+        $client->jsonRequest('PATCH', '/api/v1/assets/22222222-2222-2222-2222-222222222222', [
+            'state' => 'ARCHIVED',
+        ], [
+            'HTTP_IF_MATCH' => $this->currentAssetRevisionEtag($client, '22222222-2222-2222-2222-222222222222'),
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('STATE_CONFLICT', $payload['code'] ?? null);
+    }
+
     public function testPatchReturnsNotFoundForUnknownAsset(): void
     {
         $client = $this->createAuthenticatedClient();
@@ -398,6 +428,56 @@ final class AssetStateMachineApiTest extends WebTestCase
         self::assertArrayHasKey('next_cursor', $payload);
     }
 
+    public function testListAssetsSupportsStateArrays(): void
+    {
+        $client = $this->createAuthenticatedClient(true);
+
+        $client->request('GET', '/api/v1/assets?state=PROCESSED,ARCHIVED&sort=name&limit=10');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        self::assertCount(2, $payload['items'] ?? []);
+        self::assertSame('33333333-3333-3333-3333-333333333333', $payload['items'][0]['uuid'] ?? null);
+        self::assertSame('22222222-2222-2222-2222-222222222222', $payload['items'][1]['uuid'] ?? null);
+    }
+
+    public function testListAssetsSupportsGeoBboxFilter(): void
+    {
+        $client = $this->createAuthenticatedClient(true);
+
+        $client->request('GET', '/api/v1/assets?geo_bbox=4.30,50.80,4.45,50.92&limit=10');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        self::assertCount(1, $payload['items'] ?? []);
+        self::assertSame('11111111-1111-1111-1111-111111111111', $payload['items'][0]['uuid'] ?? null);
+    }
+
+    public function testListAssetsSupportsCursorPagination(): void
+    {
+        $client = $this->createAuthenticatedClient(true);
+
+        $client->request('GET', '/api/v1/assets?sort=name&limit=1');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        self::assertCount(1, $payload['items'] ?? []);
+        self::assertSame('33333333-3333-3333-3333-333333333333', $payload['items'][0]['uuid'] ?? null);
+        self::assertIsString($payload['next_cursor'] ?? null);
+
+        $cursor = (string) $payload['next_cursor'];
+        $client->request('GET', '/api/v1/assets?sort=name&limit=1&cursor='.rawurlencode($cursor));
+
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $secondPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($secondPayload);
+        self::assertCount(1, $secondPayload['items'] ?? []);
+        self::assertSame('11111111-1111-1111-1111-111111111111', $secondPayload['items'][0]['uuid'] ?? null);
+    }
+
     public function testListAssetsSupportsCapturedAtRangeFilters(): void
     {
         $client = $this->createAuthenticatedClient(true);
@@ -435,38 +515,26 @@ final class AssetStateMachineApiTest extends WebTestCase
         self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
     }
 
-    public function testSuggestedTagsFilterIsForbiddenWhenFeatureDisabled(): void
+    public function testListAssetsReturnsValidationFailedForInvalidGeoBbox(): void
     {
         $client = $this->createAuthenticatedClient(true);
 
-        $client->request('GET', '/api/v1/assets?suggested_tags=wedding');
-        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        $client->request('GET', '/api/v1/assets?geo_bbox=4.50,50.80,4.30,50.92');
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
         $payload = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('FORBIDDEN_SCOPE', $payload['code'] ?? null);
+        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
     }
 
-    public function testSuggestedTagsFilterWorksWhenFeatureEnabled(): void
+    public function testListAssetsReturnsValidationFailedForCursorMismatch(): void
     {
-        putenv('APP_FEATURE_AI_SUGGESTED_TAGS_FILTERS=1');
-        $_ENV['APP_FEATURE_AI_SUGGESTED_TAGS_FILTERS'] = '1';
-        $_SERVER['APP_FEATURE_AI_SUGGESTED_TAGS_FILTERS'] = '1';
-        static::ensureKernelShutdown();
+        $client = $this->createAuthenticatedClient(true);
 
-        try {
-            $client = $this->createAuthenticatedClient(true);
+        $cursor = rtrim(strtr(base64_encode(json_encode(['offset' => 1, 'context_hash' => 'wrong'], JSON_THROW_ON_ERROR)), '+/', '-_'), '=');
+        $client->request('GET', '/api/v1/assets?limit=1&cursor='.rawurlencode($cursor));
 
-            $client->request('GET', '/api/v1/assets?suggested_tags=wedding');
-            self::assertResponseStatusCodeSame(Response::HTTP_OK);
-            $payload = json_decode((string) $client->getResponse()->getContent(), true);
-            self::assertIsArray($payload);
-            self::assertCount(1, $payload['items'] ?? []);
-            self::assertSame('11111111-1111-1111-1111-111111111111', $payload['items'][0]['uuid'] ?? null);
-        } finally {
-            putenv('APP_FEATURE_AI_SUGGESTED_TAGS_FILTERS=0');
-            $_ENV['APP_FEATURE_AI_SUGGESTED_TAGS_FILTERS'] = '0';
-            $_SERVER['APP_FEATURE_AI_SUGGESTED_TAGS_FILTERS'] = '0';
-            static::ensureKernelShutdown();
-        }
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
     }
 
     private function createAuthenticatedClient(bool $seedAssets = false): KernelBrowser
@@ -543,9 +611,10 @@ final class AssetStateMachineApiTest extends WebTestCase
         $asset2->setFields([
             'captured_at' => '2026-01-20T12:00:00Z',
             'duration' => 30,
-            'suggestions' => [
-                'suggested_tags' => ['interview'],
-            ],
+            'gps_latitude' => 48.8566,
+            'gps_longitude' => 2.3522,
+            'location_country' => 'FR',
+            'location_city' => 'Paris',
         ]);
         $asset3 = new Asset('33333333-3333-3333-3333-333333333333', 'PHOTO', 'archive-001.jpg', AssetState::ARCHIVED);
         $asset3->setFields([

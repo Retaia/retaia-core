@@ -14,6 +14,7 @@ final class ListAssetsResult
     public function __construct(
         private string $status,
         private ?array $items = null,
+        private ?string $nextCursor = null,
     ) {
     }
 
@@ -28,5 +29,10 @@ final class ListAssetsResult
     public function items(): array
     {
         return $this->items ?? [];
+    }
+
+    public function nextCursor(): ?string
+    {
+        return $this->nextCursor;
     }
 }
