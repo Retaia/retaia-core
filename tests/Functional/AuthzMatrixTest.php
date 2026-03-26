@@ -4,6 +4,7 @@ namespace App\Tests\Functional;
 
 use App\Asset\AssetState;
 use App\Entity\Asset;
+use App\Tests\Support\ApiAuthClientTrait;
 use App\Tests\Support\FixtureUsers;
 use Doctrine\ORM\EntityManagerInterface;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
@@ -15,6 +16,7 @@ use Symfony\Component\HttpFoundation\Response;
 final class AuthzMatrixTest extends WebTestCase
 {
     use RecreateDatabaseTrait;
+    use ApiAuthClientTrait;
 
     public function testAnonymousActorGetsUnauthorizedForMutatingAssetEndpoint(): void
     {
@@ -90,22 +92,17 @@ final class AuthzMatrixTest extends WebTestCase
     {
         $client = $this->createOperatorClient();
 
-        $client->jsonRequest('POST', '/api/v1/agents/register', [
-            'agent_id' => '11111111-1111-4111-8111-111111111111',
+        $material = \App\Tests\Support\AgentSigningTestHelper::publicMaterial();
+        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/agents/register', [
+            'agent_id' => $material['agent_id'],
             'agent_name' => 'ffmpeg-worker',
             'agent_version' => '1.0.0',
-            'openpgp_public_key' => '-----BEGIN PGP PUBLIC KEY BLOCK----- test -----END PGP PUBLIC KEY BLOCK-----',
-            'openpgp_fingerprint' => 'ABCD1234EF567890ABCD1234EF567890ABCD1234',
+            'openpgp_public_key' => $material['public_key'],
+            'openpgp_fingerprint' => $material['fingerprint'],
             'os_name' => 'linux',
             'os_version' => '6.8',
             'arch' => 'x86_64',
             'capabilities' => ['extract_facts'],
-        ], [
-            'HTTP_X_RETAIA_AGENT_ID' => '11111111-1111-4111-8111-111111111111',
-            'HTTP_X_RETAIA_OPENPGP_FINGERPRINT' => 'ABCD1234EF567890ABCD1234EF567890ABCD1234',
-            'HTTP_X_RETAIA_SIGNATURE' => 'test-signature',
-            'HTTP_X_RETAIA_SIGNATURE_TIMESTAMP' => '2026-03-19T12:00:00+00:00',
-            'HTTP_X_RETAIA_SIGNATURE_NONCE' => 'test-nonce',
         ]);
 
         self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
@@ -159,11 +156,6 @@ final class AuthzMatrixTest extends WebTestCase
     private function createAgentClient(): KernelBrowser
     {
         $client = $this->loginClient(FixtureUsers::AGENT_EMAIL, FixtureUsers::DEFAULT_PASSWORD);
-        $client->setServerParameter('HTTP_X_RETAIA_AGENT_ID', '11111111-1111-4111-8111-111111111111');
-        $client->setServerParameter('HTTP_X_RETAIA_OPENPGP_FINGERPRINT', 'ABCD1234EF567890ABCD1234EF567890ABCD1234');
-        $client->setServerParameter('HTTP_X_RETAIA_SIGNATURE', 'test-signature');
-        $client->setServerParameter('HTTP_X_RETAIA_SIGNATURE_TIMESTAMP', '2026-03-19T12:00:00+00:00');
-        $client->setServerParameter('HTTP_X_RETAIA_SIGNATURE_NONCE', 'test-nonce');
 
         return $client;
     }
@@ -178,17 +170,7 @@ final class AuthzMatrixTest extends WebTestCase
         $client = static::createClient();
         $client->disableReboot();
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
-            'email' => $email,
-            'password' => $password,
-        ]);
-
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
-        $payload = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertIsArray($payload);
-        $token = $payload['access_token'] ?? null;
-        self::assertIsString($token);
-        $client->setServerParameter('HTTP_AUTHORIZATION', 'Bearer '.$token);
+        $this->authenticateClient($client, $email, $password);
 
         return $client;
     }

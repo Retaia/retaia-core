@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Application\Agent;
 
+use App\Api\Service\AgentSignature\AgentPublicKeyStore;
 use App\Application\Agent\RegisterAgentEndpointHandler;
 use App\Application\Agent\RegisterAgentEndpointResult;
 use App\Application\Agent\RegisterAgentResult;
@@ -9,6 +10,7 @@ use App\Application\Agent\RegisterAgentUseCase;
 use App\Application\Auth\ResolveAuthenticatedUserResult;
 use App\Application\Auth\ResolveAuthenticatedUserUseCase;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Cache\Adapter\ArrayAdapter;
 
 final class RegisterAgentEndpointHandlerTest extends TestCase
 {
@@ -19,8 +21,9 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
 
         $resolver = $this->createMock(ResolveAuthenticatedUserUseCase::class);
         $resolver->expects(self::never())->method('handle');
+        $keyStore = new AgentPublicKeyStore(new ArrayAdapter());
 
-        $result = (new RegisterAgentEndpointHandler($register, $resolver))->handle([
+        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore))->handle([
             'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'worker',
             'agent_version' => '',
@@ -46,13 +49,14 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
         $resolver->expects(self::once())->method('handle')->willReturn(
             new ResolveAuthenticatedUserResult(ResolveAuthenticatedUserResult::STATUS_AUTHENTICATED, 'u1', 'u1@retaia.local', ['ROLE_USER'])
         );
+        $keyStore = new AgentPublicKeyStore(new ArrayAdapter());
 
-        $result = (new RegisterAgentEndpointHandler($register, $resolver))->handle([
+        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore))->handle([
             'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'ffmpeg',
             'agent_version' => '2.1.0',
             'openpgp_public_key' => 'public-key',
-            'openpgp_fingerprint' => 'fingerprint',
+            'openpgp_fingerprint' => 'ABCD1234EF567890ABCD1234EF567890ABCD1234',
             'os_name' => 'linux',
             'os_version' => '6.8',
             'arch' => 'x86_64',
@@ -62,6 +66,10 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
 
         self::assertSame(RegisterAgentEndpointResult::STATUS_REGISTERED, $result->status());
         self::assertSame(['agent_id' => '11111111-1111-4111-8111-111111111111'], $result->payload());
+        self::assertSame(
+            'public-key',
+            $keyStore->publicKeyFor('11111111-1111-4111-8111-111111111111', 'ABCD1234EF567890ABCD1234EF567890ABCD1234')
+        );
     }
 
     public function testHandleReturnsUnsupportedContractVersionWhenRegisterHandlerRejects(): void
@@ -75,8 +83,9 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
         $resolver->expects(self::once())->method('handle')->willReturn(
             new ResolveAuthenticatedUserResult(ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED)
         );
+        $keyStore = new AgentPublicKeyStore(new ArrayAdapter());
 
-        $result = (new RegisterAgentEndpointHandler($register, $resolver))->handle([
+        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore))->handle([
             'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'ffmpeg',
             'agent_version' => '2.1.0',

@@ -3,6 +3,10 @@
 namespace App\Tests\Unit\Controller;
 
 use App\Api\Service\AssetRequestPreconditionService;
+use App\Api\Service\AgentSignature\AgentPublicKeyStore;
+use App\Api\Service\AgentSignature\AgentSignatureNonceStore;
+use App\Api\Service\AgentSignature\GpgCliAgentRequestSignatureVerifier;
+use App\Api\Service\AgentSignature\SignedAgentMessageCanonicalizer;
 use App\Api\Service\SignedAgentRequestValidator;
 use App\Application\Auth\Port\AgentActorGateway;
 use App\Application\Auth\ResolveAgentActorHandler;
@@ -16,8 +20,10 @@ use App\Application\Derived\Port\DerivedGateway;
 use App\Application\Derived\UploadDerivedPartHandler;
 use App\Controller\Api\DerivedController;
 use App\Entity\Asset;
+use App\Tests\Support\AgentSigningTestHelper;
 use App\Tests\Support\InMemoryDerivedGateway;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Contracts\Translation\TranslatorInterface;
@@ -98,6 +104,16 @@ final class DerivedControllerTest extends TestCase
             }
         };
 
+        $store = new AgentPublicKeyStore(new ArrayAdapter());
+        $material = AgentSigningTestHelper::publicMaterial();
+        $store->register($material['agent_id'], $material['fingerprint'], $material['public_key']);
+        $validator = new SignedAgentRequestValidator(
+            $store,
+            new GpgCliAgentRequestSignatureVerifier(),
+            new AgentSignatureNonceStore(new ArrayAdapter()),
+            new SignedAgentMessageCanonicalizer(),
+        );
+
         return new DerivedController(
             new DerivedEndpointsHandler(
                 new ResolveAgentActorHandler($agentGateway),
@@ -124,18 +140,19 @@ final class DerivedControllerTest extends TestCase
                 {
                 }
             }),
-            new SignedAgentRequestValidator(),
+            $validator,
         );
     }
 
     private function signedJsonRequest(string $content): Request
     {
         $request = Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: $content);
-        $request->headers->set('X-Retaia-Agent-Id', '11111111-1111-4111-8111-111111111111');
-        $request->headers->set('X-Retaia-OpenPGP-Fingerprint', 'ABCD1234EF567890ABCD1234EF567890ABCD1234');
-        $request->headers->set('X-Retaia-Signature', 'test-signature');
-        $request->headers->set('X-Retaia-Signature-Timestamp', '2026-03-19T12:00:00+00:00');
-        $request->headers->set('X-Retaia-Signature-Nonce', 'test-nonce');
+        $headers = AgentSigningTestHelper::signedHeadersForBody('POST', '/x', $content);
+        foreach ($headers as $name => $value) {
+            $headerName = str_replace('HTTP_', '', $name);
+            $headerName = str_replace('_', '-', $headerName);
+            $request->headers->set($headerName, $value);
+        }
 
         return $request;
     }

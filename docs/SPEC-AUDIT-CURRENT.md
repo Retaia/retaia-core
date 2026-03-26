@@ -23,8 +23,7 @@ Important context:
 The runtime is no longer far from the current v1 spec on route presence, but it is still materially behind the contract in two areas:
 
 1. `jobs` lease contract drift: `fencing_token` is still absent end-to-end, and job type naming is still on the old `generate_proxy` vocabulary.
-2. agent request signing remains structurally validated, but not cryptographically validated as described by the OpenAPI surface.
-3. contract test/tooling coverage still misses several of the newer v1 behaviors, so some drifts remain invisible while the suite stays green.
+2. contract test/tooling coverage still misses several of the newer v1 behaviors, so some drifts remain invisible while the suite stays green.
 
 ## Findings
 
@@ -95,37 +94,6 @@ Impact:
 - Current runtime advertises and accepts a job type that is absent from the normative spec.
 - Current runtime does not fully align with the v1 submit schemas that are keyed on `generate_preview` and `transcribe_audio`.
 
-### P2. Agent signed requests are validated structurally, not cryptographically
-
-Spec surface strongly implies signed agent requests built around OpenPGP signing identity:
-
-- `X-Retaia-Agent-Id`
-- `X-Retaia-OpenPGP-Fingerprint`
-- `X-Retaia-Signature`
-- `X-Retaia-Signature-Timestamp`
-- `X-Retaia-Signature-Nonce`
-
-Runtime:
-
-- `src/Api/Service/SignedAgentRequestValidator.php` checks presence, timestamp parseability, and some header/payload consistency.
-- It does not verify a cryptographic signature against a stored agent public key.
-- It does not implement nonce replay storage / replay rejection.
-
-Related evidence:
-
-- `src/Auth/AuthMcpService.php` contains an explicit comment that its own signature validation is still “lightweight”.
-- The same maturity level is visible on the agent request validator path.
-
-Impact:
-
-- The runtime security model is weaker than the API surface suggests.
-- A caller can satisfy the validator with syntactically correct headers without proving key ownership.
-
-Concrete drift:
-
-- Spec signed request headers: `specs/api/openapi/v1.yaml` under agents/jobs/derived operations and reusable parameters
-- Runtime validator: `src/Api/Service/SignedAgentRequestValidator.php`
-
 ### P2. Job lease operations are protected by `lock_token`, but not bound to the authenticated technical principal
 
 Runtime:
@@ -167,8 +135,6 @@ The current test suite is green, but the following drifts are not strongly guard
 - no test that retryable job failure clears claimant identity when the job returns to `pending`
 - no test that lease mutations are bound to the claiming principal rather than only to `lock_token`
 - no broad negative coverage for `412 PRECONDITION_FAILED` / `428 PRECONDITION_REQUIRED` across all asset and derived endpoints protected by `If-Match`
-- no broad negative coverage for missing/invalid signed-agent headers across all signed agent endpoints
-- no test that agent signature validation performs actual cryptographic verification or nonce replay prevention
 
 ## Recommended remediation order
 
@@ -182,12 +148,6 @@ The current test suite is green, but the following drifts are not strongly guard
 - clear `claimed_by` when a retryable failure returns the job to `pending`
 - bind lease mutations to the claiming principal, not only to `lock_token`
 
-### Batch 2: agent signing hardening
-
-- replace header-only validation with real signature verification against registered agent keys
-- add nonce replay storage and TTL enforcement
-- add negative tests for forged signatures and nonce replay
-
 ## Bottom line
 
 The repo is currently healthy from a route-presence and test-green perspective, but not yet fully conformant with the latest OpenAPI v1 runtime contract.
@@ -195,4 +155,3 @@ The repo is currently healthy from a route-presence and test-green perspective, 
 The biggest remaining drifts are not hidden bugs in obscure corners; they are visible contract mismatches on:
 
 - `jobs` lease semantics and job type naming
-- agent request signature strength
