@@ -12,9 +12,16 @@ if (class_exists(Dotenv::class)) {
         $dotenv->load($envPath.'.dist');
     }
 
-    $appEnv = $_SERVER['APP_ENV'] ?? $_ENV['APP_ENV'] ?? 'dev';
-    if (is_file($envPath.'.'.$appEnv)) {
-        $dotenv->load($envPath.'.'.$appEnv);
+    $appEnv = (string) ($_SERVER['APP_ENV'] ?? $_ENV['APP_ENV'] ?? 'dev');
+    $appEnvFile = match ($appEnv) {
+        'dev' => $envPath.'.dev',
+        'test' => $envPath.'.test',
+        'prod' => $envPath.'.prod',
+        default => null,
+    };
+
+    if ($appEnvFile !== null && is_file($appEnvFile)) {
+        $dotenv->load($appEnvFile);
     }
 
     if (is_file($envPath.'.local')) {
