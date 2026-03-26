@@ -19,7 +19,7 @@ final class AuthzMatrixTest extends WebTestCase
     public function testAnonymousActorGetsUnauthorizedForMutatingAssetEndpoint(): void
     {
         $client = static::createClient();
-        $client->jsonRequest('POST', '/api/v1/decisions/preview', ['action' => 'KEEP', 'uuids' => ['11111111-1111-1111-1111-111111111111']]);
+        $client->jsonRequest('PATCH', '/api/v1/assets/11111111-1111-1111-1111-111111111111', ['notes' => 'x']);
 
         self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
         $payload = json_decode((string) $client->getResponse()->getContent(), true);
@@ -31,7 +31,7 @@ final class AuthzMatrixTest extends WebTestCase
         $client = $this->createAgentClient();
         $this->seedDecisionPendingAsset();
 
-        $client->jsonRequest('POST', '/api/v1/decisions/preview', ['action' => 'KEEP', 'uuids' => ['11111111-1111-1111-1111-111111111111']]);
+        $client->jsonRequest('PATCH', '/api/v1/assets/11111111-1111-1111-1111-111111111111', ['notes' => 'x']);
 
         self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
         $payload = json_decode((string) $client->getResponse()->getContent(), true);
@@ -119,19 +119,6 @@ final class AuthzMatrixTest extends WebTestCase
 
         $client->jsonRequest('POST', '/api/v1/auth/verify-email/admin-confirm', [
             'email' => FixtureUsers::UNVERIFIED_EMAIL,
-        ]);
-
-        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
-        $payload = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('FORBIDDEN_ACTOR', $payload['code'] ?? null);
-    }
-
-    public function testAgentGetsForbiddenActorOnHumanWorkflowBatchEndpoint(): void
-    {
-        $client = $this->createAgentClient();
-
-        $client->jsonRequest('POST', '/api/v1/batches/moves/preview', [
-            'uuids' => ['11111111-1111-1111-1111-111111111111'],
         ]);
 
         self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);

@@ -10,7 +10,7 @@ Documenter les points de controle et details d'implementation propres a `retaia-
 ## Verification locale rapide
 
 1. verifier l'API locale:
-   - `GET /api/v1/health`
+   - `GET /api/v1/openapi`
 2. verifier les logs auth structures emis par Core:
    - `auth.login.failure`
    - `auth.login.throttled`

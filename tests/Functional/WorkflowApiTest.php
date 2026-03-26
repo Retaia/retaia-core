@@ -19,42 +19,6 @@ final class WorkflowApiTest extends WebTestCase
     use ApiAuthClientTrait;
     use FunctionalSchemaTrait;
 
-    public function testMovePreviewAndApplyTransitionsAssets(): void
-    {
-        $client = $this->createAuthenticatedClient('admin@retaia.local');
-        $this->seedAsset('11111111-aaaa-4aaa-8aaa-111111111111', AssetState::DECIDED_KEEP, 'file-a.mov');
-        $this->seedAsset('22222222-bbbb-4bbb-8bbb-222222222222', AssetState::DECIDED_REJECT, 'file-b.mov');
-
-        $client->jsonRequest('POST', '/api/v1/batches/moves/preview', [
-            'uuids' => ['11111111-aaaa-4aaa-8aaa-111111111111', '22222222-bbbb-4bbb-8bbb-222222222222'],
-        ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
-        $preview = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame(2, $preview['eligible_count'] ?? null);
-
-        $client->jsonRequest('POST', '/api/v1/batches/moves', [
-            'uuids' => ['11111111-aaaa-4aaa-8aaa-111111111111', '22222222-bbbb-4bbb-8bbb-222222222222'],
-        ], [
-            'HTTP_IDEMPOTENCY_KEY' => 'batch-move-1',
-        ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
-        $apply = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame(2, $apply['success_count'] ?? null);
-        $batchId = (string) ($apply['batch_id'] ?? '');
-        self::assertNotSame('', $batchId);
-
-        $client->request('GET', '/api/v1/batches/moves/'.$batchId);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
-
-        $client->request('GET', '/api/v1/assets/11111111-aaaa-4aaa-8aaa-111111111111');
-        $keepAsset = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('ARCHIVED', $keepAsset['summary']['state'] ?? null);
-
-        $client->request('GET', '/api/v1/assets/22222222-bbbb-4bbb-8bbb-222222222222');
-        $rejectAsset = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('REJECTED', $rejectAsset['summary']['state'] ?? null);
-    }
-
     public function testGetAssetReturnsSpecDetailStructure(): void
     {
         $client = $this->createAuthenticatedClient('admin@retaia.local');
@@ -97,30 +61,6 @@ final class WorkflowApiTest extends WebTestCase
         self::assertIsArray($payload['audit'] ?? null);
         self::assertArrayHasKey('path_history', $payload['audit']);
         self::assertIsArray($payload['audit']['path_history'] ?? null);
-    }
-
-    public function testBulkDecisionsEndpointsAreForbiddenWhenFeatureIsDisabled(): void
-    {
-        $client = $this->createAuthenticatedClient('admin@retaia.local');
-        $this->seedAsset('33333333-cccc-4ccc-8ccc-333333333333', AssetState::DECISION_PENDING, 'decision.mov');
-
-        $client->jsonRequest('POST', '/api/v1/decisions/preview', [
-            'action' => 'KEEP',
-            'uuids' => ['33333333-cccc-4ccc-8ccc-333333333333'],
-        ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
-        $preview = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('FORBIDDEN_SCOPE', $preview['code'] ?? null);
-
-        $client->jsonRequest('POST', '/api/v1/decisions/apply', [
-            'action' => 'KEEP',
-            'uuids' => ['33333333-cccc-4ccc-8ccc-333333333333'],
-        ], [
-            'HTTP_IDEMPOTENCY_KEY' => 'bulk-decisions-1', // gitleaks:allow
-        ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
-        $apply = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('FORBIDDEN_SCOPE', $apply['code'] ?? null);
     }
 
     public function testPurgePreviewAndApply(): void
@@ -171,16 +111,6 @@ final class WorkflowApiTest extends WebTestCase
         self::assertSame(1, $payload['failed'] ?? null);
         self::assertSame('PURGED', $payload['results'][0]['status'] ?? null);
         self::assertSame('STATE_CONFLICT', $payload['results'][1]['status'] ?? null);
-    }
-
-    public function testAgentCannotRunHumanWorkflowEndpoints(): void
-    {
-        $client = $this->createAuthenticatedClient('agent@retaia.local');
-
-        $client->jsonRequest('POST', '/api/v1/batches/moves/preview', []);
-        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
-        $payload = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('FORBIDDEN_ACTOR', $payload['code'] ?? null);
     }
 
     public function testOpsIngestDiagnosticsReturnsSnapshotForAdmin(): void

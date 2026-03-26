@@ -17,7 +17,7 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
 ## Ce qui est en place
 
 - endpoint santé :
-  - `GET /api/v1/health`
+  - `GET /api/v1/openapi`
 
 - endpoints auth :
   - `POST /api/v1/auth/login`

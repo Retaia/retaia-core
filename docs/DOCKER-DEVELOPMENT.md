@@ -69,7 +69,7 @@ docker compose exec app sh
 Smoke test API (via Traefik) :
 
 ```bash
-curl -k https://api.retaia.test/api/v1/health
+curl -k https://api.retaia.test/api/v1/openapi
 ```
 
 Swagger UI:
