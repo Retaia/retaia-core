@@ -15,7 +15,7 @@ final class SecurityHeadersSubscriberTest extends TestCase
     {
         $subscriber = new SecurityHeadersSubscriber();
         $response = new Response();
-        $request = Request::create('/api/v1/health', 'GET');
+        $request = Request::create('/api/v1/docs', 'GET');
         $event = new ResponseEvent($this->kernelMock(), $request, HttpKernelInterface::MAIN_REQUEST, $response);
 
         $subscriber->onKernelResponse($event);
@@ -31,7 +31,7 @@ final class SecurityHeadersSubscriberTest extends TestCase
     {
         $subscriber = new SecurityHeadersSubscriber();
         $response = new Response();
-        $request = Request::create('/api/v1/health', 'GET', [], [], [], ['HTTPS' => 'on']);
+        $request = Request::create('/api/v1/docs', 'GET', [], [], [], ['HTTPS' => 'on']);
         $event = new ResponseEvent($this->kernelMock(), $request, HttpKernelInterface::MAIN_REQUEST, $response);
 
         $subscriber->onKernelResponse($event);

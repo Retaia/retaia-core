@@ -6,13 +6,8 @@ use App\Application\Auth\Port\AgentActorGateway;
 use App\Application\Auth\Port\AuthenticatedUserGateway;
 use App\Application\Auth\ResolveAgentActorHandler;
 use App\Application\Auth\ResolveAuthenticatedUserHandler;
-use App\Application\Workflow\ApplyDecisionsHandler;
-use App\Application\Workflow\ApplyMovesHandler;
 use App\Application\Workflow\CheckBulkDecisionsEnabledHandler;
-use App\Application\Workflow\GetBatchReportHandler;
 use App\Application\Workflow\Port\WorkflowGateway;
-use App\Application\Workflow\PreviewDecisionsHandler;
-use App\Application\Workflow\PreviewMovesHandler;
 use App\Application\Workflow\PreviewPurgeHandler;
 use App\Application\Workflow\PurgeAssetHandler;
 use App\Application\Workflow\WorkflowEndpointResult;
@@ -21,49 +16,6 @@ use PHPUnit\Framework\TestCase;
 
 final class WorkflowEndpointsHandlerTest extends TestCase
 {
-    public function testPreviewMovesReturnsForbiddenActorWhenAgentNotAllowed(): void
-    {
-        $handler = $this->buildHandler(true, null);
-
-        $result = $handler->previewMoves(['uuids' => ['a1']]);
-
-        self::assertSame(WorkflowEndpointResult::STATUS_FORBIDDEN_ACTOR, $result->status());
-    }
-
-    public function testGetBatchReturnsNotFoundWhenMissing(): void
-    {
-        $gateway = $this->createMock(WorkflowGateway::class);
-        $gateway->expects(self::once())->method('getBatchReport')->with('batch_1')->willReturn(null);
-
-        $handler = $this->buildHandler(false, null, true, $gateway);
-
-        $result = $handler->getBatch('batch_1');
-
-        self::assertSame(WorkflowEndpointResult::STATUS_NOT_FOUND, $result->status());
-    }
-
-    public function testPreviewDecisionsReturnsForbiddenScopeWhenBulkDisabled(): void
-    {
-        $gateway = $this->createMock(WorkflowGateway::class);
-        $gateway->expects(self::never())->method('previewDecisions');
-
-        $handler = $this->buildHandler(false, null, false, $gateway);
-        $result = $handler->previewDecisions(['action' => 'KEEP', 'uuids' => ['a1']]);
-
-        self::assertSame(WorkflowEndpointResult::STATUS_FORBIDDEN_SCOPE, $result->status());
-    }
-
-    public function testApplyDecisionsReturnsValidationFailedWhenPayloadInvalid(): void
-    {
-        $gateway = $this->createMock(WorkflowGateway::class);
-        $gateway->expects(self::never())->method('applyDecisions');
-
-        $handler = $this->buildHandler(false, null, true, $gateway);
-        $result = $handler->applyDecisions(['action' => '', 'uuids' => ['a1']]);
-
-        self::assertSame(WorkflowEndpointResult::STATUS_VALIDATION_FAILED, $result->status());
-    }
-
     public function testPurgeReturnsStateConflict(): void
     {
         $gateway = $this->createMock(WorkflowGateway::class);
@@ -95,12 +47,7 @@ final class WorkflowEndpointsHandlerTest extends TestCase
         ?WorkflowGateway $gateway = null,
     ): WorkflowEndpointsHandler {
         $gateway ??= $this->createMock(WorkflowGateway::class);
-        $gateway->method('previewMoves')->willReturn(['items' => []]);
-        $gateway->method('applyMoves')->willReturn(['batch_id' => 'b1']);
         $gateway->method('previewPurge')->willReturn(['eligible' => true]);
-        $gateway->method('getBatchReport')->willReturn(['batch_id' => 'b1']);
-        $gateway->method('previewDecisions')->willReturn(['eligible_count' => 1]);
-        $gateway->method('applyDecisions')->willReturn(['batch_id' => 'd1']);
         $gateway->method('purge')->willReturn(['status' => 'PURGED', 'asset' => ['uuid' => 'a1', 'state' => 'PURGED']]);
 
         $agentActorGateway = $this->createMock(AgentActorGateway::class);
@@ -112,12 +59,12 @@ final class WorkflowEndpointsHandlerTest extends TestCase
         return new WorkflowEndpointsHandler(
             new ResolveAgentActorHandler($agentActorGateway),
             new ResolveAuthenticatedUserHandler($authenticatedUserGateway),
-            new PreviewMovesHandler($gateway),
-            new ApplyMovesHandler($gateway),
-            new GetBatchReportHandler($gateway),
+            new \App\Application\Workflow\PreviewMovesHandler($gateway),
+            new \App\Application\Workflow\ApplyMovesHandler($gateway),
+            new \App\Application\Workflow\GetBatchReportHandler($gateway),
             new CheckBulkDecisionsEnabledHandler($bulkDecisionsEnabled),
-            new PreviewDecisionsHandler($gateway),
-            new ApplyDecisionsHandler($gateway),
+            new \App\Application\Workflow\PreviewDecisionsHandler($gateway),
+            new \App\Application\Workflow\ApplyDecisionsHandler($gateway),
             new PreviewPurgeHandler($gateway),
             new PurgeAssetHandler($gateway),
         );

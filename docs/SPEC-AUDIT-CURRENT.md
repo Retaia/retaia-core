@@ -20,13 +20,11 @@ Important context:
 
 ## Executive summary
 
-The runtime is no longer far from the current v1 spec on route presence, but it is still materially behind the contract in three areas:
+The runtime is no longer far from the current v1 spec on route presence, but it is still materially behind the contract in two areas:
 
 1. `jobs` lease contract drift: `fencing_token` is still absent end-to-end, and job type naming is still on the old `generate_proxy` vocabulary.
 2. agent request signing remains structurally validated, but not cryptographically validated as described by the OpenAPI surface.
 3. contract test/tooling coverage still misses several of the newer v1 behaviors, so some drifts remain invisible while the suite stays green.
-
-There is also a smaller but important surface-management issue: several public routes are exposed in runtime while absent from the normative v1 spec.
 
 ## Findings
 
@@ -145,32 +143,6 @@ Concrete drift:
 - Application handlers: `src/Application/Job/HeartbeatJobHandler.php`, `src/Application/Job/SubmitJobHandler.php`, `src/Application/Job/FailJobHandler.php`
 - Persistence logic: `src/Job/Repository/JobRepository.php`
 
-### P2. Public runtime surface still contains non-spec routes
-
-Routes present in runtime but absent from the current normative OpenAPI v1:
-
-- `/health`
-- `/decisions/preview`
-- `/decisions/apply`
-- `/batches/moves/preview`
-- `/batches/moves`
-- `/batches/moves/{batchId}`
-
-Runtime sources:
-
-- `src/Controller/Api/HealthController.php`
-- `src/Controller/Api/WorkflowController.php`
-
-Impact:
-
-- These routes are operationally usable but not contract-governed by the current OpenAPI v1.
-- This makes the public API surface broader than the normative contract.
-
-This is not necessarily a runtime bug, but it is an API-governance gap that should be resolved explicitly:
-
-- either document them in the spec,
-- or move them behind a non-v1/internal surface.
-
 ### P3. `/auth/me` remains semantically behind the richer current user shape
 
 Spec:
@@ -215,12 +187,6 @@ The current test suite is green, but the following drifts are not strongly guard
 - replace header-only validation with real signature verification against registered agent keys
 - add nonce replay storage and TTL enforcement
 - add negative tests for forged signatures and nonce replay
-
-### Batch 3: surface governance cleanup
-
-- decide whether `/health`, `/decisions/*`, `/batches/moves*` belong to public v1
-- if yes, add them to the spec
-- if not, move or scope them out of the normative v1 surface
 
 ## Bottom line
 

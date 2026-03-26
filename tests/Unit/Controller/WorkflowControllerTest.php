@@ -35,78 +35,51 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class WorkflowControllerTest extends TestCase
 {
-    public function testPreviewMovesForbiddenAndSuccess(): void
+    public function testPurgeBatchReturnsForbiddenForAgentActor(): void
     {
-        $repo = new InMemoryAssetRepo([$this->asset('a1', AssetState::DECIDED_KEEP)]);
+        $repo = new InMemoryAssetRepo([$this->asset('a2', AssetState::REJECTED)]);
         $connection = $this->createMock(Connection::class);
         $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false));
-        $idempotency = $this->idempotencyPassthrough();
-        $translator = $this->translator();
+        $controller = $this->controller($workflows, $repo, $this->idempotencyPassthrough(), $this->translator(), true, null, false);
 
-        $controller = $this->controller($workflows, $repo, $idempotency, $translator, true, null, false);
-        self::assertSame(Response::HTTP_FORBIDDEN, $controller->previewMoves(Request::create('/x', 'POST'))->getStatusCode());
+        $request = Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{"asset_uuids":["a2"],"confirm":true}');
+        $request->headers->set('Idempotency-Key', 'idem-batch-agent');
 
-        $controller = $this->controller($workflows, $repo, $idempotency, $translator, false, null, false);
-        self::assertSame(Response::HTTP_OK, $controller->previewMoves(Request::create('/x', 'POST'))->getStatusCode());
+        self::assertSame(Response::HTTP_FORBIDDEN, $controller->purgeBatch($request)->getStatusCode());
     }
 
-    public function testDecisionAndBatchEndpoints(): void
+    public function testPurgeBatchReturnsValidationFailedForInvalidPayload(): void
     {
-        $repo = new InMemoryAssetRepo([$this->asset('a1', AssetState::DECISION_PENDING)]);
+        $repo = new InMemoryAssetRepo([$this->asset('a2', AssetState::REJECTED)]);
         $connection = $this->createMock(Connection::class);
-        $connection->method('fetchAssociative')->willReturn(false);
         $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false));
-        $idempotency = $this->idempotencyPassthrough();
-        $translator = $this->translator();
-        $controller = $this->controller(
-            $workflows,
-            $repo,
-            $idempotency,
-            $translator,
-            false,
-            new User('u1', 'u@example.test', 'hash', ['ROLE_USER'], true),
-            true
-        );
+        $controller = $this->controller($workflows, $repo, $this->idempotencyPassthrough(), $this->translator(), false, null, false);
 
-        self::assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $controller->previewDecisions(Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{}'))->getStatusCode());
-        self::assertSame(Response::HTTP_OK, $controller->previewDecisions(Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{"action":"KEEP","uuids":["a1"]}'))->getStatusCode());
-        $invalidApplyRequest = Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{}');
-        $invalidApplyRequest->headers->set('Idempotency-Key', 'idem-1');
-        self::assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $controller->applyDecisions($invalidApplyRequest)->getStatusCode());
-        $validApplyRequest = Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{"action":"KEEP","uuids":["a1"]}');
-        $validApplyRequest->headers->set('Idempotency-Key', 'idem-2');
-        self::assertSame(Response::HTTP_OK, $controller->applyDecisions($validApplyRequest)->getStatusCode());
+        $request = Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{"asset_uuids":[],"confirm":false}');
+        $request->headers->set('Idempotency-Key', 'idem-batch-invalid');
 
-        self::assertSame(Response::HTTP_NOT_FOUND, $controller->getBatch('missing')->getStatusCode());
+        self::assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $controller->purgeBatch($request)->getStatusCode());
     }
 
-    public function testDecisionEndpointsForbiddenWhenBulkFeatureDisabled(): void
+    public function testPurgeBatchReturnsPerAssetResults(): void
     {
-        $repo = new InMemoryAssetRepo([$this->asset('a1', AssetState::DECISION_PENDING)]);
+        $rejected = $this->asset('a2', AssetState::REJECTED);
+        $ready = $this->asset('a3', AssetState::READY);
+        $repo = new InMemoryAssetRepo([$rejected, $ready]);
         $connection = $this->createMock(Connection::class);
-        $connection->method('fetchAssociative')->willReturn(false);
+        $connection->method('fetchOne')->willReturn(0);
         $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false));
-        $idempotency = $this->idempotencyPassthrough();
-        $translator = $this->translator();
-        $controller = $this->controller(
-            $workflows,
-            $repo,
-            $idempotency,
-            $translator,
-            false,
-            new User('u1', 'u@example.test', 'hash', ['ROLE_USER'], true),
-            false
-        );
+        $controller = $this->controller($workflows, $repo, $this->idempotencyPassthrough(), $this->translator(), false, null, false);
 
-        $preview = $controller->previewDecisions(Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{"action":"KEEP","uuids":["a1"]}'));
-        self::assertSame(Response::HTTP_FORBIDDEN, $preview->getStatusCode());
-        self::assertSame('FORBIDDEN_SCOPE', (string) json_decode((string) $preview->getContent(), true)['code']);
+        $request = Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{"asset_uuids":["a2","a3"],"confirm":true}');
+        $request->headers->set('Idempotency-Key', 'idem-batch-ok');
 
-        $applyRequest = Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{"action":"KEEP","uuids":["a1"]}');
-        $applyRequest->headers->set('Idempotency-Key', 'idem-disabled-1');
-        $apply = $controller->applyDecisions($applyRequest);
-        self::assertSame(Response::HTTP_FORBIDDEN, $apply->getStatusCode());
-        self::assertSame('FORBIDDEN_SCOPE', (string) json_decode((string) $apply->getContent(), true)['code']);
+        $response = $controller->purgeBatch($request);
+        self::assertSame(Response::HTTP_OK, $response->getStatusCode());
+        $payload = json_decode((string) $response->getContent(), true);
+        self::assertSame(2, $payload['requested'] ?? null);
+        self::assertSame(1, $payload['purged'] ?? null);
+        self::assertSame(1, $payload['failed'] ?? null);
     }
 
     public function testPurgeEndpointsAndStateConflict(): void

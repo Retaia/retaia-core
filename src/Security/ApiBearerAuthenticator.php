@@ -32,7 +32,6 @@ final class ApiBearerAuthenticator extends AbstractAuthenticator
         }
 
         if (\in_array($path, [
-            '/api/v1/health',
             '/api/v1/docs',
             '/api/v1/openapi',
             '/api/v1/auth/login',

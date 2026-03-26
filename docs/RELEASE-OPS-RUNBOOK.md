@@ -41,7 +41,7 @@ docker compose -f docker-compose.prod.yaml exec core php bin/console doctrine:mi
 ## 3) Verification locale post-deploiement
 
 ```bash
-curl -sS http://localhost:${RETAIA_PROD_HTTP_PORT:-8080}/api/v1/health
+curl -sS http://localhost:${RETAIA_PROD_HTTP_PORT:-8080}/api/v1/openapi
 docker compose -f docker-compose.prod.yaml exec core php bin/console app:ops:readiness-check
 docker compose -f docker-compose.prod.yaml exec core php bin/console app:sentry:probe
 docker compose -f docker-compose.prod.yaml logs --tail=200 ingest-cron
