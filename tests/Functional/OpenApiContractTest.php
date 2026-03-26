@@ -151,6 +151,13 @@ final class OpenApiContractTest extends WebTestCase
     {
         $client = $this->createAuthenticatedClient();
         $this->seedDetailedAsset('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+        $this->seedDetailedAsset('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'AUDIO', 'contract-audio.wav', AssetState::PROCESSED, [
+            'captured_at' => '2026-01-11T12:00:00Z',
+            'gps_latitude' => 48.8566,
+            'gps_longitude' => 2.3522,
+            'location_country' => 'FR',
+            'location_city' => 'Paris',
+        ]);
 
         $client->request('GET', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
 
@@ -175,6 +182,47 @@ final class OpenApiContractTest extends WebTestCase
         self::assertSame('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', $listPayload['items'][0]['uuid'] ?? null);
         self::assertSame(true, $listPayload['items'][0]['has_preview'] ?? null);
         self::assertArrayNotHasKey('has_proxy', $listPayload['items'][0] ?? []);
+    }
+
+    public function testAssetListCursorAndStatePatchRuntimeBehavior(): void
+    {
+        $client = $this->createAuthenticatedClient();
+        $this->seedDetailedAsset('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+        $this->seedDetailedAsset('cccccccc-cccc-cccc-cccc-cccccccccccc', 'PHOTO', 'archive-photo.jpg', AssetState::ARCHIVED, [
+            'captured_at' => '2026-01-12T12:00:00Z',
+            'gps_latitude' => 50.8510,
+            'gps_longitude' => 4.3520,
+            'location_country' => 'BE',
+            'location_city' => 'Brussels',
+        ]);
+
+        $client->request('GET', '/api/v1/assets?state=ARCHIVED,PROCESSED&geo_bbox=4.30,50.80,4.45,50.92&sort=name&limit=1');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $firstPage = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($firstPage);
+        self::assertCount(1, $firstPage['items'] ?? []);
+        self::assertSame('cccccccc-cccc-cccc-cccc-cccccccccccc', $firstPage['items'][0]['uuid'] ?? null);
+        self::assertIsString($firstPage['next_cursor'] ?? null);
+
+        $client->request('GET', '/api/v1/assets?state=ARCHIVED,PROCESSED&geo_bbox=4.30,50.80,4.45,50.92&sort=name&limit=1&cursor='.rawurlencode((string) $firstPage['next_cursor']));
+
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $secondPage = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($secondPage);
+        self::assertCount(1, $secondPage['items'] ?? []);
+        self::assertSame('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', $secondPage['items'][0]['uuid'] ?? null);
+
+        $client->jsonRequest('PATCH', '/api/v1/assets/cccccccc-cccc-cccc-cccc-cccccccccccc', [
+            'state' => 'DECISION_PENDING',
+        ], [
+            'HTTP_IF_MATCH' => $this->currentAssetRevisionEtag($client, 'cccccccc-cccc-cccc-cccc-cccccccccccc'),
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $patched = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($patched);
+        self::assertSame('DECISION_PENDING', $patched['state'] ?? null);
     }
 
     public function testRuntimeContractKeepsPollingAsSourceOfTruth(): void
@@ -564,7 +612,16 @@ final class OpenApiContractTest extends WebTestCase
         $entityManager->flush();
     }
 
-    private function seedDetailedAsset(string $uuid): void
+    /**
+     * @param array<string, mixed> $fields
+     */
+    private function seedDetailedAsset(
+        string $uuid,
+        string $mediaType = 'VIDEO',
+        string $filename = 'contract-detailed.mov',
+        AssetState $state = AssetState::PROCESSED,
+        array $fields = [],
+    ): void
     {
         /** @var EntityManagerInterface $entityManager */
         $entityManager = static::getContainer()->get(EntityManagerInterface::class);
@@ -572,8 +629,8 @@ final class OpenApiContractTest extends WebTestCase
             return;
         }
 
-        $asset = new Asset($uuid, 'VIDEO', 'contract-detailed.mov', AssetState::PROCESSED);
-        $asset->setFields([
+        $asset = new Asset($uuid, $mediaType, $filename, $state);
+        $asset->setFields(array_replace([
             'captured_at' => '2026-01-10T12:00:00Z',
             'gps_latitude' => 50.8503,
             'gps_longitude' => 4.3517,
@@ -582,7 +639,7 @@ final class OpenApiContractTest extends WebTestCase
             'location_label' => 'Grand Place',
             'processing_profile' => 'video_standard',
             'preview_video_url' => 'https://cdn.retaia.test/previews/contract-detailed.mp4',
-        ]);
+        ], $fields));
         $entityManager->persist($asset);
         $entityManager->flush();
     }

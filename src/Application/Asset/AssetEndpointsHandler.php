@@ -22,40 +22,41 @@ final class AssetEndpointsHandler
     }
 
     /**
-     * @param array<int, string> $suggestedTags
+     * @param array<int, string> $states
+     * @param array<int, string> $tags
      */
     public function list(
-        ?string $state,
+        array $states,
         ?string $mediaType,
         ?string $query,
         ?string $sort,
         ?string $capturedAtFrom,
         ?string $capturedAtTo,
         int $limit,
+        ?string $cursor,
         array $tags,
         string $tagsMode,
         ?bool $hasPreview,
         ?string $locationCountry,
         ?string $locationCity,
-        array $suggestedTags,
-        string $suggestedTagsMode,
+        ?string $geoBbox,
     ): AssetEndpointResult
     {
         $result = $this->listAssetsHandler->handle(
-            $state,
+            $states,
             $mediaType,
             $query,
             $sort,
             $capturedAtFrom,
             $capturedAtTo,
             $limit,
+            $cursor,
             $tags,
             $tagsMode,
             $hasPreview,
             $locationCountry,
             $locationCity,
-            $suggestedTags,
-            $suggestedTagsMode
+            $geoBbox
         );
         if ($result->status() === ListAssetsResult::STATUS_VALIDATION_FAILED) {
             return new AssetEndpointResult(AssetEndpointResult::STATUS_VALIDATION_FAILED);
@@ -66,7 +67,7 @@ final class AssetEndpointsHandler
 
         return new AssetEndpointResult(AssetEndpointResult::STATUS_SUCCESS, [
             'items' => $result->items(),
-            'next_cursor' => null,
+            'next_cursor' => $result->nextCursor(),
         ]);
     }
 

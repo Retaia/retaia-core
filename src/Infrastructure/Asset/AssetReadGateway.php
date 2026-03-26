@@ -13,7 +13,6 @@ final class AssetReadGateway implements AssetReadGatewayPort
 
     public function __construct(
         private AssetRepositoryInterface $assets,
-        private bool $featureSuggestedTagsFiltersEnabled,
         private string $defaultStorageId = 'nas-main',
     ) {
     }
@@ -29,40 +28,35 @@ final class AssetReadGateway implements AssetReadGatewayPort
     }
 
     public function list(
-        ?string $state,
+        array $states,
         ?string $mediaType,
         ?string $query,
         ?string $sort,
         ?\DateTimeImmutable $capturedAtFrom,
         ?\DateTimeImmutable $capturedAtTo,
         int $limit,
+        int $offset,
         array $tags,
         string $tagsMode,
         ?bool $hasPreview,
         ?string $locationCountry,
         ?string $locationCity,
-        array $suggestedTags,
-        string $suggestedTagsMode,
+        ?array $geoBbox,
     ): ?array {
-        if ($suggestedTags !== [] && !$this->featureSuggestedTagsFiltersEnabled) {
-            return null;
-        }
-
-        $assets = $this->assets->listAssets($state, $mediaType, $query, max(200, $limit));
+        $assets = $this->assets->listAssets(null, $mediaType, $query, max(200, $offset + $limit + 1));
+        $assets = $this->applyStateFilter($assets, $states);
         $assets = $this->applyCapturedAtRange($assets, $capturedAtFrom, $capturedAtTo);
         $assets = $this->applyTagsFilter($assets, $tags, $tagsMode);
         $assets = $this->applyHasPreviewFilter($assets, $hasPreview);
         $assets = $this->applyLocationFilter($assets, $locationCountry, $locationCity);
+        $assets = $this->applyGeoBboxFilter($assets, $geoBbox);
         $assets = $this->applySort($assets, $sort ?? '-created_at');
-        if ($suggestedTags !== []) {
-            $assets = array_values(array_filter(
-                $assets,
-                fn (Asset $asset): bool => $this->matchesSuggestedTags($asset, $suggestedTags, $suggestedTagsMode)
-            ));
-        }
-        $assets = array_slice($assets, 0, max(1, min(200, $limit)));
+        $slice = array_slice($assets, max(0, $offset), max(1, min(200, $limit)));
 
-        return array_map(fn (Asset $asset): array => $this->summary($asset), $assets);
+        return [
+            'items' => array_map(fn (Asset $asset): array => $this->summary($asset), $slice),
+            'has_more' => count($assets) > ($offset + count($slice)),
+        ];
     }
 
     /**
@@ -148,6 +142,23 @@ final class AssetReadGateway implements AssetReadGatewayPort
 
     /**
      * @param array<int, Asset> $assets
+     * @param array<int, string> $states
+     * @return array<int, Asset>
+     */
+    private function applyStateFilter(array $assets, array $states): array
+    {
+        if ($states === []) {
+            return $assets;
+        }
+
+        return array_values(array_filter(
+            $assets,
+            static fn (Asset $asset): bool => in_array($asset->getState()->value, $states, true)
+        ));
+    }
+
+    /**
+     * @param array<int, Asset> $assets
      * @param array<int, string> $tags
      * @return array<int, Asset>
      */
@@ -214,43 +225,6 @@ final class AssetReadGateway implements AssetReadGatewayPort
     {
         $normalized = array_values(array_filter(
             array_map(static fn (string $tag): string => mb_strtolower(trim($tag)), $asset->getTags()),
-            static fn (string $tag): bool => $tag !== ''
-        ));
-
-        if ($mode === 'OR') {
-            foreach ($expected as $tag) {
-                if (in_array($tag, $normalized, true)) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        foreach ($expected as $tag) {
-            if (!in_array($tag, $normalized, true)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * @param array<int, string> $expected
-     */
-    private function matchesSuggestedTags(Asset $asset, array $expected, string $mode): bool
-    {
-        $fields = $asset->getFields();
-        $tags = [];
-        if (is_array($fields['suggestions']['suggested_tags'] ?? null)) {
-            $tags = $fields['suggestions']['suggested_tags'];
-        } elseif (is_array($fields['suggested_tags'] ?? null)) {
-            $tags = $fields['suggested_tags'];
-        }
-
-        $normalized = array_values(array_filter(
-            array_map(static fn (mixed $tag): string => mb_strtolower(trim((string) $tag)), $tags),
             static fn (string $tag): bool => $tag !== ''
         ));
 
@@ -365,6 +339,32 @@ final class AssetReadGateway implements AssetReadGatewayPort
         }
 
         return $trimmed;
+    }
+
+    /**
+     * @param array<int, Asset> $assets
+     * @param array{min_lon: float, min_lat: float, max_lon: float, max_lat: float}|null $geoBbox
+     * @return array<int, Asset>
+     */
+    private function applyGeoBboxFilter(array $assets, ?array $geoBbox): array
+    {
+        if ($geoBbox === null) {
+            return $assets;
+        }
+
+        return array_values(array_filter($assets, function (Asset $asset) use ($geoBbox): bool {
+            $fields = $asset->getFields();
+            $lon = $this->optionalNumber($fields['gps_longitude'] ?? null);
+            $lat = $this->optionalNumber($fields['gps_latitude'] ?? null);
+            if ($lon === null || $lat === null) {
+                return false;
+            }
+
+            return $lon >= $geoBbox['min_lon']
+                && $lon <= $geoBbox['max_lon']
+                && $lat >= $geoBbox['min_lat']
+                && $lat <= $geoBbox['max_lat'];
+        }));
     }
 
     /**

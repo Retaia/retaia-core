@@ -29,36 +29,36 @@ final class AssetController
     #[Route('', name: 'api_assets_list', methods: ['GET'])]
     public function list(Request $request): JsonResponse
     {
-        $state = $request->query->get('state');
+        $states = $this->csvUpperList($request->query->get('state'));
         $mediaType = $request->query->get('media_type');
         $query = $request->query->get('q');
         $sort = $request->query->get('sort');
         $capturedAtFrom = $request->query->get('captured_at_from');
         $capturedAtTo = $request->query->get('captured_at_to');
+        $cursor = $request->query->get('cursor');
         $tags = $this->csvList($request->query->get('tags'));
         $tagsMode = (string) $request->query->get('tags_mode', 'AND');
         $hasPreview = $this->nullableBooleanQuery($request, 'has_preview');
         $locationCountry = $this->optionalString($request->query->get('location_country'));
         $locationCity = $this->optionalString($request->query->get('location_city'));
-        $suggestedTags = $this->csvList($request->query->get('suggested_tags'));
-        $suggestedTagsMode = (string) $request->query->get('suggested_tags_mode', 'AND');
+        $geoBbox = $this->optionalString($request->query->get('geo_bbox'));
         $limit = max(1, (int) $request->query->get('limit', 50));
 
         $result = $this->assetEndpointsHandler->list(
-            is_string($state) ? $state : null,
+            $states,
             is_string($mediaType) ? $mediaType : null,
             is_string($query) ? $query : null,
             is_string($sort) ? $sort : null,
             is_string($capturedAtFrom) ? $capturedAtFrom : null,
             is_string($capturedAtTo) ? $capturedAtTo : null,
             $limit,
+            is_string($cursor) ? $cursor : null,
             $tags,
             $tagsMode,
             $hasPreview,
             $locationCountry,
             $locationCity,
-            $suggestedTags,
-            $suggestedTagsMode,
+            $geoBbox,
         );
         if ($result->status() === AssetEndpointResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse([
@@ -239,6 +239,21 @@ final class AssetController
         $items = array_map(static fn (string $item): string => mb_strtolower(trim($item)), explode(',', $value));
 
         return array_values(array_filter($items, static fn (string $item): bool => $item !== ''));
+    }
+
+    /**
+     * @param mixed $value
+     * @return array<int, string>
+     */
+    private function csvUpperList(mixed $value): array
+    {
+        if (!is_string($value) || trim($value) === '') {
+            return [];
+        }
+
+        $items = array_map(static fn (string $item): string => strtoupper(trim($item)), explode(',', $value));
+
+        return array_values(array_unique(array_filter($items, static fn (string $item): bool => $item !== '')));
     }
 
     private function optionalString(mixed $value): ?string

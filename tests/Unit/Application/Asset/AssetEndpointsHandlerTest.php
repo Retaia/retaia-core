@@ -27,7 +27,7 @@ final class AssetEndpointsHandlerTest extends TestCase
         $readGateway->expects(self::never())->method('list');
 
         $handler = $this->buildHandler(false, null, $readGateway);
-        $result = $handler->list(null, null, null, null, null, null, 50, [], 'INVALID', null, null, null, [], 'AND');
+        $result = $handler->list([], null, null, null, null, null, 50, null, [], 'INVALID', null, null, null, null);
 
         self::assertSame(AssetEndpointResult::STATUS_VALIDATION_FAILED, $result->status());
     }
@@ -38,7 +38,7 @@ final class AssetEndpointsHandlerTest extends TestCase
         $readGateway->expects(self::once())->method('list')->willReturn(null);
 
         $handler = $this->buildHandler(false, null, $readGateway);
-        $result = $handler->list(null, null, null, null, null, null, 50, ['wedding'], 'AND', null, null, null, [], 'AND');
+        $result = $handler->list([], null, null, null, null, null, 50, null, ['wedding'], 'AND', null, null, null, null);
 
         self::assertSame(AssetEndpointResult::STATUS_FORBIDDEN_SCOPE, $result->status());
     }
@@ -101,7 +101,10 @@ final class AssetEndpointsHandlerTest extends TestCase
     ): AssetEndpointsHandler {
         $readGateway ??= $this->createMock(AssetReadGateway::class);
         $readGateway->method('getByUuid')->willReturn(['uuid' => 'a1']);
-        $readGateway->method('list')->willReturn([['uuid' => 'a1']]);
+        $readGateway->method('list')->willReturn([
+            'items' => [['uuid' => 'a1']],
+            'has_more' => false,
+        ]);
 
         $patchGateway ??= $this->createMock(AssetPatchGateway::class);
         $patchGateway->method('patch')->willReturn(['status' => 'UPDATED', 'payload' => ['uuid' => 'a1']]);

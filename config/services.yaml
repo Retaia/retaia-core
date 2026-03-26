@@ -80,7 +80,6 @@ services:
 
     App\Infrastructure\Asset\AssetReadGateway:
         bind:
-            bool $featureSuggestedTagsFiltersEnabled: '%app.features.ai.suggested_tags_filters%'
             string $defaultStorageId: '%app.storage.id%'
 
     App\Job\Repository\JobRepository:
