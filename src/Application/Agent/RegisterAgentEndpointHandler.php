@@ -2,6 +2,7 @@
 
 namespace App\Application\Agent;
 
+use App\Api\Service\AgentSignature\AgentPublicKeyStore;
 use App\Application\Auth\ResolveAuthenticatedUserResult;
 use App\Application\Auth\ResolveAuthenticatedUserUseCase;
 
@@ -10,6 +11,7 @@ final class RegisterAgentEndpointHandler
     public function __construct(
         private RegisterAgentUseCase $registerAgentHandler,
         private ResolveAuthenticatedUserUseCase $resolveAuthenticatedUserHandler,
+        private AgentPublicKeyStore $agentPublicKeyStore,
     ) {
     }
 
@@ -55,6 +57,8 @@ final class RegisterAgentEndpointHandler
                 $result->acceptedFeatureFlagsContractVersions()
             );
         }
+
+        $this->agentPublicKeyStore->register($agentId, $openPgpFingerprint, $openPgpPublicKey);
 
         return new RegisterAgentEndpointResult(
             RegisterAgentEndpointResult::STATUS_REGISTERED,

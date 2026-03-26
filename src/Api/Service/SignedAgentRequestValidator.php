@@ -2,12 +2,26 @@
 
 namespace App\Api\Service;
 
+use App\Api\Service\AgentSignature\AgentPublicKeyStore;
+use App\Api\Service\AgentSignature\AgentRequestSignatureVerifier;
+use App\Api\Service\AgentSignature\AgentSignatureNonceStore;
+use App\Api\Service\AgentSignature\SignedAgentMessageCanonicalizer;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 final class SignedAgentRequestValidator
 {
+    private const SIGNATURE_TTL_SECONDS = 300;
+
+    public function __construct(
+        private AgentPublicKeyStore $publicKeyStore,
+        private AgentRequestSignatureVerifier $signatureVerifier,
+        private AgentSignatureNonceStore $nonceStore,
+        private SignedAgentMessageCanonicalizer $messageCanonicalizer,
+    ) {
+    }
+
     /**
      * @param array<string, mixed> $payload
      */
@@ -34,8 +48,12 @@ final class SignedAgentRequestValidator
 
         $timestamp = trim((string) $request->headers->get('X-Retaia-Signature-Timestamp', ''));
         try {
-            new \DateTimeImmutable($timestamp);
+            $signatureTime = new \DateTimeImmutable($timestamp);
         } catch (\Throwable) {
+            return $this->unauthorizedResponse(['X-Retaia-Signature-Timestamp']);
+        }
+        $now = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+        if (abs($now->getTimestamp() - $signatureTime->getTimestamp()) > self::SIGNATURE_TTL_SECONDS) {
             return $this->unauthorizedResponse(['X-Retaia-Signature-Timestamp']);
         }
 
@@ -45,13 +63,46 @@ final class SignedAgentRequestValidator
             return $this->unauthorizedResponse(['X-Retaia-Agent-Id']);
         }
 
-        $fingerprint = trim((string) ($payload['openpgp_fingerprint'] ?? ''));
+        $fingerprint = $this->normalizeFingerprint((string) ($payload['openpgp_fingerprint'] ?? ''));
         $headerFingerprint = trim((string) $request->headers->get('X-Retaia-OpenPGP-Fingerprint', ''));
-        if ($fingerprint !== '' && $headerFingerprint !== '' && $fingerprint !== $headerFingerprint) {
+        $normalizedHeaderFingerprint = $this->normalizeFingerprint($headerFingerprint);
+        if ($fingerprint !== null && $normalizedHeaderFingerprint !== null && $fingerprint !== $normalizedHeaderFingerprint) {
+            return $this->unauthorizedResponse(['X-Retaia-OpenPGP-Fingerprint']);
+        }
+        if ($normalizedHeaderFingerprint === null) {
             return $this->unauthorizedResponse(['X-Retaia-OpenPGP-Fingerprint']);
         }
 
+        $publicKey = trim((string) ($payload['openpgp_public_key'] ?? ''));
+        if ($publicKey === '') {
+            $publicKey = (string) ($this->publicKeyStore->publicKeyFor($headerAgentId, $normalizedHeaderFingerprint) ?? '');
+        }
+        if ($publicKey === '') {
+            return $this->unauthorizedResponse(['X-Retaia-OpenPGP-Fingerprint']);
+        }
+
+        $signature = trim((string) $request->headers->get('X-Retaia-Signature', ''));
+        $canonicalMessage = $this->messageCanonicalizer->canonicalize($request);
+        if (!$this->signatureVerifier->verify($publicKey, $normalizedHeaderFingerprint, $canonicalMessage, $signature)) {
+            return $this->unauthorizedResponse(['X-Retaia-Signature']);
+        }
+
+        $nonce = trim((string) $request->headers->get('X-Retaia-Signature-Nonce', ''));
+        if (!$this->nonceStore->consume($headerAgentId, $nonce, self::SIGNATURE_TTL_SECONDS)) {
+            return $this->unauthorizedResponse(['X-Retaia-Signature-Nonce']);
+        }
+
         return null;
+    }
+
+    private function normalizeFingerprint(string $fingerprint): ?string
+    {
+        $normalized = strtoupper(preg_replace('/\s+/', '', trim($fingerprint)) ?? '');
+        if ($normalized === '' || preg_match('/^[A-F0-9]{40}$/', $normalized) !== 1) {
+            return null;
+        }
+
+        return $normalized;
     }
 
     /**

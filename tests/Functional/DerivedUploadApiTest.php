@@ -4,6 +4,7 @@ namespace App\Tests\Functional;
 
 use App\Asset\AssetState;
 use App\Entity\Asset;
+use App\Tests\Support\ApiAuthClientTrait;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
@@ -14,6 +15,7 @@ use Symfony\Component\HttpFoundation\Response;
 final class DerivedUploadApiTest extends WebTestCase
 {
     use RecreateDatabaseTrait;
+    use ApiAuthClientTrait;
 
     public function testAgentCanUploadAndListDerived(): void
     {
@@ -21,7 +23,7 @@ final class DerivedUploadApiTest extends WebTestCase
         $this->seedAsset();
         $client->setServerParameter('HTTP_IF_MATCH', $this->currentRevisionEtag($client, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'));
 
-        $client->jsonRequest('POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/init', [
+        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/init', [
             'kind' => 'proxy_video',
             'content_type' => 'video/mp4',
             'size_bytes' => 1024,
@@ -33,13 +35,13 @@ final class DerivedUploadApiTest extends WebTestCase
         $uploadId = $init['upload_id'] ?? null;
         self::assertIsString($uploadId);
 
-        $client->jsonRequest('POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/part', [
+        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/part', [
             'upload_id' => $uploadId,
             'part_number' => 1,
         ]);
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
 
-        $client->jsonRequest('POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/complete', [
+        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/complete', [
             'upload_id' => $uploadId,
             'total_parts' => 1,
         ]);
@@ -62,7 +64,7 @@ final class DerivedUploadApiTest extends WebTestCase
         $this->seedAsset();
         $client->setServerParameter('HTTP_IF_MATCH', $this->currentRevisionEtag($client, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'));
 
-        $client->jsonRequest('POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/init', [
+        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/init', [
             'kind' => 'proxy_video',
             'content_type' => 'video/mp4',
             'size_bytes' => 1024,
@@ -79,7 +81,7 @@ final class DerivedUploadApiTest extends WebTestCase
         $this->seedAsset();
         $client->setServerParameter('HTTP_IF_MATCH', $this->currentRevisionEtag($client, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'));
 
-        $client->jsonRequest('POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/init', [
+        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/init', [
             'kind' => 'proxy_video',
             'content_type' => 'video/mp4',
             'size_bytes' => 1024,
@@ -88,7 +90,7 @@ final class DerivedUploadApiTest extends WebTestCase
         $init = json_decode((string) $client->getResponse()->getContent(), true);
         $uploadId = (string) ($init['upload_id'] ?? '');
 
-        $client->jsonRequest('POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/complete', [
+        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/complete', [
             'upload_id' => $uploadId,
             'total_parts' => 2,
         ]);
@@ -104,18 +106,18 @@ final class DerivedUploadApiTest extends WebTestCase
         $this->seedAsset();
         $client->setServerParameter('HTTP_IF_MATCH', $this->currentRevisionEtag($client, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'));
 
-        $client->jsonRequest('POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/part', []);
+        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/part', []);
         self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
         $validationPart = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertSame('VALIDATION_FAILED', $validationPart['code'] ?? null);
 
-        $client->jsonRequest('POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/complete', []);
+        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/complete', []);
         self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
         $validationComplete = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertSame('VALIDATION_FAILED', $validationComplete['code'] ?? null);
 
         $unknownAsset = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
-        $client->jsonRequest('POST', "/api/v1/assets/{$unknownAsset}/derived/upload/init", [
+        $this->signedJsonRequestAsAgent($client, 'POST', "/api/v1/assets/{$unknownAsset}/derived/upload/init", [
             'kind' => 'proxy_video',
             'content_type' => 'video/mp4',
             'size_bytes' => 1024,
@@ -182,23 +184,10 @@ final class DerivedUploadApiTest extends WebTestCase
         $client = static::createClient();
         $client->disableReboot();
 
-        $client->jsonRequest('POST', '/api/v1/auth/login', [
-            'email' => $email,
-            'password' => 'change-me',
-        ]);
-
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
-        $payload = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertIsArray($payload);
-        $token = $payload['access_token'] ?? null;
-        self::assertIsString($token);
-        $client->setServerParameter('HTTP_AUTHORIZATION', 'Bearer '.$token);
+        $this->authenticateClient($client, $email);
         if ($email === 'agent@retaia.local') {
-            $client->setServerParameter('HTTP_X_RETAIA_AGENT_ID', '11111111-1111-4111-8111-111111111111');
-            $client->setServerParameter('HTTP_X_RETAIA_OPENPGP_FINGERPRINT', 'ABCD1234EF567890ABCD1234EF567890ABCD1234');
-            $client->setServerParameter('HTTP_X_RETAIA_SIGNATURE', 'test-signature');
-            $client->setServerParameter('HTTP_X_RETAIA_SIGNATURE_TIMESTAMP', '2026-03-19T12:00:00+00:00');
-            $client->setServerParameter('HTTP_X_RETAIA_SIGNATURE_NONCE', 'test-nonce');
+            $this->registerDefaultAgent($client);
+            $this->attachDefaultAgentSignatureHeaders($client);
         }
 
         return $client;

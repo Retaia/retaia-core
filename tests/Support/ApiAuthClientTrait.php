@@ -25,12 +25,53 @@ trait ApiAuthClientTrait
     private function attachDefaultAgentSignatureHeaders(
         KernelBrowser $client,
         string $agentId = '11111111-1111-4111-8111-111111111111',
-        string $fingerprint = 'ABCD1234EF567890ABCD1234EF567890ABCD1234',
+        ?string $fingerprint = null,
     ): void {
+        $material = AgentSigningTestHelper::publicMaterial();
+        $fingerprint ??= $material['fingerprint'];
+
         $client->setServerParameter('HTTP_X_RETAIA_AGENT_ID', $agentId);
         $client->setServerParameter('HTTP_X_RETAIA_OPENPGP_FINGERPRINT', $fingerprint);
-        $client->setServerParameter('HTTP_X_RETAIA_SIGNATURE', 'test-signature');
-        $client->setServerParameter('HTTP_X_RETAIA_SIGNATURE_TIMESTAMP', '2026-03-19T12:00:00+00:00');
-        $client->setServerParameter('HTTP_X_RETAIA_SIGNATURE_NONCE', 'test-nonce');
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @param array<string, string> $extraHeaders
+     */
+    private function signedJsonRequestAsAgent(KernelBrowser $client, string $method, string $uri, array $payload = [], array $extraHeaders = []): void
+    {
+        $headers = array_merge(
+            ['CONTENT_TYPE' => 'application/json'],
+            AgentSigningTestHelper::signedHeaders($method, $uri, $payload),
+            $extraHeaders,
+        );
+
+        $client->request(
+            strtoupper($method),
+            $uri,
+            [],
+            [],
+            $headers,
+            (string) json_encode($payload, JSON_THROW_ON_ERROR),
+        );
+    }
+
+    private function registerDefaultAgent(KernelBrowser $client): void
+    {
+        $material = AgentSigningTestHelper::publicMaterial();
+        $payload = [
+            'agent_id' => $material['agent_id'],
+            'agent_name' => 'ffmpeg-worker',
+            'agent_version' => '1.0.0',
+            'openpgp_public_key' => $material['public_key'],
+            'openpgp_fingerprint' => $material['fingerprint'],
+            'os_name' => 'linux',
+            'os_version' => '6.8',
+            'arch' => 'x86_64',
+            'capabilities' => ['extract_facts', 'generate_preview', 'generate_thumbnails', 'generate_audio_waveform', 'transcribe_audio'],
+        ];
+
+        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/agents/register', $payload);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
     }
 }
