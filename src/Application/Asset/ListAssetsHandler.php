@@ -39,9 +39,19 @@ final class ListAssetsHandler
         ?string $capturedAtFrom,
         ?string $capturedAtTo,
         int $limit,
+        array $tags,
+        string $tagsMode,
+        ?bool $hasPreview,
+        ?string $locationCountry,
+        ?string $locationCity,
         array $suggestedTags,
         string $suggestedTagsMode,
     ): ListAssetsResult {
+        $normalizedTagsMode = strtoupper(trim($tagsMode));
+        if (!in_array($normalizedTagsMode, ['AND', 'OR'], true)) {
+            return new ListAssetsResult(ListAssetsResult::STATUS_VALIDATION_FAILED);
+        }
+
         $mode = strtoupper(trim($suggestedTagsMode));
         if (!in_array($mode, ['AND', 'OR'], true)) {
             return new ListAssetsResult(ListAssetsResult::STATUS_VALIDATION_FAILED);
@@ -61,7 +71,22 @@ final class ListAssetsHandler
             return new ListAssetsResult(ListAssetsResult::STATUS_VALIDATION_FAILED);
         }
 
-        $items = $this->gateway->list($state, $mediaType, $query, $normalizedSort, $from, $to, $limit, $suggestedTags, $mode);
+        $items = $this->gateway->list(
+            $state,
+            $mediaType,
+            $query,
+            $normalizedSort,
+            $from,
+            $to,
+            $limit,
+            $tags,
+            $normalizedTagsMode,
+            $hasPreview,
+            $locationCountry,
+            $locationCity,
+            $suggestedTags,
+            $mode
+        );
         if ($items === null) {
             return new ListAssetsResult(ListAssetsResult::STATUS_FORBIDDEN_SCOPE);
         }

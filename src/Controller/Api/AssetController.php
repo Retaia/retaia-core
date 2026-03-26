@@ -35,6 +35,11 @@ final class AssetController
         $sort = $request->query->get('sort');
         $capturedAtFrom = $request->query->get('captured_at_from');
         $capturedAtTo = $request->query->get('captured_at_to');
+        $tags = $this->csvList($request->query->get('tags'));
+        $tagsMode = (string) $request->query->get('tags_mode', 'AND');
+        $hasPreview = $this->nullableBooleanQuery($request, 'has_preview');
+        $locationCountry = $this->optionalString($request->query->get('location_country'));
+        $locationCity = $this->optionalString($request->query->get('location_city'));
         $suggestedTags = $this->csvList($request->query->get('suggested_tags'));
         $suggestedTagsMode = (string) $request->query->get('suggested_tags_mode', 'AND');
         $limit = max(1, (int) $request->query->get('limit', 50));
@@ -47,6 +52,11 @@ final class AssetController
             is_string($capturedAtFrom) ? $capturedAtFrom : null,
             is_string($capturedAtTo) ? $capturedAtTo : null,
             $limit,
+            $tags,
+            $tagsMode,
+            $hasPreview,
+            $locationCountry,
+            $locationCity,
             $suggestedTags,
             $suggestedTagsMode,
         );
@@ -60,7 +70,7 @@ final class AssetController
             return $this->forbiddenScopeResponse();
         }
 
-        return new JsonResponse($result->payload() ?? ['items' => [], 'next_cursor' => null], Response::HTTP_OK);
+        return $this->authenticatedJsonResponse($result->payload() ?? ['items' => [], 'next_cursor' => null], Response::HTTP_OK);
     }
 
     #[Route('/{uuid}', name: 'api_assets_get', methods: ['GET'])]
@@ -74,7 +84,14 @@ final class AssetController
             ], Response::HTTP_NOT_FOUND);
         }
 
-        return new JsonResponse($result->payload() ?? [], Response::HTTP_OK);
+        $payload = $result->payload() ?? [];
+        $response = $this->authenticatedJsonResponse($payload, Response::HTTP_OK);
+        $etag = $payload['summary']['revision_etag'] ?? null;
+        if (is_string($etag) && $etag !== '') {
+            $response->headers->set('ETag', $etag);
+        }
+
+        return $response;
     }
 
     #[Route('/{uuid}', name: 'api_assets_patch', methods: ['PATCH'])]
@@ -199,6 +216,17 @@ final class AssetController
     }
 
     /**
+     * @param array<string, mixed> $payload
+     */
+    private function authenticatedJsonResponse(array $payload, int $status): JsonResponse
+    {
+        $response = new JsonResponse($payload, $status);
+        $response->headers->set('Cache-Control', 'private, no-store');
+
+        return $response;
+    }
+
+    /**
      * @param mixed $value
      * @return array<int, string>
      */
@@ -211,6 +239,39 @@ final class AssetController
         $items = array_map(static fn (string $item): string => mb_strtolower(trim($item)), explode(',', $value));
 
         return array_values(array_filter($items, static fn (string $item): bool => $item !== ''));
+    }
+
+    private function optionalString(mixed $value): ?string
+    {
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $trimmed = trim($value);
+
+        return $trimmed === '' ? null : $trimmed;
+    }
+
+    private function nullableBooleanQuery(Request $request, string $key): ?bool
+    {
+        if (!$request->query->has($key)) {
+            return null;
+        }
+
+        $value = $request->query->get($key);
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (!is_string($value)) {
+            return null;
+        }
+
+        return match (mb_strtolower(trim($value))) {
+            '1', 'true', 'yes', 'on' => true,
+            '0', 'false', 'no', 'off' => false,
+            default => null,
+        };
     }
 
 }

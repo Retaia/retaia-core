@@ -13,6 +13,7 @@ use App\Lock\Repository\OperationLockRepository;
 final class AssetPatchGateway implements AssetPatchGatewayPort
 {
     private const HIDDEN_FIELD_KEYS = ['projects'];
+    private const PROCESSING_PROFILES = ['video_standard', 'audio_undefined', 'audio_music', 'audio_voice', 'photo_standard'];
 
     public function __construct(
         private AssetRepositoryInterface $assets,
@@ -35,22 +36,31 @@ final class AssetPatchGateway implements AssetPatchGatewayPort
             return ['status' => PatchAssetResult::STATUS_STATE_CONFLICT, 'payload' => null];
         }
 
-        if (array_key_exists('tags', $payload) && is_array($payload['tags'])) {
+        if (array_key_exists('tags', $payload)) {
+            if (!$this->isValidTagsPayload($payload['tags'])) {
+                return ['status' => PatchAssetResult::STATUS_VALIDATION_FAILED, 'payload' => null];
+            }
+
             $asset->setTags($payload['tags']);
         }
 
         if (array_key_exists('notes', $payload)) {
-            $asset->setNotes(is_string($payload['notes']) ? $payload['notes'] : null);
+            if ($payload['notes'] !== null && !is_string($payload['notes'])) {
+                return ['status' => PatchAssetResult::STATUS_VALIDATION_FAILED, 'payload' => null];
+            }
+
+            $asset->setNotes($payload['notes']);
         }
 
         $fields = $asset->getFields();
-        $existingProjects = is_array($fields['projects'] ?? null) ? $fields['projects'] : null;
-        if (array_key_exists('fields', $payload) && is_array($payload['fields'])) {
-            $fields = $payload['fields'];
-            unset($fields['projects']);
-            if (!array_key_exists('projects', $payload) && is_array($existingProjects)) {
-                $fields['projects'] = $existingProjects;
+        if (array_key_exists('fields', $payload)) {
+            if (!is_array($payload['fields'])) {
+                return ['status' => PatchAssetResult::STATUS_VALIDATION_FAILED, 'payload' => null];
             }
+
+            $incomingFields = $payload['fields'];
+            unset($incomingFields['projects']);
+            $fields = array_replace_recursive($fields, $incomingFields);
         }
 
         if (array_key_exists('projects', $payload)) {
@@ -64,6 +74,10 @@ final class AssetPatchGateway implements AssetPatchGatewayPort
             } else {
                 $fields['projects'] = $projects;
             }
+        }
+
+        if (!$this->applyMutableMetadataFields($fields, $payload)) {
+            return ['status' => PatchAssetResult::STATUS_VALIDATION_FAILED, 'payload' => null];
         }
 
         $asset->setFields($fields);
@@ -86,6 +100,90 @@ final class AssetPatchGateway implements AssetPatchGatewayPort
                 'revision_etag' => AssetRevisionTag::fromAsset($asset),
             ],
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $fields
+     * @param array<string, mixed> $payload
+     */
+    private function applyMutableMetadataFields(array &$fields, array $payload): bool
+    {
+        $dateTimeFields = ['captured_at'];
+        foreach ($dateTimeFields as $field) {
+            if (!array_key_exists($field, $payload)) {
+                continue;
+            }
+            $value = $payload[$field];
+            if ($value !== null && (!$this->isNonEmptyString($value) || !$this->isValidDateTime($value))) {
+                return false;
+            }
+            $fields[$field] = $value;
+        }
+
+        foreach ([
+            'gps_latitude' => [-90, 90],
+            'gps_longitude' => [-180, 180],
+            'gps_altitude_m' => null,
+            'gps_altitude_relative_m' => null,
+            'gps_altitude_absolute_m' => null,
+        ] as $field => $range) {
+            if (!array_key_exists($field, $payload)) {
+                continue;
+            }
+            $value = $payload[$field];
+            if ($value !== null && !is_int($value) && !is_float($value)) {
+                return false;
+            }
+            if (is_array($range) && $value !== null && ($value < $range[0] || $value > $range[1])) {
+                return false;
+            }
+            $fields[$field] = $value;
+        }
+
+        foreach (['location_country', 'location_city', 'location_label'] as $field) {
+            if (!array_key_exists($field, $payload)) {
+                continue;
+            }
+            $value = $payload[$field];
+            if ($value !== null && !is_string($value)) {
+                return false;
+            }
+            $fields[$field] = $value;
+        }
+
+        if (array_key_exists('processing_profile', $payload)) {
+            $value = $payload['processing_profile'];
+            if ($value !== null && (!is_string($value) || !in_array($value, self::PROCESSING_PROFILES, true))) {
+                return false;
+            }
+            $fields['processing_profile'] = $value;
+        }
+
+        if (array_key_exists('state', $payload)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function isValidTagsPayload(mixed $tags): bool
+    {
+        if (!is_array($tags)) {
+            return false;
+        }
+
+        foreach ($tags as $tag) {
+            if (!is_string($tag)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function isNonEmptyString(mixed $value): bool
+    {
+        return is_string($value) && trim($value) !== '';
     }
 
     /**
