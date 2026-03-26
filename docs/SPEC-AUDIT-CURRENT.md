@@ -119,6 +119,45 @@ Concrete drift:
 - Spec patch request body: `specs/api/openapi/v1.yaml` under `/assets/{uuid}` `patch`
 - Runtime patch implementation: `src/Infrastructure/Asset/AssetPatchGateway.php`
 
+### P1. `PATCH /assets/{uuid}` is not actually a safe partial update for `fields`
+
+Spec:
+
+- The endpoint is documented as a partial mutation: only provided fields are updated, omitted fields stay unchanged.
+
+Runtime:
+
+- `src/Infrastructure/Asset/AssetPatchGateway.php` replaces the whole `fields` object when `payload['fields']` is present:
+  - existing `fields` are discarded
+  - only `projects` is specially preserved
+
+Impact:
+
+- A client sending a small partial `fields` patch can accidentally erase unrelated metadata already stored on the asset.
+- This is not just a schema drift; it is a real behavioral bug against the documented semantics of the endpoint.
+
+Concrete drift:
+
+- Runtime patch implementation: `src/Infrastructure/Asset/AssetPatchGateway.php`
+
+### P1. Asset patch validation is too permissive and silently coerces invalid input
+
+Runtime examples:
+
+- `notes` with a non-string value is coerced to `null` instead of being rejected.
+- `tags` is only applied when it is an array; invalid non-array input is silently ignored.
+- supported typed metadata fields are not validated because they are not implemented at all.
+
+Impact:
+
+- The endpoint can acknowledge malformed client input with `200 OK` while applying a different mutation than the caller intended.
+- This makes debugging client behavior harder and weakens the contract of a human-edit endpoint.
+
+Concrete drift:
+
+- Runtime patch implementation: `src/Infrastructure/Asset/AssetPatchGateway.php`
+- Asset entity coercion: `src/Entity/Asset.php`
+
 ### P1. Job lease contract is missing `fencing_token` end-to-end
 
 Spec:
@@ -143,6 +182,22 @@ Concrete drift:
 
 - Spec job contract: `specs/api/openapi/v1.yaml` under `Job`, `/jobs/{job_id}/heartbeat`, `/jobs/{job_id}/submit`, `/jobs/{job_id}/fail`
 - Runtime model/controller: `src/Job/Job.php`, `src/Application/Job/JobEndpointsHandler.php`, `src/Controller/Api/JobController.php`
+
+### P1. Retryable job failure keeps stale claimant identity on a job returned to `pending`
+
+Runtime:
+
+- `src/Job/Repository/JobRepository.php::fail()` moves the job back to `pending` when `retryable=true`.
+- The same update clears `lock_token` and `locked_until`, but does not clear `claimed_by`.
+
+Impact:
+
+- A pending job can still expose the previous claimant identity even though the lease has been released.
+- This weakens the semantics of the job model and can mislead diagnostics or downstream automation reading job payloads.
+
+Concrete drift:
+
+- Runtime persistence logic: `src/Job/Repository/JobRepository.php`
 
 ### P1. Job type vocabulary is still on the old `generate_proxy` naming
 
@@ -201,6 +256,23 @@ Concrete drift:
 - Spec signed request headers: `specs/api/openapi/v1.yaml` under agents/jobs/derived operations and reusable parameters
 - Runtime validator: `src/Api/Service/SignedAgentRequestValidator.php`
 
+### P2. Job lease operations are protected by `lock_token`, but not bound to the authenticated technical principal
+
+Runtime:
+
+- `heartbeat`, `submit`, and `fail` only validate the presented `lock_token`.
+- The current actor identity is not checked against `claimed_by` during these lease mutations.
+
+Impact:
+
+- Any technical principal that obtains a valid `lock_token` can continue another agent's lease operations.
+- This is weaker than the implied ownership model of signed, agent-identified job processing.
+
+Concrete drift:
+
+- Application handlers: `src/Application/Job/HeartbeatJobHandler.php`, `src/Application/Job/SubmitJobHandler.php`, `src/Application/Job/FailJobHandler.php`
+- Persistence logic: `src/Job/Repository/JobRepository.php`
+
 ### P2. Public runtime surface still contains non-spec routes
 
 Routes present in runtime but absent from the current normative OpenAPI v1:
@@ -251,8 +323,12 @@ The current test suite is green, but the following drifts are not strongly guard
 - no contract assertion that `AssetSummary` uses `has_preview` rather than `has_proxy`
 - no contract assertion that asset list supports the new query filters and cursor semantics
 - no contract assertion for the patchable asset metadata fields beyond the currently implemented subset
+- no test that `PATCH /assets/{uuid}` preserves unrelated `fields` keys when a partial `fields` patch is sent
+- no test that invalid patch scalar types are rejected instead of silently coerced or ignored
 - no contract assertion for `fencing_token` presence in job request/response payloads
 - no contract assertion that runtime job type names match the current enum (`generate_preview` vs `generate_proxy`)
+- no test that retryable job failure clears claimant identity when the job returns to `pending`
+- no test that lease mutations are bound to the claiming principal rather than only to `lock_token`
 - no broad negative coverage for `412 PRECONDITION_FAILED` / `428 PRECONDITION_REQUIRED` across all asset and derived endpoints protected by `If-Match`
 - no broad negative coverage for missing/invalid signed-agent headers across all signed agent endpoints
 - no test that agent signature validation performs actual cryptographic verification or nonce replay prevention
@@ -266,6 +342,8 @@ The current test suite is green, but the following drifts are not strongly guard
 - expose top-level GPS/location fields in asset detail
 - set `ETag` and `Cache-Control` headers on authenticated asset reads
 - implement the missing mutable fields on `PATCH /assets/{uuid}`
+- make `fields` patch semantics truly partial instead of replacing the full `fields` object
+- reject invalid patch scalar types explicitly with `422`
 - add contract tests for these points
 
 ### Batch 2: jobs lease/model alignment
@@ -275,6 +353,8 @@ The current test suite is green, but the following drifts are not strongly guard
 - return `fencing_token` on lease responses
 - migrate runtime job types from `generate_proxy` to `generate_preview`
 - align job submit validation and tests with the current enums
+- clear `claimed_by` when a retryable failure returns the job to `pending`
+- bind lease mutations to the claiming principal, not only to `lock_token`
 
 ### Batch 3: agent signing hardening
 
