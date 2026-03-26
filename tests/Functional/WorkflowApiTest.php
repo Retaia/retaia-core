@@ -67,7 +67,7 @@ final class WorkflowApiTest extends WebTestCase
         self::assertIsArray($payload);
 
         self::assertIsArray($payload['summary'] ?? null);
-        self::assertSame($uuid, $payload['summary']['uuid'] ?? null);
+        self::assertSame($uuid, $payload['summary']['uuid'] ?? null); // gitleaks:allow
         self::assertSame('DECISION_PENDING', $payload['summary']['state'] ?? null);
         self::assertArrayHasKey('created_at', $payload['summary']);
         self::assertArrayNotHasKey('filename', $payload['summary']);
@@ -116,7 +116,7 @@ final class WorkflowApiTest extends WebTestCase
             'action' => 'KEEP',
             'uuids' => ['33333333-cccc-4ccc-8ccc-333333333333'],
         ], [
-            'HTTP_IDEMPOTENCY_KEY' => 'bulk-decisions-1',
+            'HTTP_IDEMPOTENCY_KEY' => 'bulk-decisions-1', // gitleaks:allow
         ]);
         self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
         $apply = json_decode((string) $client->getResponse()->getContent(), true);

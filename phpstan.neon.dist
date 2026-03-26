@@ -1,0 +1,13 @@
+parameters:
+  level: 1
+  paths:
+    - src
+  tmpDir: var/phpstan
+  symfony:
+    containerXmlPath: var/phpstan/container.xml
+  bootstrapFiles:
+    - vendor/autoload.php
+  ignoreErrors:
+    -
+      identifier: symfonyContainer.serviceNotFound
+      path: src/Kernel.php

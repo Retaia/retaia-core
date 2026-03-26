@@ -33,6 +33,9 @@
         "fakerphp/faker": "^1.24",
         "guzzlehttp/guzzle": "^7.9",
         "hautelook/alice-bundle": "^2.17",
+        "phpstan/extension-installer": "^1.4",
+        "phpstan/phpstan": "^2.1",
+        "phpstan/phpstan-symfony": "^2.0",
         "phpunit/phpunit": "^11",
         "symfony/browser-kit": "^7.4",
         "systemsdk/phpcpd": "^8.0"
@@ -41,7 +44,8 @@
         "allow-plugins": {
             "php-http/discovery": true,
             "symfony/flex": true,
-            "symfony/runtime": true
+            "symfony/runtime": true,
+            "phpstan/extension-installer": true
         },
         "bump-after-update": true,
         "sort-packages": true
@@ -75,6 +79,7 @@
         "check:openapi": "php scripts/check-openapi-routes.php",
         "check:contracts": "php scripts/contracts-check.php",
         "check:openapi-docs-coherence": "php scripts/check-openapi-docs-coherence.php",
+        "check:phpstan": "vendor/bin/phpstan analyse --no-progress --memory-limit=1G",
         "compose:validate": "docker compose -f docker-compose.yml config >/dev/null && docker compose -f docker-compose.staging.yml config >/dev/null && docker compose -f docker-compose.prod.yaml config >/dev/null",
         "contracts:refresh": "php scripts/contracts-refresh.php",
         "dev:up": "docker compose up -d",
