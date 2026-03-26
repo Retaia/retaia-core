@@ -12,6 +12,10 @@ permissions:
   contents: read
   security-events: write
 
+concurrency:
+  group: security-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   phpstan:
     name: PHPStan
@@ -83,7 +87,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0
           submodules: recursive
 
       - name: Run Gitleaks CLI
