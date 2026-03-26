@@ -7,6 +7,12 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 10
     rebase-strategy: auto
+    ignore:
+      - dependency-name: "*"
+        versions:
+          - "*-alpha*"
+          - "*-beta*"
+          - "*-rc*"
     labels:
       - "dependencies"
 
@@ -16,6 +22,12 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 10
     rebase-strategy: auto
+    ignore:
+      - dependency-name: "*"
+        versions:
+          - "*-alpha*"
+          - "*-beta*"
+          - "*-rc*"
     labels:
       - "dependencies"
 
@@ -25,6 +37,12 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 10
     rebase-strategy: auto
+    ignore:
+      - dependency-name: "*"
+        versions:
+          - "*-alpha*"
+          - "*-beta*"
+          - "*-rc*"
     labels:
       - "dependencies"
 
@@ -34,5 +52,11 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 10
     rebase-strategy: auto
+    ignore:
+      - dependency-name: "*"
+        versions:
+          - "*-alpha*"
+          - "*-beta*"
+          - "*-rc*"
     labels:
       - "dependencies"
