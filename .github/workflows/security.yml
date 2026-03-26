@@ -51,6 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      security-events: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -85,8 +86,24 @@ jobs:
           mkdir -p var/phpstan
           php bin/console debug:container --env=test --format=xml > var/phpstan/container.xml
 
-      - name: Run PHPStan
-        run: composer check:phpstan
+      - name: Run PHPStan and generate SARIF
+        run: |
+          set +e
+          vendor/bin/phpstan analyse --no-progress --memory-limit=1G --error-format=sarif > phpstan-results.sarif
+          status=$?
+          set -e
+          echo "phpstan_exit_code=$status" >> "$GITHUB_ENV"
+          exit 0
+
+      - name: Upload PHPStan SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: phpstan-results.sarif
+
+      - name: Fail on PHPStan findings
+        if: always()
+        run: exit "${phpstan_exit_code:-1}"
 
   semgrep:
     name: Semgrep
