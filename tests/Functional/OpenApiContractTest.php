@@ -147,6 +147,36 @@ final class OpenApiContractTest extends WebTestCase
         self::assertSame(['project_id', 'project_name', 'created_at'], $projectRef['required'] ?? null);
     }
 
+    public function testAssetReadResponsesMatchCurrentContractHeadersAndShape(): void
+    {
+        $client = $this->createAuthenticatedClient();
+        $this->seedDetailedAsset('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+
+        $client->request('GET', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        self::assertCacheControlIsPrivateNoStore((string) $client->getResponse()->headers->get('Cache-Control'));
+        $detailPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($detailPayload);
+        self::assertSame($detailPayload['summary']['revision_etag'] ?? null, $client->getResponse()->headers->get('ETag'));
+        self::assertArrayHasKey('has_preview', $detailPayload['summary'] ?? []);
+        self::assertArrayNotHasKey('has_proxy', $detailPayload['summary'] ?? []);
+        self::assertSame(50.8503, $detailPayload['gps_latitude'] ?? null);
+        self::assertSame('BE', $detailPayload['location_country'] ?? null);
+        self::assertSame('Brussels', $detailPayload['location_city'] ?? null);
+
+        $client->request('GET', '/api/v1/assets?has_preview=true&location_country=BE&location_city=Brussels&limit=10');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        self::assertCacheControlIsPrivateNoStore((string) $client->getResponse()->headers->get('Cache-Control'));
+        $listPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($listPayload);
+        self::assertCount(1, $listPayload['items'] ?? []);
+        self::assertSame('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', $listPayload['items'][0]['uuid'] ?? null);
+        self::assertSame(true, $listPayload['items'][0]['has_preview'] ?? null);
+        self::assertArrayNotHasKey('has_proxy', $listPayload['items'][0] ?? []);
+    }
+
     public function testRuntimeContractKeepsPollingAsSourceOfTruth(): void
     {
         $openApi = $this->openApi();
@@ -499,7 +529,7 @@ final class OpenApiContractTest extends WebTestCase
     private function currentAssetRevisionEtag(KernelBrowser $client, string $uuid): string
     {
         $client->request('GET', '/api/v1/assets/'.$uuid);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        self::assertSame(Response::HTTP_OK, $client->getResponse()->getStatusCode());
         $payload = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertIsArray($payload);
         $etag = $payload['summary']['revision_etag'] ?? null;
@@ -532,6 +562,37 @@ final class OpenApiContractTest extends WebTestCase
         $asset = new Asset($uuid, 'VIDEO', 'contract.mov', $state);
         $entityManager->persist($asset);
         $entityManager->flush();
+    }
+
+    private function seedDetailedAsset(string $uuid): void
+    {
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = static::getContainer()->get(EntityManagerInterface::class);
+        if ($entityManager->find(Asset::class, $uuid) instanceof Asset) {
+            return;
+        }
+
+        $asset = new Asset($uuid, 'VIDEO', 'contract-detailed.mov', AssetState::PROCESSED);
+        $asset->setFields([
+            'captured_at' => '2026-01-10T12:00:00Z',
+            'gps_latitude' => 50.8503,
+            'gps_longitude' => 4.3517,
+            'location_country' => 'BE',
+            'location_city' => 'Brussels',
+            'location_label' => 'Grand Place',
+            'processing_profile' => 'video_standard',
+            'preview_video_url' => 'https://cdn.retaia.test/previews/contract-detailed.mp4',
+        ]);
+        $entityManager->persist($asset);
+        $entityManager->flush();
+    }
+
+    private static function assertCacheControlIsPrivateNoStore(string $value): void
+    {
+        $normalized = array_map('trim', explode(',', $value));
+        sort($normalized);
+
+        self::assertSame(['no-store', 'private'], $normalized);
     }
 
     /**

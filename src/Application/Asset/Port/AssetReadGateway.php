@@ -21,6 +21,11 @@ interface AssetReadGateway
         ?\DateTimeImmutable $capturedAtFrom,
         ?\DateTimeImmutable $capturedAtTo,
         int $limit,
+        array $tags,
+        string $tagsMode,
+        ?bool $hasPreview,
+        ?string $locationCountry,
+        ?string $locationCity,
         array $suggestedTags,
         string $suggestedTagsMode,
     ): ?array;

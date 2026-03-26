@@ -144,6 +144,8 @@ final class AssetStateMachineApiTest extends WebTestCase
         self::assertSame(['updated', 'news'], $payload['tags'] ?? []);
         self::assertSame('patched note', $payload['notes'] ?? null);
         self::assertSame('fx3', $payload['fields']['camera'] ?? null);
+        self::assertSame(120, $payload['fields']['duration'] ?? null);
+        self::assertArrayNotHasKey('projects', $payload['fields'] ?? []);
     }
 
     public function testGetAssetExposesProjectsOutsideFields(): void
@@ -158,6 +160,28 @@ final class AssetStateMachineApiTest extends WebTestCase
         self::assertSame('Project Alpha', $payload['projects'][0]['project_name'] ?? null);
         self::assertSame('Main edit', $payload['projects'][0]['description'] ?? null);
         self::assertArrayNotHasKey('projects', $payload['fields'] ?? []);
+    }
+
+    public function testGetAssetReturnsSpecHeadersAndMetadataShape(): void
+    {
+        $client = $this->createAuthenticatedClient(true);
+
+        $client->request('GET', '/api/v1/assets/11111111-1111-1111-1111-111111111111');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        self::assertCacheControlIsPrivateNoStore((string) $client->getResponse()->headers->get('Cache-Control'));
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        self::assertSame($payload['summary']['revision_etag'] ?? null, $client->getResponse()->headers->get('ETag'));
+        self::assertSame(true, $payload['summary']['has_preview'] ?? null);
+        self::assertArrayNotHasKey('has_proxy', $payload['summary'] ?? []);
+        self::assertSame(50.8503, $payload['gps_latitude'] ?? null);
+        self::assertSame(4.3517, $payload['gps_longitude'] ?? null);
+        self::assertSame('BE', $payload['location_country'] ?? null);
+        self::assertSame('Brussels', $payload['location_city'] ?? null);
+        self::assertSame('Grand Place', $payload['location_label'] ?? null);
+        self::assertSame('video_standard', $payload['processing']['processing_profile'] ?? null);
+        self::assertSame('https://cdn.retaia.test/previews/rush-001.mp4', $payload['derived']['preview_video_url'] ?? null);
     }
 
     public function testPatchUpdatesProjectsAndDeduplicatesByProjectId(): void
@@ -227,6 +251,94 @@ final class AssetStateMachineApiTest extends WebTestCase
         self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
     }
 
+    public function testPatchSupportsMutableAssetMetadataFields(): void
+    {
+        $client = $this->createAuthenticatedClient(true);
+
+        $client->jsonRequest('PATCH', '/api/v1/assets/11111111-1111-1111-1111-111111111111', [
+            'captured_at' => '2026-03-10T10:11:12Z',
+            'gps_latitude' => 48.8566,
+            'gps_longitude' => 2.3522,
+            'gps_altitude_m' => 35.5,
+            'gps_altitude_relative_m' => 4.0,
+            'gps_altitude_absolute_m' => 39.5,
+            'location_country' => 'FR',
+            'location_city' => 'Paris',
+            'location_label' => 'Studio',
+            'processing_profile' => 'audio_voice',
+        ], [
+            'HTTP_IF_MATCH' => $this->currentAssetRevisionEtag($client, '11111111-1111-1111-1111-111111111111'),
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('2026-03-10T10:11:12Z', $payload['fields']['captured_at'] ?? null);
+        self::assertSame(48.8566, $payload['fields']['gps_latitude'] ?? null);
+        self::assertSame(2.3522, $payload['fields']['gps_longitude'] ?? null);
+        self::assertSame(35.5, $payload['fields']['gps_altitude_m'] ?? null);
+        self::assertEquals(4.0, $payload['fields']['gps_altitude_relative_m'] ?? null);
+        self::assertSame(39.5, $payload['fields']['gps_altitude_absolute_m'] ?? null);
+        self::assertSame('FR', $payload['fields']['location_country'] ?? null);
+        self::assertSame('Paris', $payload['fields']['location_city'] ?? null);
+        self::assertSame('Studio', $payload['fields']['location_label'] ?? null);
+        self::assertSame('audio_voice', $payload['fields']['processing_profile'] ?? null);
+
+        $client->request('GET', '/api/v1/assets/11111111-1111-1111-1111-111111111111');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $detailPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame(48.8566, $detailPayload['gps_latitude'] ?? null);
+        self::assertSame(2.3522, $detailPayload['gps_longitude'] ?? null);
+        self::assertSame('FR', $detailPayload['location_country'] ?? null);
+        self::assertSame('Paris', $detailPayload['location_city'] ?? null);
+        self::assertSame('Studio', $detailPayload['location_label'] ?? null);
+        self::assertSame('audio_voice', $detailPayload['processing']['processing_profile'] ?? null);
+    }
+
+    public function testPatchRejectsInvalidNotesType(): void
+    {
+        $client = $this->createAuthenticatedClient(true);
+
+        $client->jsonRequest('PATCH', '/api/v1/assets/11111111-1111-1111-1111-111111111111', [
+            'notes' => 123,
+        ], [
+            'HTTP_IF_MATCH' => $this->currentAssetRevisionEtag($client, '11111111-1111-1111-1111-111111111111'),
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
+    }
+
+    public function testPatchRejectsInvalidTagsPayload(): void
+    {
+        $client = $this->createAuthenticatedClient(true);
+
+        $client->jsonRequest('PATCH', '/api/v1/assets/11111111-1111-1111-1111-111111111111', [
+            'tags' => ['valid', 1],
+        ], [
+            'HTTP_IF_MATCH' => $this->currentAssetRevisionEtag($client, '11111111-1111-1111-1111-111111111111'),
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
+    }
+
+    public function testPatchRejectsUnsupportedStateMutation(): void
+    {
+        $client = $this->createAuthenticatedClient(true);
+
+        $client->jsonRequest('PATCH', '/api/v1/assets/11111111-1111-1111-1111-111111111111', [
+            'state' => 'READY',
+        ], [
+            'HTTP_IF_MATCH' => $this->currentAssetRevisionEtag($client, '11111111-1111-1111-1111-111111111111'),
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
+    }
+
     public function testPatchReturnsNotFoundForUnknownAsset(): void
     {
         $client = $this->createAuthenticatedClient();
@@ -267,6 +379,23 @@ final class AssetStateMachineApiTest extends WebTestCase
         self::assertIsArray($payload);
         self::assertCount(1, $payload['items'] ?? []);
         self::assertSame('22222222-2222-2222-2222-222222222222', $payload['items'][0]['uuid'] ?? null);
+    }
+
+    public function testListAssetsAppliesSpecFiltersAndHeaders(): void
+    {
+        $client = $this->createAuthenticatedClient(true);
+
+        $client->request('GET', '/api/v1/assets?tags=wedding&tags_mode=AND&has_preview=true&location_country=BE&location_city=Brussels&limit=10');
+
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        self::assertCacheControlIsPrivateNoStore((string) $client->getResponse()->headers->get('Cache-Control'));
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        self::assertCount(1, $payload['items'] ?? []);
+        self::assertSame('11111111-1111-1111-1111-111111111111', $payload['items'][0]['uuid'] ?? null);
+        self::assertSame(true, $payload['items'][0]['has_preview'] ?? null);
+        self::assertArrayNotHasKey('has_proxy', $payload['items'][0] ?? []);
+        self::assertArrayHasKey('next_cursor', $payload);
     }
 
     public function testListAssetsSupportsCapturedAtRangeFilters(): void
@@ -358,7 +487,7 @@ final class AssetStateMachineApiTest extends WebTestCase
     private function currentAssetRevisionEtag(KernelBrowser $client, string $uuid): string
     {
         $client->request('GET', '/api/v1/assets/'.$uuid);
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        self::assertSame(Response::HTTP_OK, $client->getResponse()->getStatusCode());
         $payload = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertIsArray($payload);
         $etag = $payload['summary']['revision_etag'] ?? null;
@@ -387,6 +516,16 @@ final class AssetStateMachineApiTest extends WebTestCase
             'camera' => 'a7s',
             'captured_at' => '2026-01-10T12:00:00Z',
             'duration' => 120,
+            'gps_latitude' => 50.8503,
+            'gps_longitude' => 4.3517,
+            'gps_altitude_m' => 18.0,
+            'gps_altitude_relative_m' => 3.0,
+            'gps_altitude_absolute_m' => 21.0,
+            'location_country' => 'BE',
+            'location_city' => 'Brussels',
+            'location_label' => 'Grand Place',
+            'processing_profile' => 'video_standard',
+            'preview_video_url' => 'https://cdn.retaia.test/previews/rush-001.mp4',
             'projects' => [
                 [
                     'project_id' => 'proj-alpha',
@@ -434,5 +573,13 @@ final class AssetStateMachineApiTest extends WebTestCase
         $asset = new Asset('44444444-4444-4444-4444-444444444444', 'VIDEO', 'purged.mov', AssetState::PURGED);
         $entityManager->persist($asset);
         $entityManager->flush();
+    }
+
+    private static function assertCacheControlIsPrivateNoStore(string $value): void
+    {
+        $normalized = array_map('trim', explode(',', $value));
+        sort($normalized);
+
+        self::assertSame(['no-store', 'private'], $normalized);
     }
 }

@@ -36,6 +36,11 @@ final class AssetReadGateway implements AssetReadGatewayPort
         ?\DateTimeImmutable $capturedAtFrom,
         ?\DateTimeImmutable $capturedAtTo,
         int $limit,
+        array $tags,
+        string $tagsMode,
+        ?bool $hasPreview,
+        ?string $locationCountry,
+        ?string $locationCity,
         array $suggestedTags,
         string $suggestedTagsMode,
     ): ?array {
@@ -45,6 +50,9 @@ final class AssetReadGateway implements AssetReadGatewayPort
 
         $assets = $this->assets->listAssets($state, $mediaType, $query, max(200, $limit));
         $assets = $this->applyCapturedAtRange($assets, $capturedAtFrom, $capturedAtTo);
+        $assets = $this->applyTagsFilter($assets, $tags, $tagsMode);
+        $assets = $this->applyHasPreviewFilter($assets, $hasPreview);
+        $assets = $this->applyLocationFilter($assets, $locationCountry, $locationCity);
         $assets = $this->applySort($assets, $sort ?? '-created_at');
         if ($suggestedTags !== []) {
             $assets = array_values(array_filter(
@@ -72,12 +80,20 @@ final class AssetReadGateway implements AssetReadGatewayPort
             'summary' => $summary,
             'notes' => $asset->getNotes(),
             'fields' => $this->publicFields($fields),
+            'gps_latitude' => $this->optionalNumber($fields['gps_latitude'] ?? null),
+            'gps_longitude' => $this->optionalNumber($fields['gps_longitude'] ?? null),
+            'gps_altitude_m' => $this->optionalNumber($fields['gps_altitude_m'] ?? null),
+            'gps_altitude_relative_m' => $this->optionalNumber($fields['gps_altitude_relative_m'] ?? null),
+            'gps_altitude_absolute_m' => $this->optionalNumber($fields['gps_altitude_absolute_m'] ?? null),
+            'location_country' => $this->optionalString($fields['location_country'] ?? null),
+            'location_city' => $this->optionalString($fields['location_city'] ?? null),
+            'location_label' => $this->optionalString($fields['location_label'] ?? null),
             'projects' => $projects,
             'paths' => $source,
             'processing' => [
                 'facts_done' => (bool) ($fields['facts_done'] ?? false),
                 'thumbs_done' => (bool) ($fields['thumbs_done'] ?? !empty($derived['thumbs'])),
-                'proxy_done' => (bool) ($fields['proxy_done'] ?? ($derived['proxy_video_url'] !== null || $derived['proxy_audio_url'] !== null || $derived['proxy_photo_url'] !== null)),
+                'proxy_done' => (bool) ($fields['proxy_done'] ?? ($derived['preview_video_url'] !== null || $derived['preview_audio_url'] !== null || $derived['preview_photo_url'] !== null)),
                 'waveform_done' => (bool) ($fields['waveform_done'] ?? $derived['waveform_url'] !== null),
                 'processing_profile' => is_string($fields['processing_profile'] ?? null) ? $fields['processing_profile'] : null,
                 'review_processing_version' => is_string($fields['review_processing_version'] ?? null) ? $fields['review_processing_version'] : null,
@@ -125,9 +141,99 @@ final class AssetReadGateway implements AssetReadGatewayPort
             'captured_at' => is_string($fields['captured_at'] ?? null) ? $fields['captured_at'] : null,
             'duration' => is_numeric($fields['duration'] ?? null) ? (float) $fields['duration'] : null,
             'tags' => $asset->getTags(),
-            'has_proxy' => $derived['proxy_video_url'] !== null || $derived['proxy_audio_url'] !== null || $derived['proxy_photo_url'] !== null,
+            'has_preview' => $derived['preview_video_url'] !== null || $derived['preview_audio_url'] !== null || $derived['preview_photo_url'] !== null,
             'thumb_url' => $derived['thumbs'][0] ?? null,
         ];
+    }
+
+    /**
+     * @param array<int, Asset> $assets
+     * @param array<int, string> $tags
+     * @return array<int, Asset>
+     */
+    private function applyTagsFilter(array $assets, array $tags, string $mode): array
+    {
+        if ($tags === []) {
+            return $assets;
+        }
+
+        return array_values(array_filter($assets, fn (Asset $asset): bool => $this->matchesTags($asset, $tags, $mode)));
+    }
+
+    /**
+     * @param array<int, Asset> $assets
+     * @return array<int, Asset>
+     */
+    private function applyHasPreviewFilter(array $assets, ?bool $hasPreview): array
+    {
+        if ($hasPreview === null) {
+            return $assets;
+        }
+
+        return array_values(array_filter($assets, function (Asset $asset) use ($hasPreview): bool {
+            $derived = $this->derivedFromFields($asset->getFields());
+            $value = $derived['preview_video_url'] !== null
+                || $derived['preview_audio_url'] !== null
+                || $derived['preview_photo_url'] !== null;
+
+            return $value === $hasPreview;
+        }));
+    }
+
+    /**
+     * @param array<int, Asset> $assets
+     * @return array<int, Asset>
+     */
+    private function applyLocationFilter(array $assets, ?string $locationCountry, ?string $locationCity): array
+    {
+        if ($locationCountry === null && $locationCity === null) {
+            return $assets;
+        }
+
+        return array_values(array_filter($assets, function (Asset $asset) use ($locationCountry, $locationCity): bool {
+            $fields = $asset->getFields();
+            $country = mb_strtolower(trim((string) ($fields['location_country'] ?? '')));
+            $city = mb_strtolower(trim((string) ($fields['location_city'] ?? '')));
+
+            if ($locationCountry !== null && $country !== mb_strtolower($locationCountry)) {
+                return false;
+            }
+
+            if ($locationCity !== null && $city !== mb_strtolower($locationCity)) {
+                return false;
+            }
+
+            return true;
+        }));
+    }
+
+    /**
+     * @param array<int, string> $expected
+     */
+    private function matchesTags(Asset $asset, array $expected, string $mode): bool
+    {
+        $normalized = array_values(array_filter(
+            array_map(static fn (string $tag): string => mb_strtolower(trim($tag)), $asset->getTags()),
+            static fn (string $tag): bool => $tag !== ''
+        ));
+
+        if ($mode === 'OR') {
+            foreach ($expected as $tag) {
+                if (in_array($tag, $normalized, true)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        foreach ($expected as $tag) {
+            if (!in_array($tag, $normalized, true)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -206,9 +312,9 @@ final class AssetReadGateway implements AssetReadGatewayPort
         }
 
         return [
-            'proxy_video_url' => $this->optionalString($derived['proxy_video_url'] ?? $fields['proxy_video_url'] ?? null),
-            'proxy_audio_url' => $this->optionalString($derived['proxy_audio_url'] ?? $fields['proxy_audio_url'] ?? null),
-            'proxy_photo_url' => $this->optionalString($derived['proxy_photo_url'] ?? $fields['proxy_photo_url'] ?? null),
+            'preview_video_url' => $this->optionalString($derived['preview_video_url'] ?? $derived['proxy_video_url'] ?? $fields['preview_video_url'] ?? $fields['proxy_video_url'] ?? null),
+            'preview_audio_url' => $this->optionalString($derived['preview_audio_url'] ?? $derived['proxy_audio_url'] ?? $fields['preview_audio_url'] ?? $fields['proxy_audio_url'] ?? null),
+            'preview_photo_url' => $this->optionalString($derived['preview_photo_url'] ?? $derived['proxy_photo_url'] ?? $fields['preview_photo_url'] ?? $fields['proxy_photo_url'] ?? null),
             'waveform_url' => $this->optionalString($derived['waveform_url'] ?? $fields['waveform_url'] ?? null),
             'thumbs' => array_values(array_filter(
                 array_map(fn (mixed $thumb): string => (string) $thumb, $thumbs),
@@ -462,5 +568,14 @@ final class AssetReadGateway implements AssetReadGatewayPort
         $trimmed = trim($value);
 
         return $trimmed === '' ? null : $trimmed;
+    }
+
+    private function optionalNumber(mixed $value): float|int|null
+    {
+        if (!is_int($value) && !is_float($value)) {
+            return null;
+        }
+
+        return $value;
     }
 }

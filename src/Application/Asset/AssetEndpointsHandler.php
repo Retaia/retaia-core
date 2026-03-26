@@ -32,11 +32,31 @@ final class AssetEndpointsHandler
         ?string $capturedAtFrom,
         ?string $capturedAtTo,
         int $limit,
+        array $tags,
+        string $tagsMode,
+        ?bool $hasPreview,
+        ?string $locationCountry,
+        ?string $locationCity,
         array $suggestedTags,
         string $suggestedTagsMode,
     ): AssetEndpointResult
     {
-        $result = $this->listAssetsHandler->handle($state, $mediaType, $query, $sort, $capturedAtFrom, $capturedAtTo, $limit, $suggestedTags, $suggestedTagsMode);
+        $result = $this->listAssetsHandler->handle(
+            $state,
+            $mediaType,
+            $query,
+            $sort,
+            $capturedAtFrom,
+            $capturedAtTo,
+            $limit,
+            $tags,
+            $tagsMode,
+            $hasPreview,
+            $locationCountry,
+            $locationCity,
+            $suggestedTags,
+            $suggestedTagsMode
+        );
         if ($result->status() === ListAssetsResult::STATUS_VALIDATION_FAILED) {
             return new AssetEndpointResult(AssetEndpointResult::STATUS_VALIDATION_FAILED);
         }

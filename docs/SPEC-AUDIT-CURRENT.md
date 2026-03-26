@@ -22,7 +22,7 @@ Important context:
 
 The runtime is no longer far from the current v1 spec on route presence, but it is still materially behind the contract in four areas:
 
-1. `assets` read/write contract drift: filters, response headers, and metadata fields are behind the spec.
+1. `assets` read/write contract drift remains on pagination and the last unsupported query/body semantics, even though the current metadata/header shape has been aligned.
 2. `jobs` lease contract drift: `fencing_token` is still absent end-to-end, and job type naming is still on the old `generate_proxy` vocabulary.
 3. agent request signing remains structurally validated, but not cryptographically validated as described by the OpenAPI surface.
 4. contract test/tooling coverage still misses several of the newer v1 behaviors, so some drifts remain invisible while the suite stays green.
@@ -31,7 +31,7 @@ There is also a smaller but important surface-management issue: several public r
 
 ## Findings
 
-### P1. `/assets` list contract is behind the current spec
+### P1. `/assets` list contract still lacks the remaining spec pagination/filter semantics
 
 Spec:
 
@@ -40,13 +40,13 @@ Spec:
 
 Runtime:
 
-- `src/Controller/Api/AssetController.php` only reads `state`, `media_type`, `q`, `sort`, `captured_at_from`, `captured_at_to`, `limit`, and legacy `suggested_tags` / `suggested_tags_mode`.
+- `src/Controller/Api/AssetController.php` now reads `tags`, `tags_mode`, `has_preview`, `location_country`, and `location_city`, but still accepts a single `state` value rather than the spec's `state[]`, and still keeps legacy `suggested_tags` / `suggested_tags_mode`.
 - `src/Application/Asset/AssetEndpointsHandler.php` always returns `next_cursor => null`.
-- `src/Infrastructure/Asset/AssetReadGateway.php` only filters by one `state`, `media_type`, `query`, captured-at range, and legacy suggested-tags logic.
+- `src/Infrastructure/Asset/AssetReadGateway.php` now filters by tags, preview presence, and location metadata, but still has no `geo_bbox` filtering and no cursor pagination.
 
 Impact:
 
-- Spec-declared filters are silently ignored by runtime.
+- The remaining spec-declared pagination/filter semantics are still ignored by runtime.
 - Cursor pagination is declared but not implemented.
 - Legacy query parameters (`suggested_tags`) remain in runtime despite being absent from the spec.
 
@@ -56,107 +56,21 @@ Concrete drift:
 - Runtime handler: `src/Controller/Api/AssetController.php`
 - Runtime gateway: `src/Infrastructure/Asset/AssetReadGateway.php`
 
-### P1. `AssetSummary` and `AssetDetail` payloads are still on the older shape
-
-Spec:
-
-- `AssetSummary` uses `has_preview`, not `has_proxy`.
-- `AssetDetail` includes top-level metadata fields such as `gps_latitude`, `gps_longitude`, `gps_altitude_*`, `location_country`, `location_city`, `location_label`.
-- `GET /assets/{uuid}` must return `ETag` and `Cache-Control: private, no-store`.
-
-Runtime:
-
-- `src/Infrastructure/Asset/AssetReadGateway.php` emits `has_proxy` in the summary payload instead of `has_preview`.
-- The same gateway does not project the top-level GPS/location fields required by `AssetDetail`; it only exposes them indirectly if present inside `fields`.
-- `src/Controller/Api/AssetController.php::getOne()` returns a raw `JsonResponse` without setting the `ETag` header.
-- Neither asset list nor asset detail responses set the spec-declared authenticated cache policy.
-
-Impact:
-
-- Clients coded against the current summary/detail schemas do not get the documented fields.
-- The optimistic concurrency flow is weaker than documented because clients cannot rely on `GET /assets/{uuid}` to receive the canonical `ETag` header.
-- Cache behavior is undocumented at runtime for authenticated asset reads.
-
-Concrete drift:
-
-- Spec detail/summary schemas: `specs/api/openapi/v1.yaml` under `AssetSummary` and `AssetDetail`
-- Runtime payload builder: `src/Infrastructure/Asset/AssetReadGateway.php`
-- Runtime controller: `src/Controller/Api/AssetController.php`
-
-### P1. `PATCH /assets/{uuid}` only implements a subset of the mutable fields declared by the spec
-
-Spec-declared writable fields include:
-
-- `captured_at`
-- `gps_latitude`
-- `gps_longitude`
-- `gps_altitude_m`
-- `gps_altitude_relative_m`
-- `gps_altitude_absolute_m`
-- `location_country`
-- `location_city`
-- `location_label`
-- `processing_profile`
-- `state`
-- `projects`
-- `tags`
-- `notes`
-- `fields`
-
-Runtime:
-
-- `src/Infrastructure/Asset/AssetPatchGateway.php` only mutates `tags`, `notes`, `fields`, and `projects`.
-- The additional typed metadata fields declared by the spec are currently ignored.
-- The state transition part of the patch contract is not implemented here either.
-
-Impact:
-
-- The endpoint exists and returns `200`, but several spec-declared fields have no effect.
-- This is a high-risk contract drift because callers receive no explicit “unsupported field” failure.
-
-Concrete drift:
-
-- Spec patch request body: `specs/api/openapi/v1.yaml` under `/assets/{uuid}` `patch`
-- Runtime patch implementation: `src/Infrastructure/Asset/AssetPatchGateway.php`
-
-### P1. `PATCH /assets/{uuid}` is not actually a safe partial update for `fields`
-
-Spec:
-
-- The endpoint is documented as a partial mutation: only provided fields are updated, omitted fields stay unchanged.
-
-Runtime:
-
-- `src/Infrastructure/Asset/AssetPatchGateway.php` replaces the whole `fields` object when `payload['fields']` is present:
-  - existing `fields` are discarded
-  - only `projects` is specially preserved
-
-Impact:
-
-- A client sending a small partial `fields` patch can accidentally erase unrelated metadata already stored on the asset.
-- This is not just a schema drift; it is a real behavioral bug against the documented semantics of the endpoint.
-
-Concrete drift:
-
-- Runtime patch implementation: `src/Infrastructure/Asset/AssetPatchGateway.php`
-
-### P1. Asset patch validation is too permissive and silently coerces invalid input
+### P1. `PATCH /assets/{uuid}` still does not implement the spec-declared `state` field semantics
 
 Runtime examples:
 
-- `notes` with a non-string value is coerced to `null` instead of being rejected.
-- `tags` is only applied when it is an array; invalid non-array input is silently ignored.
-- supported typed metadata fields are not validated because they are not implemented at all.
+- The endpoint now rejects invalid `notes`, `tags`, and typed metadata scalars with `422`.
+- The remaining unsupported part of the patch contract is `state`: the spec declares it writable, while the runtime currently rejects it with `VALIDATION_FAILED` rather than applying the documented state mutation semantics.
 
 Impact:
 
-- The endpoint can acknowledge malformed client input with `200 OK` while applying a different mutation than the caller intended.
-- This makes debugging client behavior harder and weakens the contract of a human-edit endpoint.
+- The runtime is now safer for malformed scalar input, but `state` remains a documented patch field that the endpoint still cannot honor.
+- Clients must still use dedicated lifecycle endpoints (`reopen`, `reprocess`, decisions) rather than the spec-declared unified patch field.
 
 Concrete drift:
 
 - Runtime patch implementation: `src/Infrastructure/Asset/AssetPatchGateway.php`
-- Asset entity coercion: `src/Entity/Asset.php`
 
 ### P1. Job lease contract is missing `fencing_token` end-to-end
 
@@ -318,13 +232,9 @@ Nuance:
 
 The current test suite is green, but the following drifts are not strongly guarded today:
 
-- no contract assertion that `GET /assets/{uuid}` returns `ETag`
-- no contract assertion for authenticated asset `Cache-Control: private, no-store`
-- no contract assertion that `AssetSummary` uses `has_preview` rather than `has_proxy`
-- no contract assertion that asset list supports the new query filters and cursor semantics
-- no contract assertion for the patchable asset metadata fields beyond the currently implemented subset
-- no test that `PATCH /assets/{uuid}` preserves unrelated `fields` keys when a partial `fields` patch is sent
-- no test that invalid patch scalar types are rejected instead of silently coerced or ignored
+- no contract assertion that asset list supports the remaining `cursor` semantics
+- no contract assertion for spec `state[]` query semantics on `GET /assets`
+- no contract assertion that `PATCH /assets/{uuid}` implements the spec-declared `state` field semantics
 - no contract assertion for `fencing_token` presence in job request/response payloads
 - no contract assertion that runtime job type names match the current enum (`generate_preview` vs `generate_proxy`)
 - no test that retryable job failure clears claimant identity when the job returns to `pending`
@@ -337,14 +247,10 @@ The current test suite is green, but the following drifts are not strongly guard
 
 ### Batch 1: asset contract alignment
 
-- implement the current `/assets` filter surface and cursor pagination
-- rename `has_proxy` to `has_preview`
-- expose top-level GPS/location fields in asset detail
-- set `ETag` and `Cache-Control` headers on authenticated asset reads
-- implement the missing mutable fields on `PATCH /assets/{uuid}`
-- make `fields` patch semantics truly partial instead of replacing the full `fields` object
-- reject invalid patch scalar types explicitly with `422`
-- add contract tests for these points
+- implement the remaining `/assets` list surface: `state[]`, `geo_bbox`, and real `cursor` pagination
+- remove legacy `suggested_tags` runtime parameters or move them behind an explicitly non-v1 surface
+- decide whether `PATCH /assets/{uuid}` should support spec-level `state` mutations or whether the spec should be narrowed to the dedicated lifecycle endpoints already in runtime
+- add contract tests for the remaining asset list/pagination semantics
 
 ### Batch 2: jobs lease/model alignment
 
@@ -374,6 +280,6 @@ The repo is currently healthy from a route-presence and test-green perspective, 
 
 The biggest remaining drifts are not hidden bugs in obscure corners; they are visible contract mismatches on:
 
-- `assets` filtering/headers/metadata
+- `assets` pagination/filter edge semantics and patch `state` semantics
 - `jobs` lease semantics and job type naming
 - agent request signature strength
