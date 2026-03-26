@@ -33,6 +33,7 @@
         "fakerphp/faker": "^1.24",
         "guzzlehttp/guzzle": "^7.9",
         "hautelook/alice-bundle": "^2.17",
+        "jbelien/phpstan-sarif-formatter": "^1.2",
         "phpstan/extension-installer": "^1.4",
         "phpstan/phpstan": "^2.1",
         "phpstan/phpstan-symfony": "^2.0",
