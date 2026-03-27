@@ -20,6 +20,7 @@ final class Job
         /** @var array<string, mixed> */
         public readonly array $source = [],
         public readonly ?string $correlationId = null,
+        public readonly ?int $fencingToken = null,
     ) {
     }
 
@@ -43,6 +44,7 @@ final class Job
             'required_capabilities' => $this->requiredCapabilities(),
             'claimed_by' => $this->claimedBy,
             'lock_token' => $this->lockToken,
+            'fencing_token' => $this->fencingToken,
             'locked_until' => $this->lockedUntil?->format(DATE_ATOM),
         ];
     }
@@ -54,9 +56,10 @@ final class Job
     {
         return match ($this->jobType) {
             'extract_facts' => ['facts:write'],
-            'generate_proxy' => ['derived:write'],
+            'generate_preview' => ['derived:write'],
             'generate_thumbnails' => ['derived:write'],
             'generate_audio_waveform' => ['derived:write'],
+            'transcribe_audio' => ['derived:write'],
             default => [],
         };
     }

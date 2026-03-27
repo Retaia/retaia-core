@@ -27,12 +27,12 @@ final class FailJobHandlerTest extends TestCase
         $gateway = $this->createMock(JobGateway::class);
         $gateway->expects(self::once())
             ->method('fail')
-            ->with('job-1', 'lock-1', true, 'E_RUNTIME', 'failed')
+            ->with('job-1', 'agent-1', 'lock-1', 1, true, 'E_RUNTIME', 'failed')
             ->willReturn($job);
         $gateway->expects(self::never())->method('find');
 
         $handler = new FailJobHandler($gateway, new ResolveJobLockConflictCodeHandler($gateway));
-        $result = $handler->handle('job-1', 'lock-1', true, 'E_RUNTIME', 'failed');
+        $result = $handler->handle('job-1', 'agent-1', 'lock-1', 1, true, 'E_RUNTIME', 'failed');
 
         self::assertSame(FailJobResult::STATUS_FAILED, $result->status());
         self::assertSame($job, $result->job());
@@ -43,7 +43,7 @@ final class FailJobHandlerTest extends TestCase
         $gateway = $this->createMock(JobGateway::class);
         $gateway->expects(self::once())
             ->method('fail')
-            ->with('job-1', 'lock-from-client', false, 'E_TIMEOUT', 'timeout')
+            ->with('job-1', 'agent-1', 'lock-from-client', 1, false, 'E_TIMEOUT', 'timeout')
             ->willReturn(null);
         $gateway->expects(self::once())
             ->method('find')
@@ -60,7 +60,7 @@ final class FailJobHandlerTest extends TestCase
             ));
 
         $handler = new FailJobHandler($gateway, new ResolveJobLockConflictCodeHandler($gateway));
-        $result = $handler->handle('job-1', 'lock-from-client', false, 'E_TIMEOUT', 'timeout');
+        $result = $handler->handle('job-1', 'agent-1', 'lock-from-client', 1, false, 'E_TIMEOUT', 'timeout');
 
         self::assertSame(FailJobResult::STATUS_STALE_LOCK_TOKEN, $result->status());
         self::assertNull($result->job());
@@ -71,7 +71,7 @@ final class FailJobHandlerTest extends TestCase
         $gateway = $this->createMock(JobGateway::class);
         $gateway->expects(self::once())
             ->method('fail')
-            ->with('job-1', 'lock-1', false, 'E_TIMEOUT', 'timeout')
+            ->with('job-1', 'agent-1', 'lock-1', 1, false, 'E_TIMEOUT', 'timeout')
             ->willReturn(null);
         $gateway->expects(self::once())
             ->method('find')
@@ -79,7 +79,7 @@ final class FailJobHandlerTest extends TestCase
             ->willReturn(null);
 
         $handler = new FailJobHandler($gateway, new ResolveJobLockConflictCodeHandler($gateway));
-        $result = $handler->handle('job-1', 'lock-1', false, 'E_TIMEOUT', 'timeout');
+        $result = $handler->handle('job-1', 'agent-1', 'lock-1', 1, false, 'E_TIMEOUT', 'timeout');
 
         self::assertSame(FailJobResult::STATUS_LOCK_INVALID, $result->status());
         self::assertNull($result->job());

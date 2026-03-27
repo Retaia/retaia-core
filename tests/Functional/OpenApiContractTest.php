@@ -83,6 +83,25 @@ final class OpenApiContractTest extends WebTestCase
         $this->assertPathStatusUsesErrorResponse($openApi, '/jobs/{job_id}/submit', 'post', '423');
     }
 
+    public function testJobLeaseSchemasDeclareCurrentFencingAndTypeContracts(): void
+    {
+        $openApi = $this->openApi();
+
+        $jobSchema = $openApi['components']['schemas']['Job'] ?? null;
+        self::assertIsArray($jobSchema);
+        self::assertContains('generate_preview', $jobSchema['properties']['job_type']['enum'] ?? []);
+        self::assertContains('transcribe_audio', $jobSchema['properties']['job_type']['enum'] ?? []);
+        self::assertSame('integer', $jobSchema['properties']['fencing_token']['type'] ?? null);
+
+        $heartbeatRequest = $openApi['paths']['/jobs/{job_id}/heartbeat']['post']['requestBody']['content']['application/json']['schema'] ?? null;
+        self::assertIsArray($heartbeatRequest);
+        self::assertContains('fencing_token', $heartbeatRequest['required'] ?? []);
+
+        $submitDerived = $openApi['components']['schemas']['SubmitDerived'] ?? null;
+        self::assertIsArray($submitDerived);
+        self::assertContains('generate_preview', $submitDerived['properties']['job_type']['enum'] ?? []);
+    }
+
     public function testErrorCodeEnumIncludesRuntimeCodes(): void
     {
         $openApi = $this->openApi();

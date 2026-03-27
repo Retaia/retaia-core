@@ -35,7 +35,7 @@ final class SubmitJobHandlerTest extends TestCase
             new ResolveJobLockConflictCodeHandler($gateway)
         );
 
-        $result = $handler->handle('job-1', 't', 'suggest_tags', ['ok' => true], ['ROLE_AGENT']);
+        $result = $handler->handle('job-1', 'agent-1', 't', 1, 'suggest_tags', ['ok' => true], ['ROLE_AGENT']);
 
         self::assertSame(SubmitJobResult::STATUS_FORBIDDEN_SCOPE, $result->status());
     }
@@ -52,7 +52,7 @@ final class SubmitJobHandlerTest extends TestCase
             new Job('job-1', 'asset-1', 'extract_facts', JobStatus::PENDING, null, null, null, []),
             new Job('job-1', 'asset-1', 'extract_facts', JobStatus::PENDING, null, null, null, [])
         );
-        $gateway->expects(self::exactly(2))->method('submit')->with('job-1', 'wrong-token', ['facts_patch' => ['duration_ms' => 42]])->willReturn(null);
+        $gateway->expects(self::exactly(2))->method('submit')->with('job-1', 'agent-1', 'wrong-token', 1, ['facts_patch' => ['duration_ms' => 42]])->willReturn(null);
 
         $handler = new SubmitJobHandler(
             $gateway,
@@ -62,8 +62,8 @@ final class SubmitJobHandlerTest extends TestCase
             new ResolveJobLockConflictCodeHandler($gateway)
         );
 
-        self::assertSame(SubmitJobResult::STATUS_STALE_LOCK_TOKEN, $handler->handle('job-1', 'wrong-token', 'extract_facts', ['facts_patch' => ['duration_ms' => 42]], ['ROLE_AGENT'])->status());
-        self::assertSame(SubmitJobResult::STATUS_LOCK_INVALID, $handler->handle('job-1', 'wrong-token', 'extract_facts', ['facts_patch' => ['duration_ms' => 42]], ['ROLE_AGENT'])->status());
+        self::assertSame(SubmitJobResult::STATUS_STALE_LOCK_TOKEN, $handler->handle('job-1', 'agent-1', 'wrong-token', 1, 'extract_facts', ['facts_patch' => ['duration_ms' => 42]], ['ROLE_AGENT'])->status());
+        self::assertSame(SubmitJobResult::STATUS_LOCK_INVALID, $handler->handle('job-1', 'agent-1', 'wrong-token', 1, 'extract_facts', ['facts_patch' => ['duration_ms' => 42]], ['ROLE_AGENT'])->status());
     }
 
     public function testHandleReturnsSubmittedWhenGatewaySucceeds(): void
@@ -77,7 +77,7 @@ final class SubmitJobHandlerTest extends TestCase
         $gateway->expects(self::once())->method('find')->with('job-1')->willReturn(
             new Job('job-1', 'asset-1', 'extract_facts', JobStatus::CLAIMED, 'agent-1', 'token', null, [])
         );
-        $gateway->expects(self::once())->method('submit')->with('job-1', 'token', ['facts_patch' => ['duration_ms' => 42]])->willReturn($job);
+        $gateway->expects(self::once())->method('submit')->with('job-1', 'agent-1', 'token', 1, ['facts_patch' => ['duration_ms' => 42]])->willReturn($job);
 
         $handler = new SubmitJobHandler(
             $gateway,
@@ -87,7 +87,7 @@ final class SubmitJobHandlerTest extends TestCase
             new ResolveJobLockConflictCodeHandler($gateway)
         );
 
-        $result = $handler->handle('job-1', 'token', 'extract_facts', ['facts_patch' => ['duration_ms' => 42]], ['ROLE_SUGGESTIONS_WRITE']);
+        $result = $handler->handle('job-1', 'agent-1', 'token', 1, 'extract_facts', ['facts_patch' => ['duration_ms' => 42]], ['ROLE_SUGGESTIONS_WRITE']);
 
         self::assertSame(SubmitJobResult::STATUS_SUBMITTED, $result->status());
         self::assertSame($job, $result->job());
@@ -97,7 +97,7 @@ final class SubmitJobHandlerTest extends TestCase
     {
         $this->assertValidationFailedResult(
             new Job('job-1', 'asset-1', 'extract_facts', JobStatus::CLAIMED, 'agent-1', 'token', null, []),
-            'generate_proxy',
+            'generate_preview',
             ['derived_patch' => ['derived_manifest' => []]],
             ['ROLE_AGENT']
         );
@@ -129,7 +129,7 @@ final class SubmitJobHandlerTest extends TestCase
         $assets = $this->createMock(AssetRepositoryInterface::class);
         $stateMachine = new AssetStateMachine();
         $gateway->expects(self::once())->method('find')->with('job-1')->willReturn(
-            new Job('job-1', 'asset-1', 'generate_proxy', JobStatus::CLAIMED, 'agent-1', 'token', null, [])
+            new Job('job-1', 'asset-1', 'generate_preview', JobStatus::CLAIMED, 'agent-1', 'token', null, [])
         );
         $gateway->expects(self::never())->method('submit');
 
@@ -141,7 +141,7 @@ final class SubmitJobHandlerTest extends TestCase
             new ResolveJobLockConflictCodeHandler($gateway)
         );
 
-        $result = $handler->handle('job-1', 'token', 'generate_proxy', [
+        $result = $handler->handle('job-1', 'agent-1', 'token', 1, 'generate_preview', [
             'derived_patch' => ['derived_manifest' => [['kind' => 'unknown', 'ref' => 'x']]],
         ], ['ROLE_AGENT']);
 
@@ -179,7 +179,7 @@ final class SubmitJobHandlerTest extends TestCase
             new ResolveJobLockConflictCodeHandler($gateway)
         );
 
-        $result = $handler->handle('job-1', 'token', 'extract_facts', ['facts_patch' => ['duration_ms' => 1200]], ['ROLE_AGENT']);
+        $result = $handler->handle('job-1', 'agent-1', 'token', 1, 'extract_facts', ['facts_patch' => ['duration_ms' => 1200]], ['ROLE_AGENT']);
 
         self::assertSame(SubmitJobResult::STATUS_SUBMITTED, $result->status());
     }
@@ -223,7 +223,7 @@ final class SubmitJobHandlerTest extends TestCase
             new ResolveJobLockConflictCodeHandler($gateway)
         );
 
-        $result = $handler->handle('job-1', 'token', 'generate_thumbnails', [
+        $result = $handler->handle('job-1', 'agent-1', 'token', 1, 'generate_thumbnails', [
             'derived_patch' => [
                 'derived_manifest' => [
                     ['kind' => 'thumb', 'ref' => 'thumb:1'],
@@ -254,7 +254,7 @@ final class SubmitJobHandlerTest extends TestCase
             new ResolveJobLockConflictCodeHandler($gateway)
         );
 
-        $result = $handler->handle('job-1', 'token', $jobType, $resultPayload, $actorRoles);
+        $result = $handler->handle('job-1', 'agent-1', 'token', 1, $jobType, $resultPayload, $actorRoles);
 
         self::assertSame(SubmitJobResult::STATUS_VALIDATION_FAILED, $result->status());
     }

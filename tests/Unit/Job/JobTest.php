@@ -40,6 +40,7 @@ final class JobTest extends TestCase
             'required_capabilities' => [],
             'claimed_by' => 'agent-1',
             'lock_token' => 'lock-123',
+            'fencing_token' => null,
             'locked_until' => $lockedUntil->format(DATE_ATOM),
         ], $job->toArray());
     }

@@ -1638,7 +1638,7 @@ final class ApiAuthFlowTest extends WebTestCase
         ]);
 
         $payload = $this->agentRegisterPayload([
-            'capabilities' => ['extract_facts', 'generate_proxy'],
+            'capabilities' => ['extract_facts', 'generate_preview'],
         ]);
         $client->jsonRequest('POST', '/api/v1/agents/register', $payload, $this->agentSignatureHeaders($payload));
 
@@ -1665,7 +1665,7 @@ final class ApiAuthFlowTest extends WebTestCase
 
         $payload = $this->agentRegisterPayload([
             'client_feature_flags_contract_version' => '0.9.0',
-            'capabilities' => ['extract_facts', 'generate_proxy'],
+            'capabilities' => ['extract_facts', 'generate_preview'],
         ]);
         $client->jsonRequest('POST', '/api/v1/agents/register', $payload, $this->agentSignatureHeaders($payload));
 
@@ -1686,7 +1686,7 @@ final class ApiAuthFlowTest extends WebTestCase
 
         $payload = $this->agentRegisterPayload([
             'client_feature_flags_contract_version' => '2.0.0',
-            'capabilities' => ['extract_facts', 'generate_proxy'],
+            'capabilities' => ['extract_facts', 'generate_preview'],
         ]);
         $client->jsonRequest('POST', '/api/v1/agents/register', $payload, $this->agentSignatureHeaders($payload));
 
