@@ -4,6 +4,7 @@ namespace App\Tests\Functional;
 
 use App\Asset\AssetState;
 use App\Entity\Asset;
+use App\Tests\Support\AgentSigningTestHelper;
 use App\Tests\Support\ApiAuthClientTrait;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
@@ -129,6 +130,53 @@ final class DerivedUploadApiTest extends WebTestCase
 
         $client->request('GET', "/api/v1/assets/{$unknownAsset}/derived/proxy_video");
         self::assertResponseStatusCodeSame(Response::HTTP_NOT_FOUND);
+    }
+
+    public function testDerivedUploadInitRejectsForgedAgentSignature(): void
+    {
+        $client = $this->login('agent@retaia.local');
+        $this->seedAsset();
+
+        $payload = [
+            'kind' => 'proxy_video',
+            'content_type' => 'video/mp4',
+            'size_bytes' => 1024,
+        ];
+        $headers = array_merge(
+            ['HTTP_IF_MATCH' => $this->currentRevisionEtag($client, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')],
+            AgentSigningTestHelper::signedHeaders('POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/init', $payload)
+        );
+        $headers['HTTP_X_RETAIA_SIGNATURE'] = base64_encode('forged-signature');
+
+        $client->jsonRequest('POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/init', $payload, $headers);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $responsePayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame(['X-Retaia-Signature'], $responsePayload['details']['invalid_headers'] ?? null);
+    }
+
+    public function testDerivedUploadInitRejectsReplayNonce(): void
+    {
+        $client = $this->login('agent@retaia.local');
+        $this->seedAsset();
+
+        $payload = [
+            'kind' => 'proxy_video',
+            'content_type' => 'video/mp4',
+            'size_bytes' => 1024,
+        ];
+        $headers = array_merge(
+            ['HTTP_IF_MATCH' => $this->currentRevisionEtag($client, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')],
+            AgentSigningTestHelper::signedHeaders('POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/init', $payload, 'derived-replay-nonce')
+        );
+
+        $client->jsonRequest('POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/init', $payload, $headers);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/init', $payload, $headers);
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $responsePayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame(['X-Retaia-Signature-Nonce'], $responsePayload['details']['invalid_headers'] ?? null);
     }
 
     public function testDerivedUploadMutationsRejectMissingIfMatchAcrossProtectedRoutes(): void
