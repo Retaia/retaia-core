@@ -13,6 +13,9 @@ final class SetupTwoFactorHandlerTest extends TestCase
     {
         $gateway = $this->createMock(TwoFactorGateway::class);
         $gateway->expects(self::once())->method('setup')->with('u-1', 'user@retaia.local')->willReturn([
+            'method' => 'TOTP',
+            'issuer' => 'Retaia',
+            'account_name' => 'user@retaia.local',
             'secret' => 'ABC123',
             'otpauth_uri' => 'otpauth://totp/Retaia:user@retaia.local?secret=ABC123',
         ]);
@@ -21,6 +24,9 @@ final class SetupTwoFactorHandlerTest extends TestCase
         $result = $handler->handle('u-1', 'user@retaia.local');
 
         self::assertSame(SetupTwoFactorResult::STATUS_READY, $result->status());
+        self::assertSame('TOTP', $result->setup()['method'] ?? null);
+        self::assertSame('Retaia', $result->setup()['issuer'] ?? null);
+        self::assertSame('user@retaia.local', $result->setup()['account_name'] ?? null);
         self::assertSame('ABC123', $result->setup()['secret'] ?? null);
     }
 

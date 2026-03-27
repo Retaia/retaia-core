@@ -70,6 +70,33 @@ final class AuthSelfServiceEndpointsHandlerTest extends TestCase
         self::assertSame(TwoFactorSetupEndpointResult::STATUS_ALREADY_ENABLED, $result->status());
     }
 
+    public function testTwoFactorSetupReturnsProvisioningPayload(): void
+    {
+        $twoFactorGateway = $this->createMock(TwoFactorGateway::class);
+        $twoFactorGateway->expects(self::once())
+            ->method('setup')
+            ->with('u_setup', 'setup@retaia.local')
+            ->willReturn([
+                'method' => 'TOTP',
+                'issuer' => 'Retaia',
+                'account_name' => 'setup@retaia.local',
+                'secret' => 'ABC123',
+                'otpauth_uri' => 'otpauth://totp/Retaia:setup@retaia.local?secret=ABC123',
+            ]);
+
+        $handler = $this->buildHandler(
+            ['id' => 'u_setup', 'email' => 'setup@retaia.local', 'roles' => ['ROLE_USER']],
+            $twoFactorGateway
+        );
+
+        $result = $handler->twoFactorSetup();
+
+        self::assertSame(TwoFactorSetupEndpointResult::STATUS_READY, $result->status());
+        self::assertSame('TOTP', $result->setup()['method'] ?? null);
+        self::assertSame('Retaia', $result->setup()['issuer'] ?? null);
+        self::assertSame('setup@retaia.local', $result->setup()['account_name'] ?? null);
+    }
+
     public function testTwoFactorEnableReturnsValidationFailedWhenOtpMissing(): void
     {
         $twoFactorGateway = $this->createMock(TwoFactorGateway::class);

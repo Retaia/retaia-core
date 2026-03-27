@@ -10,6 +10,7 @@ use App\Tests\Support\FunctionalSchemaTrait;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
+use OTPHP\TOTP;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\HttpFoundation\Response;
@@ -350,6 +351,103 @@ final class OpenApiContractTest extends WebTestCase
         self::assertSame('TOO_MANY_ATTEMPTS', $payload['code'] ?? null);
     }
 
+    public function testAuthSelfServiceRuntimeShapesMatchCurrentOpenApiSchemas(): void
+    {
+        $openApi = $this->openApi();
+
+        $authCurrentUser = $openApi['components']['schemas']['AuthCurrentUser'] ?? null;
+        self::assertIsArray($authCurrentUser);
+        self::assertSame(['email'], $authCurrentUser['required'] ?? null);
+        self::assertTrue((bool) ($authCurrentUser['additionalProperties'] ?? false));
+        self::assertSame('boolean', $authCurrentUser['properties']['email_verified']['type'] ?? null);
+        self::assertSame('boolean', $authCurrentUser['properties']['mfa_enabled']['type'] ?? null);
+        self::assertSame('array', $authCurrentUser['properties']['roles']['type'] ?? null);
+
+        $authSession = $openApi['components']['schemas']['AuthSession'] ?? null;
+        self::assertIsArray($authSession);
+        self::assertSame(['session_id', 'client_id', 'created_at', 'last_used_at', 'is_current'], $authSession['required'] ?? null);
+        self::assertSame('string', $authSession['properties']['expires_at']['type'] ?? null);
+        self::assertTrue((bool) ($authSession['properties']['expires_at']['nullable'] ?? false));
+        self::assertTrue((bool) ($authSession['properties']['device_label']['nullable'] ?? false));
+        self::assertTrue((bool) ($authSession['properties']['browser']['nullable'] ?? false));
+        self::assertTrue((bool) ($authSession['properties']['os']['nullable'] ?? false));
+        self::assertTrue((bool) ($authSession['properties']['ip_address_last_seen']['nullable'] ?? false));
+
+        $setupSchema = $openApi['components']['schemas']['Auth2faSetupResponse'] ?? null;
+        self::assertIsArray($setupSchema);
+        self::assertSame(['method', 'issuer', 'account_name', 'secret', 'otpauth_uri'], $setupSchema['required'] ?? null);
+        self::assertArrayNotHasKey('qr_svg', array_flip($setupSchema['required'] ?? []));
+        self::assertSame('string', $setupSchema['properties']['qr_svg']['type'] ?? null);
+
+        $enableSchema = $openApi['components']['schemas']['Auth2faEnableResponse'] ?? null;
+        self::assertIsArray($enableSchema);
+        self::assertSame(['mfa_enabled', 'recovery_codes'], $enableSchema['required'] ?? null);
+
+        $recoverySchema = $openApi['components']['schemas']['Auth2faRecoveryCodesResponse'] ?? null;
+        self::assertIsArray($recoverySchema);
+        self::assertSame(['recovery_codes'], $recoverySchema['required'] ?? null);
+
+        $client = $this->createAuthenticatedClient();
+
+        $client->request('GET', '/api/v1/auth/me');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $mePayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($mePayload);
+        self::assertIsString($mePayload['uuid'] ?? null);
+        self::assertIsString($mePayload['id'] ?? null);
+        self::assertSame(FixtureUsers::ADMIN_EMAIL, $mePayload['email'] ?? null);
+        self::assertIsString($mePayload['display_name'] ?? null);
+        self::assertIsBool($mePayload['email_verified'] ?? null);
+        self::assertIsBool($mePayload['mfa_enabled'] ?? null);
+        self::assertContainsOnly('string', $mePayload['roles'] ?? []);
+
+        $client->request('GET', '/api/v1/auth/me/sessions');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $sessionsPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($sessionsPayload);
+        self::assertContainsOnly('array', $sessionsPayload['items'] ?? []);
+        self::assertNotEmpty($sessionsPayload['items'] ?? []);
+        $session = $sessionsPayload['items'][0];
+        self::assertIsString($session['session_id'] ?? null);
+        self::assertIsString($session['client_id'] ?? null);
+        self::assertIsString($session['created_at'] ?? null);
+        self::assertIsString($session['last_used_at'] ?? null);
+        self::assertTrue(is_string($session['expires_at'] ?? null) || null === ($session['expires_at'] ?? null));
+        self::assertIsBool($session['is_current'] ?? null);
+        self::assertTrue(is_string($session['device_label'] ?? null) || null === ($session['device_label'] ?? null));
+        self::assertTrue(is_string($session['browser'] ?? null) || null === ($session['browser'] ?? null));
+        self::assertTrue(is_string($session['os'] ?? null) || null === ($session['os'] ?? null));
+        self::assertTrue(is_string($session['ip_address_last_seen'] ?? null) || null === ($session['ip_address_last_seen'] ?? null));
+
+        $client->request('POST', '/api/v1/auth/2fa/setup');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $setupPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($setupPayload);
+        self::assertSame('TOTP', $setupPayload['method'] ?? null);
+        self::assertIsString($setupPayload['issuer'] ?? null);
+        self::assertIsString($setupPayload['account_name'] ?? null);
+        self::assertIsString($setupPayload['secret'] ?? null);
+        self::assertIsString($setupPayload['otpauth_uri'] ?? null);
+        self::assertTrue(!array_key_exists('qr_svg', $setupPayload) || is_string($setupPayload['qr_svg']));
+
+        $client->jsonRequest('POST', '/api/v1/auth/2fa/enable', [
+            'otp_code' => TOTP::create((string) $setupPayload['secret'])->now(),
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $enablePayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($enablePayload);
+        self::assertSame(true, $enablePayload['mfa_enabled'] ?? null);
+        self::assertContainsOnly('string', $enablePayload['recovery_codes'] ?? []);
+        self::assertNotEmpty($enablePayload['recovery_codes'] ?? []);
+
+        $client->request('POST', '/api/v1/auth/2fa/recovery-codes/regenerate');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $recoveryPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($recoveryPayload);
+        self::assertContainsOnly('string', $recoveryPayload['recovery_codes'] ?? []);
+        self::assertNotEmpty($recoveryPayload['recovery_codes'] ?? []);
+    }
+
     public function testAllDeclaredErrorResponsesUseErrorResponseSchema(): void
     {
         $openApi = $this->openApi();
@@ -587,6 +685,7 @@ final class OpenApiContractTest extends WebTestCase
         $client = static::createClient();
         $client->disableReboot();
         $this->ensureAuxiliaryTables();
+        $this->resetTwoFactorState(FixtureUsers::ADMIN_EMAIL);
 
         $this->authenticateClient($client, 'admin@retaia.local');
 
@@ -616,6 +715,21 @@ final class OpenApiContractTest extends WebTestCase
         $this->ensureProcessingJobTable($connection);
         $this->ensureIngestScanTable($connection);
         $this->ensureUnmatchedSidecarTable($connection);
+    }
+
+    private function resetTwoFactorState(string $email): void
+    {
+        /** @var Connection $connection */
+        $connection = static::getContainer()->get(Connection::class);
+        $userId = $connection->fetchOne('SELECT id FROM app_user WHERE email = :email', ['email' => $email]);
+        if (!is_string($userId) || $userId === '') {
+            return;
+        }
+
+        $cache = static::getContainer()->get('cache.app');
+        if (method_exists($cache, 'deleteItem')) {
+            $cache->deleteItem('auth_2fa_'.sha1($userId));
+        }
     }
 
     private function seedAsset(string $uuid, AssetState $state): void

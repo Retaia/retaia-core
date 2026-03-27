@@ -5,7 +5,7 @@ namespace App\Application\Auth\Port;
 interface TwoFactorGateway
 {
     /**
-     * @return array{secret: string, otpauth_uri: string}
+     * @return array{method: string, issuer: string, account_name: string, secret: string, otpauth_uri: string, qr_svg?: string}
      */
     public function setup(string $userId, string $email): array;
 

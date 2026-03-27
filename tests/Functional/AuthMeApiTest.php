@@ -4,6 +4,7 @@ namespace App\Tests\Functional;
 
 use App\Tests\Support\ApiAuthClientTrait;
 use App\Tests\Support\FixtureUsers;
+use Doctrine\DBAL\Connection;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
 use OTPHP\TOTP;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
@@ -18,6 +19,7 @@ final class AuthMeApiTest extends WebTestCase
     {
         $client = static::createClient();
         $client->disableReboot();
+        $this->resetTwoFactorState(FixtureUsers::ADMIN_EMAIL);
 
         $this->authenticateClient($client, FixtureUsers::ADMIN_EMAIL);
         $client->request('GET', '/api/v1/auth/me');
@@ -37,6 +39,7 @@ final class AuthMeApiTest extends WebTestCase
     {
         $client = static::createClient();
         $client->disableReboot();
+        $this->resetTwoFactorState(FixtureUsers::ADMIN_EMAIL);
 
         $this->authenticateClient($client, FixtureUsers::ADMIN_EMAIL);
 
@@ -55,5 +58,20 @@ final class AuthMeApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $payload = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertSame(true, $payload['mfa_enabled'] ?? null);
+    }
+
+    private function resetTwoFactorState(string $email): void
+    {
+        /** @var Connection $connection */
+        $connection = static::getContainer()->get(Connection::class);
+        $userId = $connection->fetchOne('SELECT id FROM app_user WHERE email = :email', ['email' => $email]);
+        if (!is_string($userId) || $userId === '') {
+            return;
+        }
+
+        $cache = static::getContainer()->get('cache.app');
+        if (method_exists($cache, 'deleteItem')) {
+            $cache->deleteItem('auth_2fa_'.sha1($userId));
+        }
     }
 }

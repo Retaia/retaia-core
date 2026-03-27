@@ -8,6 +8,7 @@ use Psr\Cache\CacheItemPoolInterface;
 final class TwoFactorService
 {
     private const RECOVERY_CODE_COUNT = 10;
+    private const ISSUER = 'Retaia';
 
     public function __construct(
         private CacheItemPoolInterface $cache,
@@ -31,7 +32,7 @@ final class TwoFactorService
     }
 
     /**
-     * @return array{secret: string, otpauth_uri: string}
+     * @return array{method: string, issuer: string, account_name: string, secret: string, otpauth_uri: string}
      */
     public function setup(string $userId, string $email): array
     {
@@ -42,7 +43,7 @@ final class TwoFactorService
 
         $totp = TOTP::generate();
         $totp->setLabel($email);
-        $totp->setIssuer('Retaia');
+        $totp->setIssuer(self::ISSUER);
         $totp->setIssuerIncludedAsParameter(true);
 
         $secret = $totp->getSecret();
@@ -51,6 +52,9 @@ final class TwoFactorService
         $this->saveState($userId, $state);
 
         return [
+            'method' => 'TOTP',
+            'issuer' => self::ISSUER,
+            'account_name' => $email,
             'secret' => $secret,
             'otpauth_uri' => $totp->getProvisioningUri(),
         ];
