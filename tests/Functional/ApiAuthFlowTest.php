@@ -1722,6 +1722,45 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
     }
 
+    public function testAgentRegisterRejectsNonStringCapabilities(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.461');
+
+        $this->loginAndAttachBearer($client, [
+            'email' => 'agent@retaia.local',
+            'password' => 'change-me',
+        ]);
+
+        $payload = $this->agentRegisterPayload([
+            'capabilities' => ['extract_facts', 12],
+        ]);
+        $client->jsonRequest('POST', '/api/v1/agents/register', $payload, $this->agentSignatureHeaders($payload));
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
+    }
+
+    public function testAgentRegisterRejectsMalformedClientContractVersion(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.462');
+
+        $this->loginAndAttachBearer($client, [
+            'email' => 'agent@retaia.local',
+            'password' => 'change-me',
+        ]);
+
+        $payload = $this->agentRegisterPayload([
+            'client_feature_flags_contract_version' => '1.0',
+            'capabilities' => ['extract_facts'],
+        ]);
+        $client->jsonRequest('POST', '/api/v1/agents/register', $payload, $this->agentSignatureHeaders($payload));
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
+    }
+
     public function testAgentRegisterReturnsServerPolicy(): void
     {
         $client = $this->createIsolatedClient('10.0.0.33');

@@ -41,6 +41,8 @@ final class RegisterAgentEndpointHandler
             || $osVersion === ''
             || !in_array($arch, ['x86_64', 'arm64', 'armv7', 'other'], true)
             || !is_array($capabilities)
+            || !$this->hasValidCapabilities($capabilities)
+            || !$this->hasValidClientContractVersion($clientContractVersion)
         ) {
             return new RegisterAgentEndpointResult(RegisterAgentEndpointResult::STATUS_VALIDATION_FAILED);
         }
@@ -70,5 +72,28 @@ final class RegisterAgentEndpointHandler
     private function isValidAgentId(string $agentId): bool
     {
         return preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $agentId) === 1;
+    }
+
+    /**
+     * @param array<mixed> $capabilities
+     */
+    private function hasValidCapabilities(array $capabilities): bool
+    {
+        foreach ($capabilities as $capability) {
+            if (!is_string($capability) || trim($capability) === '') {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function hasValidClientContractVersion(string $clientContractVersion): bool
+    {
+        if ($clientContractVersion === '') {
+            return true;
+        }
+
+        return preg_match('/^[0-9]+\.[0-9]+\.[0-9]+$/', $clientContractVersion) === 1;
     }
 }
