@@ -14,6 +14,8 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
 
 final class RegisterAgentEndpointHandlerTest extends TestCase
 {
+    private const ARMORED_PUBLIC_KEY = "-----BEGIN PGP PUBLIC KEY BLOCK-----\nVersion: Test\n\nabc\n-----END PGP PUBLIC KEY BLOCK-----";
+
     public function testHandleReturnsValidationFailedWhenPayloadInvalid(): void
     {
         $register = $this->createMock(RegisterAgentUseCase::class);
@@ -27,8 +29,56 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
             'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'worker',
             'agent_version' => '',
-            'openpgp_public_key' => 'public-key',
+            'openpgp_public_key' => self::ARMORED_PUBLIC_KEY,
             'openpgp_fingerprint' => 'fingerprint',
+            'os_name' => 'linux',
+            'os_version' => '6.8',
+            'arch' => 'x86_64',
+            'capabilities' => ['extract_facts'],
+        ]);
+
+        self::assertSame(RegisterAgentEndpointResult::STATUS_VALIDATION_FAILED, $result->status());
+    }
+
+    public function testHandleReturnsValidationFailedWhenFingerprintIsMalformed(): void
+    {
+        $register = $this->createMock(RegisterAgentUseCase::class);
+        $register->expects(self::never())->method('handle');
+
+        $resolver = $this->createMock(ResolveAuthenticatedUserUseCase::class);
+        $resolver->expects(self::never())->method('handle');
+        $keyStore = new AgentPublicKeyStore(new ArrayAdapter());
+
+        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore))->handle([
+            'agent_id' => '11111111-1111-4111-8111-111111111111',
+            'agent_name' => 'worker',
+            'agent_version' => '1.0.0',
+            'openpgp_public_key' => self::ARMORED_PUBLIC_KEY,
+            'openpgp_fingerprint' => 'not-a-fingerprint',
+            'os_name' => 'linux',
+            'os_version' => '6.8',
+            'arch' => 'x86_64',
+            'capabilities' => ['extract_facts'],
+        ]);
+
+        self::assertSame(RegisterAgentEndpointResult::STATUS_VALIDATION_FAILED, $result->status());
+    }
+
+    public function testHandleReturnsValidationFailedWhenPublicKeyIsNotAsciiArmored(): void
+    {
+        $register = $this->createMock(RegisterAgentUseCase::class);
+        $register->expects(self::never())->method('handle');
+
+        $resolver = $this->createMock(ResolveAuthenticatedUserUseCase::class);
+        $resolver->expects(self::never())->method('handle');
+        $keyStore = new AgentPublicKeyStore(new ArrayAdapter());
+
+        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore))->handle([
+            'agent_id' => '11111111-1111-4111-8111-111111111111',
+            'agent_name' => 'worker',
+            'agent_version' => '1.0.0',
+            'openpgp_public_key' => 'public-key',
+            'openpgp_fingerprint' => 'ABCD1234EF567890ABCD1234EF567890ABCD1234',
             'os_name' => 'linux',
             'os_version' => '6.8',
             'arch' => 'x86_64',
@@ -51,7 +101,7 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
             'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'worker',
             'agent_version' => '1.0.0',
-            'openpgp_public_key' => 'public-key',
+            'openpgp_public_key' => self::ARMORED_PUBLIC_KEY,
             'openpgp_fingerprint' => 'fingerprint',
             'os_name' => 'linux',
             'os_version' => '6.8',
@@ -75,7 +125,7 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
             'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'worker',
             'agent_version' => '1.0.0',
-            'openpgp_public_key' => 'public-key',
+            'openpgp_public_key' => self::ARMORED_PUBLIC_KEY,
             'openpgp_fingerprint' => 'fingerprint',
             'os_name' => 'linux',
             'os_version' => '6.8',
@@ -104,7 +154,7 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
             'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'ffmpeg',
             'agent_version' => '2.1.0',
-            'openpgp_public_key' => 'public-key',
+            'openpgp_public_key' => self::ARMORED_PUBLIC_KEY,
             'openpgp_fingerprint' => 'ABCD1234EF567890ABCD1234EF567890ABCD1234',
             'os_name' => 'linux',
             'os_version' => '6.8',
@@ -116,7 +166,7 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
         self::assertSame(RegisterAgentEndpointResult::STATUS_REGISTERED, $result->status());
         self::assertSame(['agent_id' => '11111111-1111-4111-8111-111111111111'], $result->payload());
         self::assertSame(
-            'public-key',
+            self::ARMORED_PUBLIC_KEY,
             $keyStore->publicKeyFor('11111111-1111-4111-8111-111111111111', 'ABCD1234EF567890ABCD1234EF567890ABCD1234')
         );
     }
@@ -138,8 +188,8 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
             'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'ffmpeg',
             'agent_version' => '2.1.0',
-            'openpgp_public_key' => 'public-key',
-            'openpgp_fingerprint' => 'fingerprint',
+            'openpgp_public_key' => self::ARMORED_PUBLIC_KEY,
+            'openpgp_fingerprint' => 'ABCD1234EF567890ABCD1234EF567890ABCD1234',
             'os_name' => 'linux',
             'os_version' => '6.8',
             'arch' => 'x86_64',

@@ -35,8 +35,8 @@ final class RegisterAgentEndpointHandler
             !$this->isValidAgentId($agentId)
             || $agentName === ''
             || $agentVersion === ''
-            || $openPgpPublicKey === ''
-            || $openPgpFingerprint === ''
+            || !$this->looksLikeAsciiArmoredPublicKey($openPgpPublicKey)
+            || !$this->isValidFingerprint($openPgpFingerprint)
             || !in_array($osName, ['linux', 'macos', 'windows'], true)
             || $osVersion === ''
             || !in_array($arch, ['x86_64', 'arm64', 'armv7', 'other'], true)
@@ -72,6 +72,21 @@ final class RegisterAgentEndpointHandler
     private function isValidAgentId(string $agentId): bool
     {
         return preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $agentId) === 1;
+    }
+
+    private function isValidFingerprint(string $fingerprint): bool
+    {
+        $normalized = strtoupper(preg_replace('/\s+/', '', trim($fingerprint)) ?? '');
+
+        return preg_match('/^[A-F0-9]{40}$/', $normalized) === 1;
+    }
+
+    private function looksLikeAsciiArmoredPublicKey(string $publicKey): bool
+    {
+        $trimmed = trim($publicKey);
+
+        return str_contains($trimmed, 'BEGIN PGP PUBLIC KEY BLOCK')
+            && str_contains($trimmed, 'END PGP PUBLIC KEY BLOCK');
     }
 
     /**
