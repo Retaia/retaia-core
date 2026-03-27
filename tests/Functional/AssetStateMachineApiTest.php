@@ -70,6 +70,72 @@ final class AssetStateMachineApiTest extends WebTestCase
         self::assertSame('NOT_FOUND', $payload['code'] ?? null);
     }
 
+    public function testAssetMutationsRejectMissingIfMatchAcrossProtectedRoutes(): void
+    {
+        $client = $this->createAuthenticatedClient(true);
+
+        $cases = [
+            ['method' => 'PATCH', 'url' => '/api/v1/assets/11111111-1111-1111-1111-111111111111', 'payload' => ['notes' => 'missing if-match']],
+            ['method' => 'POST', 'url' => '/api/v1/assets/33333333-3333-3333-3333-333333333333/reopen', 'payload' => []],
+            ['method' => 'POST', 'url' => '/api/v1/assets/33333333-3333-3333-3333-333333333333/reprocess', 'payload' => []],
+        ];
+
+        foreach ($cases as $index => $case) {
+            $headers = [];
+            if (($case['method'] ?? null) === 'POST') {
+                $headers['HTTP_IDEMPOTENCY_KEY'] = sprintf('asset-precondition-required-%d', $index + 1);
+            }
+
+            $client->jsonRequest((string) $case['method'], (string) $case['url'], (array) $case['payload'], $headers);
+
+            $this->assertPreconditionError($client, Response::HTTP_PRECONDITION_REQUIRED, 'PRECONDITION_REQUIRED');
+        }
+    }
+
+    public function testAssetMutationsRejectStaleIfMatchAcrossProtectedRoutes(): void
+    {
+        $client = $this->createAuthenticatedClient(true);
+
+        $cases = [
+            [
+                'method' => 'PATCH',
+                'url' => '/api/v1/assets/11111111-1111-1111-1111-111111111111',
+                'payload' => ['notes' => 'stale if-match'],
+                'uuid' => '11111111-1111-1111-1111-111111111111',
+            ],
+            [
+                'method' => 'POST',
+                'url' => '/api/v1/assets/33333333-3333-3333-3333-333333333333/reopen',
+                'payload' => [],
+                'uuid' => '33333333-3333-3333-3333-333333333333',
+            ],
+            [
+                'method' => 'POST',
+                'url' => '/api/v1/assets/33333333-3333-3333-3333-333333333333/reprocess',
+                'payload' => [],
+                'uuid' => '33333333-3333-3333-3333-333333333333',
+            ],
+        ];
+
+        foreach ($cases as $index => $case) {
+            $headers = [
+                'HTTP_IF_MATCH' => '"stale-revision-etag"',
+            ];
+            if (($case['method'] ?? null) === 'POST') {
+                $headers['HTTP_IDEMPOTENCY_KEY'] = sprintf('asset-precondition-failed-%d', $index + 1);
+            }
+
+            $client->jsonRequest((string) $case['method'], (string) $case['url'], (array) $case['payload'], $headers);
+
+            $this->assertPreconditionError(
+                $client,
+                Response::HTTP_PRECONDITION_FAILED,
+                'PRECONDITION_FAILED',
+                (string) $case['uuid']
+            );
+        }
+    }
+
     public function testPatchUpdatesTagsNotesAndFields(): void
     {
         $client = $this->createAuthenticatedClient(true);
@@ -585,6 +651,24 @@ final class AssetStateMachineApiTest extends WebTestCase
         $asset = new Asset('44444444-4444-4444-4444-444444444444', 'VIDEO', 'purged.mov', AssetState::PURGED);
         $entityManager->persist($asset);
         $entityManager->flush();
+    }
+
+    private function assertPreconditionError(KernelBrowser $client, int $status, string $code, ?string $uuid = null): void
+    {
+        self::assertResponseStatusCodeSame($status);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        self::assertSame($code, $payload['code'] ?? null);
+        self::assertIsArray($payload['details'] ?? null);
+        self::assertIsString($payload['details']['current_revision_etag'] ?? null);
+        self::assertIsString($payload['details']['current_state'] ?? null);
+
+        if (is_string($uuid)) {
+            self::assertSame(
+                $this->currentAssetRevisionEtag($client, $uuid),
+                $payload['details']['current_revision_etag'] ?? null
+            );
+        }
     }
 
     private static function assertCacheControlIsPrivateNoStore(string $value): void

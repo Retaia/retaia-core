@@ -113,6 +113,33 @@ final class WorkflowApiTest extends WebTestCase
         self::assertSame('STATE_CONFLICT', $payload['results'][1]['status'] ?? null);
     }
 
+    public function testSingleAssetPurgeRejectsMissingIfMatch(): void
+    {
+        $client = $this->createAuthenticatedClient('admin@retaia.local');
+        $uuid = '99999999-1111-4111-8111-999999999999';
+        $this->seedAsset($uuid, AssetState::REJECTED, 'purge-precondition.mov');
+
+        $client->jsonRequest('POST', '/api/v1/assets/'.$uuid.'/purge', [], [
+            'HTTP_IDEMPOTENCY_KEY' => 'purge-precondition-required-1',
+        ]);
+
+        $this->assertPreconditionError($client, Response::HTTP_PRECONDITION_REQUIRED, 'PRECONDITION_REQUIRED');
+    }
+
+    public function testSingleAssetPurgeRejectsStaleIfMatch(): void
+    {
+        $client = $this->createAuthenticatedClient('admin@retaia.local');
+        $uuid = '99999999-2222-4222-8222-999999999999';
+        $this->seedAsset($uuid, AssetState::REJECTED, 'purge-precondition-stale.mov');
+
+        $client->jsonRequest('POST', '/api/v1/assets/'.$uuid.'/purge', [], [
+            'HTTP_IF_MATCH' => '"stale-revision-etag"',
+            'HTTP_IDEMPOTENCY_KEY' => 'purge-precondition-failed-1',
+        ]);
+
+        $this->assertPreconditionError($client, Response::HTTP_PRECONDITION_FAILED, 'PRECONDITION_FAILED', $uuid);
+    }
+
     public function testOpsIngestDiagnosticsReturnsSnapshotForAdmin(): void
     {
         $client = $this->createAuthenticatedClient('admin@retaia.local');
@@ -585,6 +612,21 @@ final class WorkflowApiTest extends WebTestCase
         self::assertIsString($etag);
 
         return $etag;
+    }
+
+    private function assertPreconditionError(KernelBrowser $client, int $status, string $code, ?string $uuid = null): void
+    {
+        self::assertResponseStatusCodeSame($status);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        self::assertSame($code, $payload['code'] ?? null);
+        self::assertIsArray($payload['details'] ?? null);
+        self::assertIsString($payload['details']['current_revision_etag'] ?? null);
+        self::assertIsString($payload['details']['current_state'] ?? null);
+
+        if (is_string($uuid)) {
+            self::assertSame($this->currentAssetRevisionEtag($client, $uuid), $payload['details']['current_revision_etag'] ?? null);
+        }
     }
 
     private function seedAsset(string $uuid, AssetState $state, string $filename): void
