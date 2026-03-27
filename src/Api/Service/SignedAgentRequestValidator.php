@@ -19,6 +19,7 @@ final class SignedAgentRequestValidator
         private AgentRequestSignatureVerifier $signatureVerifier,
         private AgentSignatureNonceStore $nonceStore,
         private SignedAgentMessageCanonicalizer $messageCanonicalizer,
+        private AgentRuntimeStore $agentRuntimeStore,
     ) {
     }
 
@@ -91,6 +92,8 @@ final class SignedAgentRequestValidator
         if (!$this->nonceStore->consume($headerAgentId, $nonce, self::SIGNATURE_TTL_SECONDS)) {
             return $this->unauthorizedResponse(['X-Retaia-Signature-Nonce']);
         }
+
+        $this->agentRuntimeStore->touchSeen($headerAgentId);
 
         return null;
     }

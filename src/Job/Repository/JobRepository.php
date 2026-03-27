@@ -294,6 +294,26 @@ final class JobRepository
         return $this->find($id);
     }
 
+    public function hasActiveJobForAgent(string $agentId): bool
+    {
+        $row = $this->connection->fetchOne(
+            'SELECT 1
+             FROM processing_job
+             WHERE claimed_by = :agentId
+               AND status = :claimed
+               AND locked_until IS NOT NULL
+               AND locked_until >= :now
+             LIMIT 1',
+            [
+                'agentId' => $agentId,
+                'claimed' => JobStatus::CLAIMED->value,
+                'now' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
+            ]
+        );
+
+        return $row !== false;
+    }
+
     /**
      * @return array{
      *     summary:array{pending_total:int,claimed_total:int,failed_total:int},

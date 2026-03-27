@@ -2,6 +2,7 @@
 
 namespace App\Tests\Support;
 
+use Doctrine\DBAL\Connection;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -40,6 +41,7 @@ trait ApiAuthClientTrait
      */
     private function signedJsonRequestAsAgent(KernelBrowser $client, string $method, string $uri, array $payload = [], array $extraHeaders = []): void
     {
+        $this->ensureAgentRuntimeTableExists();
         $headers = array_merge(
             ['CONTENT_TYPE' => 'application/json'],
             AgentSigningTestHelper::signedHeaders($method, $uri, $payload),
@@ -73,5 +75,13 @@ trait ApiAuthClientTrait
 
         $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/agents/register', $payload);
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
+    }
+
+    private function ensureAgentRuntimeTableExists(): void
+    {
+        /** @var Connection $connection */
+        $connection = static::getContainer()->get(Connection::class);
+        $connection->executeStatement("CREATE TABLE IF NOT EXISTS agent_runtime (agent_id VARCHAR(36) PRIMARY KEY NOT NULL, client_id VARCHAR(64) NOT NULL, agent_name VARCHAR(255) NOT NULL, agent_version VARCHAR(64) NOT NULL, os_name VARCHAR(32) DEFAULT NULL, os_version VARCHAR(64) DEFAULT NULL, arch VARCHAR(32) DEFAULT NULL, effective_capabilities CLOB NOT NULL, capability_warnings CLOB NOT NULL, last_register_at DATETIME NOT NULL, last_seen_at DATETIME NOT NULL, last_heartbeat_at DATETIME DEFAULT NULL, max_parallel_jobs INTEGER NOT NULL, feature_flags_contract_version VARCHAR(32) DEFAULT NULL, effective_feature_flags_contract_version VARCHAR(32) DEFAULT NULL, server_time_skew_seconds INTEGER DEFAULT NULL)");
+        $connection->executeStatement('CREATE INDEX IF NOT EXISTS idx_agent_runtime_last_seen_at ON agent_runtime (last_seen_at)');
     }
 }

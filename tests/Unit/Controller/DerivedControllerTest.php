@@ -3,6 +3,7 @@
 namespace App\Tests\Unit\Controller;
 
 use App\Api\Service\AssetRequestPreconditionService;
+use App\Api\Service\AgentRuntimeStore;
 use App\Api\Service\AgentSignature\AgentPublicKeyStore;
 use App\Api\Service\AgentSignature\AgentSignatureNonceStore;
 use App\Api\Service\AgentSignature\GpgCliAgentRequestSignatureVerifier;
@@ -22,6 +23,7 @@ use App\Controller\Api\DerivedController;
 use App\Entity\Asset;
 use App\Tests\Support\AgentSigningTestHelper;
 use App\Tests\Support\InMemoryDerivedGateway;
+use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\HttpFoundation\Request;
@@ -112,6 +114,7 @@ final class DerivedControllerTest extends TestCase
             new GpgCliAgentRequestSignatureVerifier(),
             new AgentSignatureNonceStore(new ArrayAdapter()),
             new SignedAgentMessageCanonicalizer(),
+            $this->runtimeStore(),
         );
 
         return new DerivedController(
@@ -163,6 +166,17 @@ final class DerivedControllerTest extends TestCase
         $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
 
         return $translator;
+    }
+
+    private function runtimeStore(): AgentRuntimeStore
+    {
+        $connection = DriverManager::getConnection([
+            'driver' => 'pdo_sqlite',
+            'memory' => true,
+        ]);
+        $connection->executeStatement("CREATE TABLE agent_runtime (agent_id VARCHAR(36) PRIMARY KEY NOT NULL, client_id VARCHAR(64) NOT NULL, agent_name VARCHAR(255) NOT NULL, agent_version VARCHAR(64) NOT NULL, os_name VARCHAR(32) DEFAULT NULL, os_version VARCHAR(64) DEFAULT NULL, arch VARCHAR(32) DEFAULT NULL, effective_capabilities CLOB NOT NULL, capability_warnings CLOB NOT NULL, last_register_at DATETIME NOT NULL, last_seen_at DATETIME NOT NULL, last_heartbeat_at DATETIME DEFAULT NULL, max_parallel_jobs INTEGER NOT NULL, feature_flags_contract_version VARCHAR(32) DEFAULT NULL, effective_feature_flags_contract_version VARCHAR(32) DEFAULT NULL, server_time_skew_seconds INTEGER DEFAULT NULL)");
+
+        return new AgentRuntimeStore($connection);
     }
 
 }
