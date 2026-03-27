@@ -38,6 +38,55 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
         self::assertSame(RegisterAgentEndpointResult::STATUS_VALIDATION_FAILED, $result->status());
     }
 
+    public function testHandleReturnsValidationFailedWhenCapabilitiesContainNonStringValue(): void
+    {
+        $register = $this->createMock(RegisterAgentUseCase::class);
+        $register->expects(self::never())->method('handle');
+
+        $resolver = $this->createMock(ResolveAuthenticatedUserUseCase::class);
+        $resolver->expects(self::never())->method('handle');
+        $keyStore = new AgentPublicKeyStore(new ArrayAdapter());
+
+        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore))->handle([
+            'agent_id' => '11111111-1111-4111-8111-111111111111',
+            'agent_name' => 'worker',
+            'agent_version' => '1.0.0',
+            'openpgp_public_key' => 'public-key',
+            'openpgp_fingerprint' => 'fingerprint',
+            'os_name' => 'linux',
+            'os_version' => '6.8',
+            'arch' => 'x86_64',
+            'capabilities' => ['extract_facts', 42],
+        ]);
+
+        self::assertSame(RegisterAgentEndpointResult::STATUS_VALIDATION_FAILED, $result->status());
+    }
+
+    public function testHandleReturnsValidationFailedWhenClientContractVersionIsNotSemver(): void
+    {
+        $register = $this->createMock(RegisterAgentUseCase::class);
+        $register->expects(self::never())->method('handle');
+
+        $resolver = $this->createMock(ResolveAuthenticatedUserUseCase::class);
+        $resolver->expects(self::never())->method('handle');
+        $keyStore = new AgentPublicKeyStore(new ArrayAdapter());
+
+        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore))->handle([
+            'agent_id' => '11111111-1111-4111-8111-111111111111',
+            'agent_name' => 'worker',
+            'agent_version' => '1.0.0',
+            'openpgp_public_key' => 'public-key',
+            'openpgp_fingerprint' => 'fingerprint',
+            'os_name' => 'linux',
+            'os_version' => '6.8',
+            'arch' => 'x86_64',
+            'capabilities' => ['extract_facts'],
+            'client_feature_flags_contract_version' => '1.0',
+        ]);
+
+        self::assertSame(RegisterAgentEndpointResult::STATUS_VALIDATION_FAILED, $result->status());
+    }
+
     public function testHandleUsesAuthenticatedActorAndReturnsRegisteredPayload(): void
     {
         $register = $this->createMock(RegisterAgentUseCase::class);
