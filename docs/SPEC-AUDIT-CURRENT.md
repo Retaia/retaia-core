@@ -39,11 +39,7 @@ No remaining critical-path gap is tracked after batch 1.
 
 ### Secondary gaps
 
-- no dedicated controller/functional assertion that `POST /auth/logout` rejects malformed bearer variants beyond the broader auth flows already covered.
-- no dedicated functional assertion that `/auth/me/sessions/{session_id}/revoke` returns `404` for an unknown foreign session id. Current coverage exercises the success path and the self-revoke `409` path.
-- no dedicated functional assertion that `/auth/me/sessions/revoke-others` returns `0` and preserves the current session when no peer session exists.
-- no dedicated negative functional assertion that `/auth/2fa/recovery-codes/regenerate` returns `409 MFA_NOT_ENABLED` on a fresh account through the HTTP endpoint. The behavior is covered deeper in unit and broader auth-process scenarios, but not as an isolated contract guard.
-- no dedicated functional assertion that `/auth/2fa/setup` rejects unauthorized requests with the exact current shape after the recent payload alignment. Unauthorized auth coverage exists globally, but not as a route-focused guard for this endpoint.
+No remaining secondary gap is tracked after batch 2.
 
 ### Notes on surfaces already reviewed
 
@@ -54,7 +50,7 @@ No remaining critical-path gap is tracked after batch 1.
 
 ### Batch 1: self-service negative edge guards
 
-- add isolated HTTP guards for session revoke `404`, revoke-others on single session, and 2FA setup/regenerate edge responses
+Completed.
 
 ## Bottom line
 

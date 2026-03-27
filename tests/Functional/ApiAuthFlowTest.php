@@ -300,6 +300,29 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
     }
 
+    public function testLogoutRejectsMalformedBearerVariants(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.171');
+
+        $client->setServerParameter('HTTP_AUTHORIZATION', 'Basic abc123');
+        $client->jsonRequest('POST', '/api/v1/auth/logout');
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
+
+        $client->setServerParameter('HTTP_AUTHORIZATION', 'Bearer');
+        $client->jsonRequest('POST', '/api/v1/auth/logout');
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
+
+        $client->setServerParameter('HTTP_AUTHORIZATION', 'Bearer    ');
+        $client->jsonRequest('POST', '/api/v1/auth/logout');
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $payload = json_decode($client->getResponse()->getContent(), true);
+        self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
+    }
+
     public function testMySessionsListCurrentAndOtherSessions(): void
     {
         $email = sprintf('sessions-%s@retaia.local', bin2hex(random_bytes(4)));
@@ -354,6 +377,24 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('STATE_CONFLICT', $payload['code'] ?? null);
     }
 
+    public function testUnknownForeignSessionRevokeReturns404(): void
+    {
+        $email = sprintf('sessions-404-%s@retaia.local', bin2hex(random_bytes(4)));
+        $client = $this->createIsolatedClient('10.0.0.201');
+        $this->insertUser($email, 'Change-me1!', ['ROLE_USER'], true);
+
+        $this->loginAndAttachBearer($client, [
+            'email' => $email,
+            'password' => 'Change-me1!',
+            'client_id' => 'interactive-404',
+        ]);
+
+        $client->jsonRequest('POST', '/api/v1/auth/me/sessions/unknown-session-id/revoke');
+        self::assertResponseStatusCodeSame(Response::HTTP_NOT_FOUND);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('NOT_FOUND', $payload['code'] ?? null);
+    }
+
     public function testRevokeOtherSessionsRevokesOnlyOtherSessions(): void
     {
         $email = sprintf('sessions-revoke-%s@retaia.local', bin2hex(random_bytes(4)));
@@ -390,6 +431,27 @@ final class ApiAuthFlowTest extends WebTestCase
         $currentClient->setServerParameter('HTTP_AUTHORIZATION', 'Bearer '.$secondaryToken);
         $currentClient->request('GET', '/api/v1/auth/me');
         self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+    }
+
+    public function testRevokeOtherSessionsReturnsZeroWhenNoPeerSessionExists(): void
+    {
+        $email = sprintf('sessions-solo-%s@retaia.local', bin2hex(random_bytes(4)));
+        $client = $this->createIsolatedClient('10.0.0.211');
+        $this->insertUser($email, 'Change-me1!', ['ROLE_USER'], true);
+
+        $this->loginAndAttachBearer($client, [
+            'email' => $email,
+            'password' => 'Change-me1!',
+            'client_id' => 'interactive-solo',
+        ]);
+
+        $client->jsonRequest('POST', '/api/v1/auth/me/sessions/revoke-others');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame(0, (int) ($payload['revoked'] ?? -1));
+
+        $client->request('GET', '/api/v1/auth/me');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
     }
 
     private function forceTokenExpired(string $token): void
@@ -649,6 +711,7 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
         $payload = json_decode($client->getResponse()->getContent(), true);
         self::assertSame('UNAUTHORIZED', $payload['code'] ?? null);
+        self::assertSame('Authentication required', $payload['message'] ?? null);
     }
 
     public function testTwoFactorSetupReturnsProvisioningMaterial(): void
@@ -734,6 +797,23 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
         $payload = json_decode($client->getResponse()->getContent(), true);
         self::assertSame('INVALID_2FA_CODE', $payload['code'] ?? null);
+    }
+
+    public function testRecoveryCodesRegenerateReturnsConflictWhenMfaDisabled(): void
+    {
+        $email = sprintf('mfa-disabled-%s@retaia.local', bin2hex(random_bytes(4)));
+        $client = $this->createIsolatedClient('10.0.0.541');
+        $this->insertUser($email, 'Change-me1!', ['ROLE_USER'], true);
+
+        $this->loginAndAttachBearer($client, [
+            'email' => $email,
+            'password' => 'Change-me1!',
+        ]);
+
+        $client->jsonRequest('POST', '/api/v1/auth/2fa/recovery-codes/regenerate');
+        self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('MFA_NOT_ENABLED', $payload['code'] ?? null);
     }
 
     public function testTwoFactorLoginAcceptsSlightClockDriftOtpCode(): void
