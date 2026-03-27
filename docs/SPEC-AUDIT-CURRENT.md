@@ -31,18 +31,14 @@ No active runtime finding remains in this audit snapshot.
 
 ## Coverage gaps in current tests
 
-The current suite is green, but a few broader negative-path checks can still be extended:
-
-- no exhaustive contract/runtime matrix yet for every optional field on the richer authenticated user/profile shapes
+No concrete coverage gap remains tracked in this audit snapshot.
 
 ## Recommended remediation order
 
-### Batch 1: broader profile-shape guards
-
-- extend auth contract tests to cover optional profile fields more exhaustively across `/auth/me` and related self-service responses
+No pending remediation batch remains in this snapshot.
 
 ## Bottom line
 
 The repo is currently aligned with the current OpenAPI v1 runtime contract to the extent verified by the implemented runtime and current local validation suite.
 
-The remaining work is now about increasing confidence depth, not correcting a known behavioral drift.
+No currently identified runtime or contract-depth remediation remains tracked in this audit snapshot.
