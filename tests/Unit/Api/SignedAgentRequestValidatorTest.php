@@ -8,6 +8,8 @@ use App\Api\Service\AgentSignature\AgentSignatureNonceStore;
 use App\Api\Service\AgentSignature\SignedAgentMessageCanonicalizer;
 use App\Api\Service\AgentRuntimeStore;
 use App\Api\Service\SignedAgentRequestValidator;
+use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\HttpFoundation\Request;
@@ -46,7 +48,7 @@ final class SignedAgentRequestValidatorTest extends TestCase
             new AlwaysInvalidVerifier(),
             new AgentSignatureNonceStore(new ArrayAdapter()),
             new SignedAgentMessageCanonicalizer(),
-            new AgentRuntimeStore(new ArrayAdapter()),
+            $this->runtimeStore(),
         );
 
         $response = $validator->violationResponse($this->signedRequest());
@@ -64,7 +66,7 @@ final class SignedAgentRequestValidatorTest extends TestCase
             new AlwaysValidVerifier(),
             new AgentSignatureNonceStore(new ArrayAdapter()),
             new SignedAgentMessageCanonicalizer(),
-            new AgentRuntimeStore(new ArrayAdapter()),
+            $this->runtimeStore(),
         );
 
         self::assertNull($validator->violationResponse($this->signedRequest('nonce-1')));
@@ -91,13 +93,29 @@ final class SignedAgentRequestValidatorTest extends TestCase
             $verifier,
             new AgentSignatureNonceStore(new ArrayAdapter()),
             new SignedAgentMessageCanonicalizer(),
-            new AgentRuntimeStore(new ArrayAdapter()),
+            $this->runtimeStore(),
         );
     }
 
     private function keyStore(): AgentPublicKeyStore
     {
         return new AgentPublicKeyStore(new ArrayAdapter());
+    }
+
+    private function runtimeStore(): AgentRuntimeStore
+    {
+        return new AgentRuntimeStore($this->connection());
+    }
+
+    private function connection(): Connection
+    {
+        $connection = DriverManager::getConnection([
+            'driver' => 'pdo_sqlite',
+            'memory' => true,
+        ]);
+        $connection->executeStatement("CREATE TABLE agent_runtime (agent_id VARCHAR(36) PRIMARY KEY NOT NULL, client_id VARCHAR(64) NOT NULL, agent_name VARCHAR(255) NOT NULL, agent_version VARCHAR(64) NOT NULL, os_name VARCHAR(32) DEFAULT NULL, os_version VARCHAR(64) DEFAULT NULL, arch VARCHAR(32) DEFAULT NULL, effective_capabilities CLOB NOT NULL, capability_warnings CLOB NOT NULL, last_register_at DATETIME NOT NULL, last_seen_at DATETIME NOT NULL, last_heartbeat_at DATETIME DEFAULT NULL, max_parallel_jobs INTEGER NOT NULL, feature_flags_contract_version VARCHAR(32) DEFAULT NULL, effective_feature_flags_contract_version VARCHAR(32) DEFAULT NULL, server_time_skew_seconds INTEGER DEFAULT NULL)");
+
+        return $connection;
     }
 
     private function signedRequest(string $nonce = 'nonce-1'): Request

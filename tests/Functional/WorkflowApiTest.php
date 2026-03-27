@@ -722,5 +722,6 @@ final class WorkflowApiTest extends WebTestCase
         $this->ensureUnmatchedSidecarTable($connection);
         $this->ensureAssetDerivedFileTable($connection);
         $this->ensureIdempotencyTable($connection);
+        $this->ensureAgentRuntimeTable($connection);
     }
 }

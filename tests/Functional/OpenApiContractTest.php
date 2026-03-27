@@ -715,6 +715,7 @@ final class OpenApiContractTest extends WebTestCase
         $this->ensureProcessingJobTable($connection);
         $this->ensureIngestScanTable($connection);
         $this->ensureUnmatchedSidecarTable($connection);
+        $this->ensureAgentRuntimeTable($connection);
     }
 
     private function resetTwoFactorState(string $email): void
