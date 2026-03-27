@@ -113,6 +113,7 @@ final class IngestPipelineE2ETest extends KernelTestCase
                 correlation_id VARCHAR(64) DEFAULT NULL,
                 claimed_by VARCHAR(32) DEFAULT NULL,
                 lock_token VARCHAR(64) DEFAULT NULL,
+                fencing_token INTEGER DEFAULT NULL,
                 locked_until DATETIME DEFAULT NULL,
                 result_payload CLOB DEFAULT NULL,
                 created_at DATETIME NOT NULL,

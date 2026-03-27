@@ -58,6 +58,7 @@ final class JobEndpointsHandlerTest extends TestCase
         $handler = $this->buildHandler($gateway, ['id' => 'agent-1', 'email' => 'a@b.c', 'roles' => ['ROLE_AGENT']]);
         $result = $handler->submit('job-1', [
             'lock_token' => 'token',
+            'fencing_token' => 1,
             'job_type' => 'suggest_tags',
             'result' => ['ok' => true],
         ]);
@@ -73,6 +74,7 @@ final class JobEndpointsHandlerTest extends TestCase
         $handler = $this->buildHandler($gateway, ['id' => 'agent-1', 'email' => 'a@b.c', 'roles' => ['ROLE_AGENT']]);
         $result = $handler->submit('job-1', [
             'lock_token' => 'token',
+            'fencing_token' => 1,
             'result' => ['ok' => true],
         ]);
 
@@ -87,6 +89,7 @@ final class JobEndpointsHandlerTest extends TestCase
         $handler = $this->buildHandler($gateway, ['id' => 'agent-1', 'email' => 'a@b.c', 'roles' => ['ROLE_AGENT']]);
         $result = $handler->fail('job-1', [
             'lock_token' => 'token',
+            'fencing_token' => 1,
             'message' => 'failed',
             'retryable' => true,
         ]);

@@ -70,9 +70,12 @@ final class JobApiTest extends WebTestCase
         $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-3/claim');
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $claimPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        $fencingToken = (int) ($claimPayload['fencing_token'] ?? 0);
+        self::assertGreaterThanOrEqual(1, $fencingToken);
 
         $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-3/heartbeat', [
             'lock_token' => $claimPayload['lock_token'] ?? null,
+            'fencing_token' => $fencingToken,
         ]);
 
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
@@ -81,6 +84,7 @@ final class JobApiTest extends WebTestCase
             strtotime((string) ($claimPayload['locked_until'] ?? '1970-01-01T00:00:00Z')),
             strtotime((string) ($heartbeatPayload['locked_until'] ?? '1970-01-01T00:00:00Z')),
         );
+        self::assertSame($fencingToken + 1, $heartbeatPayload['fencing_token'] ?? null);
     }
 
     public function testHeartbeatReturnsStaleLockTokenWhenClaimedByAnotherToken(): void
@@ -91,9 +95,11 @@ final class JobApiTest extends WebTestCase
 
         $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-heartbeat-stale/claim');
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $claimPayload = json_decode((string) $client->getResponse()->getContent(), true);
 
         $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-heartbeat-stale/heartbeat', [
             'lock_token' => 'wrong-lock-token',
+            'fencing_token' => $claimPayload['fencing_token'] ?? null,
         ]);
         self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
         $payload = json_decode((string) $client->getResponse()->getContent(), true);
@@ -110,10 +116,13 @@ final class JobApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $claimPayload = json_decode((string) $client->getResponse()->getContent(), true);
         $lockToken = $claimPayload['lock_token'] ?? null;
+        $fencingToken = (int) ($claimPayload['fencing_token'] ?? 0);
         self::assertIsString($lockToken);
+        self::assertGreaterThanOrEqual(1, $fencingToken);
 
         $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-4/submit', [
             'lock_token' => $lockToken,
+            'fencing_token' => $fencingToken,
             'job_type' => 'extract_facts',
             'result' => ['facts_patch' => ['duration_ms' => 4200]],
         ], [
@@ -124,6 +133,7 @@ final class JobApiTest extends WebTestCase
 
         $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-4/submit', [
             'lock_token' => $lockToken,
+            'fencing_token' => $fencingToken,
             'job_type' => 'extract_facts',
             'result' => ['facts_patch' => ['duration_ms' => 4200]],
         ], [
@@ -135,6 +145,7 @@ final class JobApiTest extends WebTestCase
 
         $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-4/submit', [
             'lock_token' => $lockToken,
+            'fencing_token' => $fencingToken,
             'job_type' => 'extract_facts',
             'result' => ['facts_patch' => ['duration_ms' => 4300]],
         ], [
@@ -201,9 +212,11 @@ final class JobApiTest extends WebTestCase
 
         $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-submit-stale/claim');
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $claimPayload = json_decode((string) $client->getResponse()->getContent(), true);
 
         $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-submit-stale/submit', [
             'lock_token' => 'wrong-lock-token',
+            'fencing_token' => $claimPayload['fencing_token'] ?? null,
             'job_type' => 'extract_facts',
             'result' => ['facts_patch' => ['duration_ms' => 10]],
         ], [
@@ -222,6 +235,7 @@ final class JobApiTest extends WebTestCase
 
         $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-submit-lock-invalid/submit', [
             'lock_token' => 'no-active-claim',
+            'fencing_token' => 1,
             'job_type' => 'extract_facts',
             'result' => ['facts_patch' => ['duration_ms' => 10]],
         ], [
@@ -267,6 +281,7 @@ final class JobApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $claimPayload = json_decode((string) $client->getResponse()->getContent(), true);
         $lockToken = (string) ($claimPayload['lock_token'] ?? '');
+        $fencingToken = (int) ($claimPayload['fencing_token'] ?? 0);
         self::assertNotSame('', $lockToken);
 
         $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-fail-1/fail', [
@@ -280,6 +295,7 @@ final class JobApiTest extends WebTestCase
 
         $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-fail-1/fail', [
             'lock_token' => $lockToken,
+            'fencing_token' => $fencingToken,
             'error_code' => 'ERR_GENERIC',
         ], [
             'HTTP_IDEMPOTENCY_KEY' => 'job-fail-validation',
@@ -291,9 +307,11 @@ final class JobApiTest extends WebTestCase
 
         $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-fail-2/claim');
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $claimPayload2 = json_decode((string) $client->getResponse()->getContent(), true);
 
         $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-fail-2/fail', [
             'lock_token' => 'wrong-lock',
+            'fencing_token' => $claimPayload2['fencing_token'] ?? null,
             'error_code' => 'ERR_GENERIC',
             'message' => 'failed',
         ], [
@@ -305,6 +323,7 @@ final class JobApiTest extends WebTestCase
 
         $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-fail-1/fail', [
             'lock_token' => $lockToken,
+            'fencing_token' => $fencingToken,
             'error_code' => 'ERR_RETRYABLE',
             'message' => 'temporary failure',
             'retryable' => true,
@@ -335,6 +354,7 @@ final class JobApiTest extends WebTestCase
 
         $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-fail-lock-cases/fail', [
             'lock_token' => 'no-active-claim',
+            'fencing_token' => 1,
             'error_code' => 'ERR_GENERIC',
             'message' => 'failed',
             'retryable' => false,
@@ -359,6 +379,7 @@ final class JobApiTest extends WebTestCase
 
         $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-heartbeat-lock-cases/heartbeat', [
             'lock_token' => 'no-active-claim',
+            'fencing_token' => 1,
         ]);
         self::assertResponseStatusCodeSame(Response::HTTP_LOCKED);
         $invalidPayload = json_decode((string) $client->getResponse()->getContent(), true);
@@ -387,10 +408,12 @@ final class JobApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $claimPayload = json_decode((string) $client->getResponse()->getContent(), true);
         $lockToken = (string) ($claimPayload['lock_token'] ?? '');
+        $fencingToken = (int) ($claimPayload['fencing_token'] ?? 0);
         self::assertNotSame('', $lockToken);
 
         $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-submit-jobtype/submit', [
             'lock_token' => $lockToken,
+            'fencing_token' => $fencingToken,
             'result' => ['facts_patch' => ['duration_ms' => 10]],
         ], [
             'HTTP_IDEMPOTENCY_KEY' => 'submit-missing-job-type',
@@ -401,7 +424,8 @@ final class JobApiTest extends WebTestCase
 
         $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-submit-jobtype/submit', [
             'lock_token' => $lockToken,
-            'job_type' => 'generate_proxy',
+            'fencing_token' => $fencingToken,
+            'job_type' => 'generate_preview',
             'result' => ['derived_patch' => ['derived_manifest' => []]],
         ], [
             'HTTP_IDEMPOTENCY_KEY' => 'submit-mismatched-job-type',
@@ -421,10 +445,12 @@ final class JobApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $claimPayload = json_decode((string) $client->getResponse()->getContent(), true);
         $lockToken = (string) ($claimPayload['lock_token'] ?? '');
+        $fencingToken = (int) ($claimPayload['fencing_token'] ?? 0);
         self::assertNotSame('', $lockToken);
 
         $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-submit-ownership/submit', [
             'lock_token' => $lockToken,
+            'fencing_token' => $fencingToken,
             'job_type' => 'extract_facts',
             'result' => ['derived_patch' => ['derived_manifest' => []]],
         ], [
@@ -445,10 +471,12 @@ final class JobApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $claimPayload = json_decode((string) $client->getResponse()->getContent(), true);
         $lockToken = (string) ($claimPayload['lock_token'] ?? '');
+        $fencingToken = (int) ($claimPayload['fencing_token'] ?? 0);
         self::assertNotSame('', $lockToken);
 
         $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-submit-progression/submit', [
             'lock_token' => $lockToken,
+            'fencing_token' => $fencingToken,
             'job_type' => 'extract_facts',
             'result' => ['facts_patch' => ['duration_ms' => 1234]],
         ], [
@@ -465,6 +493,65 @@ final class JobApiTest extends WebTestCase
         self::assertIsArray($fields);
         self::assertSame(1234, $fields['facts']['duration_ms'] ?? null);
         self::assertTrue((bool) ($fields['facts_done'] ?? false));
+    }
+
+    public function testRetryableFailClearsClaimOwnershipAndFencingToken(): void
+    {
+        $client = $this->bootClient();
+        $this->seedJob('job-fail-reset');
+        $this->loginAgent($client);
+
+        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-fail-reset/claim');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $claimPayload = json_decode((string) $client->getResponse()->getContent(), true);
+
+        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-fail-reset/fail', [
+            'lock_token' => $claimPayload['lock_token'] ?? null,
+            'fencing_token' => $claimPayload['fencing_token'] ?? null,
+            'error_code' => 'ERR_RETRYABLE',
+            'message' => 'temporary failure',
+            'retryable' => true,
+        ], [
+            'HTTP_IDEMPOTENCY_KEY' => 'job-fail-reset',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        /** @var Connection $connection */
+        $connection = self::getContainer()->get(Connection::class);
+        $row = $connection->fetchAssociative(
+            'SELECT status, claimed_by, lock_token, fencing_token FROM processing_job WHERE id = :id',
+            ['id' => 'job-fail-reset']
+        );
+        self::assertIsArray($row);
+        self::assertSame('pending', $row['status'] ?? null);
+        self::assertNull($row['claimed_by'] ?? null);
+        self::assertNull($row['lock_token'] ?? null);
+        self::assertNull($row['fencing_token'] ?? null);
+    }
+
+    public function testLeaseMutationsAreRejectedForAnotherAuthenticatedPrincipal(): void
+    {
+        $client = $this->bootClient();
+        $this->seedJob('job-submit-binding');
+        $this->loginAgent($client);
+
+        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-submit-binding/claim');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $claimPayload = json_decode((string) $client->getResponse()->getContent(), true);
+
+        $this->loginAgentAs($client, 'agent-2@retaia.local');
+
+        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-submit-binding/submit', [
+            'lock_token' => $claimPayload['lock_token'] ?? null,
+            'fencing_token' => $claimPayload['fencing_token'] ?? null,
+            'job_type' => 'extract_facts',
+            'result' => ['facts_patch' => ['duration_ms' => 99]],
+        ], [
+            'HTTP_IDEMPOTENCY_KEY' => 'job-submit-binding-intruder',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_LOCKED);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('LOCK_INVALID', $payload['code'] ?? null);
     }
 
     private function seedJob(string $jobId, string $jobType = 'extract_facts'): void
@@ -504,6 +591,7 @@ final class JobApiTest extends WebTestCase
             'status' => 'pending',
             'claimed_by' => null,
             'lock_token' => null,
+            'fencing_token' => null,
             'locked_until' => null,
             'result_payload' => null,
             'created_at' => $now,
@@ -541,7 +629,13 @@ final class JobApiTest extends WebTestCase
 
     private function loginAgent(KernelBrowser $client): void
     {
-        $this->loginAs($client, 'agent@retaia.local');
+        $this->loginAgentAs($client, 'agent@retaia.local');
+    }
+
+    private function loginAgentAs(KernelBrowser $client, string $email): void
+    {
+        $this->insertAgent($email, ['ROLE_AGENT']);
+        $this->loginAs($client, $email);
         $this->registerDefaultAgent($client);
         $this->attachDefaultAgentSignatureHeaders($client);
     }

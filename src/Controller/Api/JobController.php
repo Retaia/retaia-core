@@ -90,6 +90,12 @@ final class JobController
         if ($result->status() === JobEndpointResult::STATUS_LOCK_REQUIRED) {
             return $this->lockRequiredResponse();
         }
+        if ($result->status() === JobEndpointResult::STATUS_VALIDATION_FAILED) {
+            return new JsonResponse([
+                'code' => 'VALIDATION_FAILED',
+                'message' => 'fencing_token is required and must be a positive integer',
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
         if ($result->status() === JobEndpointResult::STATUS_LOCK_CONFLICT) {
             $conflictCode = $result->conflictCode() ?? 'LOCK_INVALID';
             $this->logger->warning('jobs.heartbeat.conflict', [
@@ -107,7 +113,10 @@ final class JobController
         }
         $this->logger->info('jobs.heartbeat.succeeded', $this->jobContext($job));
 
-        return new JsonResponse($result->payload() ?? ['locked_until' => $job->lockedUntil?->format(DATE_ATOM)], Response::HTTP_OK);
+        return new JsonResponse($result->payload() ?? [
+            'locked_until' => $job->lockedUntil?->format(DATE_ATOM),
+            'fencing_token' => $job->fencingToken,
+        ], Response::HTTP_OK);
     }
 
     #[Route('/{jobId}/submit', name: 'api_jobs_submit', methods: ['POST'])]
@@ -129,7 +138,7 @@ final class JobController
             if ($submission->status() === JobEndpointResult::STATUS_VALIDATION_FAILED) {
                 return new JsonResponse([
                     'code' => 'VALIDATION_FAILED',
-                    'message' => 'job_type is required and must match the claimed job type',
+                    'message' => 'fencing_token, job_type and result must match the claimed job contract',
                 ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
             if ($submission->status() === JobEndpointResult::STATUS_LOCK_CONFLICT) {
@@ -169,7 +178,7 @@ final class JobController
             if ($failure->status() === JobEndpointResult::STATUS_VALIDATION_FAILED) {
                 return new JsonResponse([
                     'code' => 'VALIDATION_FAILED',
-                    'message' => 'error_code and message are required',
+                    'message' => 'fencing_token, error_code and message are required',
                 ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
             if ($failure->status() === JobEndpointResult::STATUS_LOCK_CONFLICT) {

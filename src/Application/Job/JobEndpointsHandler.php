@@ -48,11 +48,15 @@ final class JobEndpointsHandler
     {
         $actorId = $this->actorId();
         $lockToken = trim((string) ($payload['lock_token'] ?? ''));
+        $fencingToken = $this->parseFencingToken($payload['fencing_token'] ?? null);
         if ($lockToken === '') {
             return new JobEndpointResult(JobEndpointResult::STATUS_LOCK_REQUIRED, null, null, $actorId);
         }
+        if ($fencingToken === null) {
+            return new JobEndpointResult(JobEndpointResult::STATUS_VALIDATION_FAILED, null, null, $actorId);
+        }
 
-        $result = $this->heartbeatJobHandler->handle($jobId, $lockToken);
+        $result = $this->heartbeatJobHandler->handle($jobId, $actorId, $lockToken, $fencingToken);
         if ($result->status() !== HeartbeatJobResult::STATUS_HEARTBEATED) {
             return new JobEndpointResult(
                 JobEndpointResult::STATUS_LOCK_CONFLICT,
@@ -68,7 +72,10 @@ final class JobEndpointsHandler
 
         return new JobEndpointResult(
             JobEndpointResult::STATUS_SUCCESS,
-            ['locked_until' => $result->job()->lockedUntil?->format(DATE_ATOM)],
+            [
+                'locked_until' => $result->job()->lockedUntil?->format(DATE_ATOM),
+                'fencing_token' => $result->job()->fencingToken,
+            ],
             $result->job(),
             $actorId
         );
@@ -81,14 +88,18 @@ final class JobEndpointsHandler
     {
         $actorId = $this->actorId();
         $lockToken = trim((string) ($payload['lock_token'] ?? ''));
+        $fencingToken = $this->parseFencingToken($payload['fencing_token'] ?? null);
         $jobType = trim((string) ($payload['job_type'] ?? ''));
         if ($lockToken === '') {
             return new JobEndpointResult(JobEndpointResult::STATUS_LOCK_REQUIRED, null, null, $actorId);
         }
+        if ($fencingToken === null) {
+            return new JobEndpointResult(JobEndpointResult::STATUS_VALIDATION_FAILED, null, null, $actorId);
+        }
         if ($jobType === '') {
             return new JobEndpointResult(JobEndpointResult::STATUS_VALIDATION_FAILED, null, null, $actorId);
         }
-        if (!in_array($jobType, ['extract_facts', 'generate_proxy', 'generate_thumbnails', 'generate_audio_waveform'], true)) {
+        if (!in_array($jobType, ['extract_facts', 'generate_preview', 'generate_thumbnails', 'generate_audio_waveform', 'transcribe_audio'], true)) {
             return new JobEndpointResult(JobEndpointResult::STATUS_VALIDATION_FAILED, null, null, $actorId);
         }
 
@@ -97,7 +108,7 @@ final class JobEndpointsHandler
             $result = [];
         }
 
-        $submission = $this->submitJobHandler->handle($jobId, $lockToken, $jobType, $result, $this->actorRoles());
+        $submission = $this->submitJobHandler->handle($jobId, $actorId, $lockToken, $fencingToken, $jobType, $result, $this->actorRoles());
         if ($submission->status() === SubmitJobResult::STATUS_FORBIDDEN_SCOPE) {
             return new JobEndpointResult(JobEndpointResult::STATUS_FORBIDDEN_SCOPE, null, null, $actorId);
         }
@@ -127,6 +138,7 @@ final class JobEndpointsHandler
     {
         $actorId = $this->actorId();
         $lockToken = trim((string) ($payload['lock_token'] ?? ''));
+        $fencingToken = $this->parseFencingToken($payload['fencing_token'] ?? null);
         $errorCode = trim((string) ($payload['error_code'] ?? ''));
         $message = trim((string) ($payload['message'] ?? ''));
         $retryable = (bool) ($payload['retryable'] ?? false);
@@ -142,7 +154,7 @@ final class JobEndpointsHandler
                 $retryable
             );
         }
-        if ($errorCode === '' || $message === '') {
+        if ($fencingToken === null || $errorCode === '' || $message === '') {
             return new JobEndpointResult(
                 JobEndpointResult::STATUS_VALIDATION_FAILED,
                 null,
@@ -154,7 +166,7 @@ final class JobEndpointsHandler
             );
         }
 
-        $failure = $this->failJobHandler->handle($jobId, $lockToken, $retryable, $errorCode, $message);
+        $failure = $this->failJobHandler->handle($jobId, $actorId, $lockToken, $fencingToken, $retryable, $errorCode, $message);
         if ($failure->status() !== FailJobResult::STATUS_FAILED) {
             return new JobEndpointResult(
                 JobEndpointResult::STATUS_LOCK_CONFLICT,
@@ -210,5 +222,17 @@ final class JobEndpointsHandler
         }
 
         return $authenticatedUser->roles();
+    }
+
+    private function parseFencingToken(mixed $value): ?int
+    {
+        if (is_int($value)) {
+            return $value >= 1 ? $value : null;
+        }
+        if (is_string($value) && preg_match('/^[1-9][0-9]*$/', $value) === 1) {
+            return (int) $value;
+        }
+
+        return null;
     }
 }

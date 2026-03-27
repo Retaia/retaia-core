@@ -9,9 +9,10 @@ final class JobContractPolicy
      */
     private const V1_JOB_TYPES = [
         'extract_facts',
-        'generate_proxy',
+        'generate_preview',
         'generate_thumbnails',
         'generate_audio_waveform',
+        'transcribe_audio',
     ];
 
     public function isV1JobType(string $jobType): bool
@@ -26,7 +27,7 @@ final class JobContractPolicy
     {
         return match ($jobType) {
             'extract_facts' => ['facts:write'],
-            'generate_proxy', 'generate_thumbnails', 'generate_audio_waveform' => ['derived:write'],
+            'generate_preview', 'generate_thumbnails', 'generate_audio_waveform', 'transcribe_audio' => ['derived:write'],
             default => [],
         };
     }
@@ -64,4 +65,3 @@ final class JobContractPolicy
         return array_values(array_unique($capabilities));
     }
 }
-

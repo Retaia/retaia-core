@@ -12,11 +12,11 @@ final class HeartbeatJobHandler
     ) {
     }
 
-    public function handle(string $jobId, string $lockToken): HeartbeatJobResult
+    public function handle(string $jobId, string $actorId, string $lockToken, int $fencingToken): HeartbeatJobResult
     {
-        $job = $this->gateway->heartbeat($jobId, $lockToken, 300);
+        $job = $this->gateway->heartbeat($jobId, $actorId, $lockToken, $fencingToken, 300);
         if ($job === null) {
-            $code = $this->resolveLockConflictCodeHandler->handle($jobId, $lockToken);
+            $code = $this->resolveLockConflictCodeHandler->handle($jobId, $actorId, $lockToken, $fencingToken);
 
             return new HeartbeatJobResult($code === 'STALE_LOCK_TOKEN'
                 ? HeartbeatJobResult::STATUS_STALE_LOCK_TOKEN

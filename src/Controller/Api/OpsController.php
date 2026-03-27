@@ -409,7 +409,7 @@ final class OpsController
         if ($includeDerived) {
             $jobs[] = 'generate_thumbnails';
             if (!$proxyDone) {
-                $jobs[] = 'generate_proxy';
+                $jobs[] = 'generate_preview';
             }
             if ($asset->getMediaType() === 'AUDIO') {
                 $jobs[] = 'generate_audio_waveform';

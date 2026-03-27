@@ -22,7 +22,7 @@ final class JobRepository
     public function listClaimable(int $limit): array
     {
         $rows = $this->connection->fetchAllAssociative(
-            'SELECT j.id, j.asset_uuid, j.job_type, j.status, j.claimed_by, j.lock_token, j.locked_until, j.result_payload, j.correlation_id, a.fields AS asset_fields, a.filename AS asset_filename
+            'SELECT j.id, j.asset_uuid, j.job_type, j.status, j.claimed_by, j.lock_token, j.fencing_token, j.locked_until, j.result_payload, j.correlation_id, a.fields AS asset_fields, a.filename AS asset_filename
             FROM processing_job j
             INNER JOIN asset a ON a.uuid = j.asset_uuid
             WHERE (j.status = :pending OR (j.status = :claimed AND j.locked_until < :now))
@@ -56,7 +56,7 @@ final class JobRepository
     public function find(string $id): ?Job
     {
         $row = $this->connection->fetchAssociative(
-            'SELECT j.id, j.asset_uuid, j.job_type, j.status, j.claimed_by, j.lock_token, j.locked_until, j.result_payload, j.correlation_id, a.fields AS asset_fields, a.filename AS asset_filename
+            'SELECT j.id, j.asset_uuid, j.job_type, j.status, j.claimed_by, j.lock_token, j.fencing_token, j.locked_until, j.result_payload, j.correlation_id, a.fields AS asset_fields, a.filename AS asset_filename
              FROM processing_job j
              LEFT JOIN asset a ON a.uuid = j.asset_uuid
              WHERE j.id = :id',
@@ -103,6 +103,7 @@ final class JobRepository
             'correlation_id' => null,
             'claimed_by' => null,
             'lock_token' => null,
+            'fencing_token' => null,
             'locked_until' => null,
             'result_payload' => null,
             'created_at' => $now,
@@ -131,6 +132,7 @@ final class JobRepository
                 'correlation_id' => $correlationId,
                 'claimed_by' => null,
                 'lock_token' => null,
+                'fencing_token' => null,
                 'locked_until' => null,
                 'result_payload' => null,
                 'created_at' => $now,
@@ -151,7 +153,7 @@ final class JobRepository
 
         $affected = $this->connection->executeStatement(
             'UPDATE processing_job
-             SET status = :claimed, claimed_by = :agentId, lock_token = :lockToken, locked_until = :lockedUntil, updated_at = :now
+             SET status = :claimed, claimed_by = :agentId, lock_token = :lockToken, fencing_token = 1, locked_until = :lockedUntil, updated_at = :now
              WHERE id = :id
                AND (status = :pending OR (status = :claimed AND locked_until < :now))
                AND EXISTS (
@@ -186,22 +188,26 @@ final class JobRepository
         return $this->find($id);
     }
 
-    public function heartbeat(string $id, string $lockToken, int $ttlSeconds): ?Job
+    public function heartbeat(string $id, string $actorId, string $lockToken, int $fencingToken, int $ttlSeconds): ?Job
     {
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
         $lockedUntil = (new \DateTimeImmutable(sprintf('+%d seconds', max(1, $ttlSeconds))))->format('Y-m-d H:i:s');
 
         $affected = $this->connection->executeStatement(
             'UPDATE processing_job
-             SET locked_until = :lockedUntil, updated_at = :now
+             SET locked_until = :lockedUntil, fencing_token = fencing_token + 1, updated_at = :now
              WHERE id = :id
                AND status = :claimed
+               AND claimed_by = :actorId
                AND lock_token = :lockToken
+               AND fencing_token = :fencingToken
                AND locked_until >= :now',
             [
                 'id' => $id,
+                'actorId' => $actorId,
                 'claimed' => JobStatus::CLAIMED->value,
                 'lockToken' => $lockToken,
+                'fencingToken' => $fencingToken,
                 'lockedUntil' => $lockedUntil,
                 'now' => $now,
             ]
@@ -217,23 +223,27 @@ final class JobRepository
     /**
      * @param array<string, mixed> $result
      */
-    public function submit(string $id, string $lockToken, array $result): ?Job
+    public function submit(string $id, string $actorId, string $lockToken, int $fencingToken, array $result): ?Job
     {
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
         $affected = $this->connection->executeStatement(
             'UPDATE processing_job
-             SET status = :completed, result_payload = :result, lock_token = NULL, locked_until = NULL, updated_at = :now
+             SET status = :completed, result_payload = :result, claimed_by = NULL, lock_token = NULL, fencing_token = NULL, locked_until = NULL, updated_at = :now
              WHERE id = :id
                AND status = :claimed
+               AND claimed_by = :actorId
                AND lock_token = :lockToken
+               AND fencing_token = :fencingToken
                AND locked_until >= :now',
             [
                 'id' => $id,
+                'actorId' => $actorId,
                 'completed' => JobStatus::COMPLETED->value,
                 'claimed' => JobStatus::CLAIMED->value,
                 'result' => json_encode($result, JSON_THROW_ON_ERROR),
                 'lockToken' => $lockToken,
+                'fencingToken' => $fencingToken,
                 'now' => $now,
             ]
         );
@@ -245,7 +255,7 @@ final class JobRepository
         return $this->find($id);
     }
 
-    public function fail(string $id, string $lockToken, bool $retryable, string $errorCode, string $message): ?Job
+    public function fail(string $id, string $actorId, string $lockToken, int $fencingToken, bool $retryable, string $errorCode, string $message): ?Job
     {
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
         $nextStatus = $retryable ? JobStatus::PENDING->value : JobStatus::FAILED->value;
@@ -257,17 +267,22 @@ final class JobRepository
 
         $affected = $this->connection->executeStatement(
             'UPDATE processing_job
-             SET status = :nextStatus, result_payload = :result, lock_token = NULL, locked_until = NULL, updated_at = :now
+             SET status = :nextStatus, result_payload = :result, claimed_by = :nextClaimedBy, lock_token = NULL, fencing_token = NULL, locked_until = NULL, updated_at = :now
              WHERE id = :id
                AND status = :claimed
+               AND claimed_by = :actorId
                AND lock_token = :lockToken
+               AND fencing_token = :fencingToken
                AND locked_until >= :now',
             [
                 'id' => $id,
+                'actorId' => $actorId,
                 'nextStatus' => $nextStatus,
+                'nextClaimedBy' => $retryable ? null : $actorId,
                 'claimed' => JobStatus::CLAIMED->value,
                 'result' => json_encode($result, JSON_THROW_ON_ERROR),
                 'lockToken' => $lockToken,
+                'fencingToken' => $fencingToken,
                 'now' => $now,
             ]
         );
@@ -413,6 +428,7 @@ final class JobRepository
             $result,
             $this->sourceFromAssetFields($row['asset_fields'] ?? null, (string) ($row['asset_filename'] ?? '')),
             is_string($row['correlation_id'] ?? null) ? (string) $row['correlation_id'] : null,
+            isset($row['fencing_token']) ? (int) $row['fencing_token'] : null,
         );
     }
 

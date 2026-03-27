@@ -13,15 +13,24 @@ final class ResolveJobLockConflictCodeHandler
     ) {
     }
 
-    public function handle(string $jobId, string $lockToken): string
+    public function handle(string $jobId, string $actorId, string $lockToken, ?int $fencingToken = null): string
     {
         $current = $this->gateway->find($jobId);
         if ($current instanceof Job
             && $current->status === JobStatus::CLAIMED
             && is_string($current->lockToken)
             && $current->lockToken !== ''
-            && !hash_equals($current->lockToken, $lockToken)
         ) {
+            if (!hash_equals($current->lockToken, $lockToken)) {
+                return 'STALE_LOCK_TOKEN';
+            }
+            if ($current->claimedBy !== null && $current->claimedBy !== '' && !hash_equals($current->claimedBy, $actorId)) {
+                return 'LOCK_INVALID';
+            }
+            if ($fencingToken !== null && $current->fencingToken !== null && $current->fencingToken !== $fencingToken) {
+                return 'STALE_LOCK_TOKEN';
+            }
+
             return 'STALE_LOCK_TOKEN';
         }
 

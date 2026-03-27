@@ -23,19 +23,19 @@ final class JobGateway implements JobGatewayPort
         return $this->repository->claim($jobId, $actorId, $ttlSeconds);
     }
 
-    public function heartbeat(string $jobId, string $lockToken, int $ttlSeconds): ?Job
+    public function heartbeat(string $jobId, string $actorId, string $lockToken, int $fencingToken, int $ttlSeconds): ?Job
     {
-        return $this->repository->heartbeat($jobId, $lockToken, $ttlSeconds);
+        return $this->repository->heartbeat($jobId, $actorId, $lockToken, $fencingToken, $ttlSeconds);
     }
 
-    public function submit(string $jobId, string $lockToken, array $result): ?Job
+    public function submit(string $jobId, string $actorId, string $lockToken, int $fencingToken, array $result): ?Job
     {
-        return $this->repository->submit($jobId, $lockToken, $result);
+        return $this->repository->submit($jobId, $actorId, $lockToken, $fencingToken, $result);
     }
 
-    public function fail(string $jobId, string $lockToken, bool $retryable, string $errorCode, string $message): ?Job
+    public function fail(string $jobId, string $actorId, string $lockToken, int $fencingToken, bool $retryable, string $errorCode, string $message): ?Job
     {
-        return $this->repository->fail($jobId, $lockToken, $retryable, $errorCode, $message);
+        return $this->repository->fail($jobId, $actorId, $lockToken, $fencingToken, $retryable, $errorCode, $message);
     }
 
     public function find(string $jobId): ?Job

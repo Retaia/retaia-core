@@ -12,11 +12,11 @@ final class FailJobHandler
     ) {
     }
 
-    public function handle(string $jobId, string $lockToken, bool $retryable, string $errorCode, string $message): FailJobResult
+    public function handle(string $jobId, string $actorId, string $lockToken, int $fencingToken, bool $retryable, string $errorCode, string $message): FailJobResult
     {
-        $job = $this->gateway->fail($jobId, $lockToken, $retryable, $errorCode, $message);
+        $job = $this->gateway->fail($jobId, $actorId, $lockToken, $fencingToken, $retryable, $errorCode, $message);
         if ($job === null) {
-            $code = $this->resolveLockConflictCodeHandler->handle($jobId, $lockToken);
+            $code = $this->resolveLockConflictCodeHandler->handle($jobId, $actorId, $lockToken, $fencingToken);
 
             return new FailJobResult($code === 'STALE_LOCK_TOKEN'
                 ? FailJobResult::STATUS_STALE_LOCK_TOKEN

@@ -89,7 +89,7 @@ final class AppController
                     'max_parallel_jobs_allowed' => 8,
                     'allowed_job_types' => [
                         'extract_facts',
-                        'generate_proxy',
+                        'generate_preview',
                         'generate_thumbnails',
                         'generate_audio_waveform',
                         'transcribe_audio',

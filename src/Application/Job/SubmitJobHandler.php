@@ -24,7 +24,7 @@ final class SubmitJobHandler
      * @param array<string, mixed> $result
      * @param array<int, string>   $actorRoles
      */
-    public function handle(string $jobId, string $lockToken, string $jobType, array $result, array $actorRoles): SubmitJobResult
+    public function handle(string $jobId, string $actorId, string $lockToken, int $fencingToken, string $jobType, array $result, array $actorRoles): SubmitJobResult
     {
         $current = $this->gateway->find($jobId);
         if ($current instanceof Job && $current->jobType !== $jobType) {
@@ -41,9 +41,9 @@ final class SubmitJobHandler
             return new SubmitJobResult(SubmitJobResult::STATUS_FORBIDDEN_SCOPE);
         }
 
-        $job = $this->gateway->submit($jobId, $lockToken, $result);
+        $job = $this->gateway->submit($jobId, $actorId, $lockToken, $fencingToken, $result);
         if ($job === null) {
-            $code = $this->resolveLockConflictCodeHandler->handle($jobId, $lockToken);
+            $code = $this->resolveLockConflictCodeHandler->handle($jobId, $actorId, $lockToken, $fencingToken);
 
             return new SubmitJobResult($code === 'STALE_LOCK_TOKEN'
                 ? SubmitJobResult::STATUS_STALE_LOCK_TOKEN
@@ -60,7 +60,7 @@ final class SubmitJobHandler
      */
     private function applyResultToAsset(Job $job, array $result): void
     {
-        if (!in_array($job->jobType, ['extract_facts', 'generate_proxy', 'generate_thumbnails', 'generate_audio_waveform'], true)) {
+        if (!in_array($job->jobType, ['extract_facts', 'generate_preview', 'generate_thumbnails', 'generate_audio_waveform', 'transcribe_audio'], true)) {
             return;
         }
 
@@ -74,6 +74,9 @@ final class SubmitJobHandler
             $factsPatch = is_array($result['facts_patch'] ?? null) ? $result['facts_patch'] : [];
             $fields['facts'] = array_replace_recursive(is_array($fields['facts'] ?? null) ? $fields['facts'] : [], $factsPatch);
             $fields['facts_done'] = true;
+        } elseif ($job->jobType === 'transcribe_audio') {
+            $transcriptPatch = is_array($result['transcript_patch'] ?? null) ? $result['transcript_patch'] : [];
+            $fields['transcript'] = array_replace_recursive(is_array($fields['transcript'] ?? null) ? $fields['transcript'] : [], $transcriptPatch);
         } else {
             $derivedPatch = is_array($result['derived_patch'] ?? null) ? $result['derived_patch'] : [];
             $fields['derived'] = array_replace_recursive(is_array($fields['derived'] ?? null) ? $fields['derived'] : [], $derivedPatch);
@@ -134,7 +137,7 @@ final class SubmitJobHandler
      */
     private function isResultAllowedForJobType(string $jobType, array $result): bool
     {
-        if (!in_array($jobType, ['extract_facts', 'generate_proxy', 'generate_thumbnails', 'generate_audio_waveform'], true)) {
+        if (!in_array($jobType, ['extract_facts', 'generate_preview', 'generate_thumbnails', 'generate_audio_waveform', 'transcribe_audio'], true)) {
             return true;
         }
 
@@ -158,6 +161,16 @@ final class SubmitJobHandler
             return $this->isFactsPatchValid($result['facts_patch']);
         }
 
+        if ($jobType === 'transcribe_audio') {
+            if (!is_array($result['transcript_patch'] ?? null)
+                || array_key_exists('derived_patch', $result)
+                || array_key_exists('facts_patch', $result)) {
+                return false;
+            }
+
+            return $this->isTranscriptPatchValid($result['transcript_patch']);
+        }
+
         if (!is_array($result['derived_patch'] ?? null) || array_key_exists('facts_patch', $result)) {
             return false;
         }
@@ -174,6 +187,36 @@ final class SubmitJobHandler
             if (!in_array((string) $key, ['duration_ms', 'media_format', 'video_codec', 'audio_codec', 'width', 'height', 'fps'], true)) {
                 return false;
             }
+        }
+
+        return true;
+    }
+
+    /**
+     * @param array<string, mixed> $transcriptPatch
+     */
+    private function isTranscriptPatchValid(array $transcriptPatch): bool
+    {
+        foreach (array_keys($transcriptPatch) as $key) {
+            if (!in_array((string) $key, ['status', 'text', 'text_preview', 'language', 'updated_at'], true)) {
+                return false;
+            }
+        }
+
+        if (array_key_exists('status', $transcriptPatch)
+            && !in_array($transcriptPatch['status'], ['NONE', 'RUNNING', 'DONE', 'FAILED'], true)) {
+            return false;
+        }
+        foreach (['text', 'text_preview', 'language'] as $nullableStringField) {
+            if (array_key_exists($nullableStringField, $transcriptPatch)
+                && !is_string($transcriptPatch[$nullableStringField])
+                && $transcriptPatch[$nullableStringField] !== null) {
+                return false;
+            }
+        }
+        if (array_key_exists('updated_at', $transcriptPatch)
+            && (!is_string($transcriptPatch['updated_at']) || trim($transcriptPatch['updated_at']) === '')) {
+            return false;
         }
 
         return true;

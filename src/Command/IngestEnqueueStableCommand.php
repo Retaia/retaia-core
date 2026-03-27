@@ -348,7 +348,7 @@ final class IngestEnqueueStableCommand extends Command
         $ingestCorrelationId = $this->newIngestCorrelationId($asset->getUuid());
         $jobs = ['extract_facts', 'generate_thumbnails'];
         if (!$hasExistingProxy) {
-            $jobs[] = 'generate_proxy';
+            $jobs[] = 'generate_preview';
         }
         if ($asset->getMediaType() === 'AUDIO') {
             $jobs[] = 'generate_audio_waveform';

@@ -194,9 +194,9 @@ final class AuthzMatrixTest extends WebTestCase
     {
         yield ['GET', '/api/v1/jobs', []];
         yield ['POST', '/api/v1/jobs/job-authz-1/claim', []];
-        yield ['POST', '/api/v1/jobs/job-authz-1/heartbeat', ['lock_token' => 't']];
-        yield ['POST', '/api/v1/jobs/job-authz-1/submit', ['lock_token' => 't', 'job_type' => 'extract_facts', 'result_payload' => []]];
-        yield ['POST', '/api/v1/jobs/job-authz-1/fail', ['lock_token' => 't', 'error_code' => 'GENERIC_ERROR']];
+        yield ['POST', '/api/v1/jobs/job-authz-1/heartbeat', ['lock_token' => 't', 'fencing_token' => 1]];
+        yield ['POST', '/api/v1/jobs/job-authz-1/submit', ['lock_token' => 't', 'fencing_token' => 1, 'job_type' => 'extract_facts', 'result' => ['facts_patch' => []]]];
+        yield ['POST', '/api/v1/jobs/job-authz-1/fail', ['lock_token' => 't', 'fencing_token' => 1, 'error_code' => 'GENERIC_ERROR', 'message' => 'failed']];
     }
 
     /**
