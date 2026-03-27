@@ -37,6 +37,10 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $mePayload = json_decode($client->getResponse()->getContent(), true);
         self::assertSame(FixtureUsers::ADMIN_EMAIL, $mePayload['email'] ?? null);
+        self::assertIsString($mePayload['uuid'] ?? null);
+        self::assertArrayHasKey('display_name', $mePayload);
+        self::assertSame(true, $mePayload['email_verified'] ?? null);
+        self::assertSame(false, $mePayload['mfa_enabled'] ?? null);
     }
 
     public function testLogoutInvalidatesSession(): void

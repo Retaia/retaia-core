@@ -11,6 +11,9 @@ final class GetAuthMeProfileResult
         private string $id,
         private string $email,
         private array $roles,
+        private ?string $displayName = null,
+        private bool $emailVerified = false,
+        private bool $mfaEnabled = false,
     ) {
     }
 
@@ -30,5 +33,20 @@ final class GetAuthMeProfileResult
     public function roles(): array
     {
         return $this->roles;
+    }
+
+    public function displayName(): ?string
+    {
+        return $this->displayName;
+    }
+
+    public function emailVerified(): bool
+    {
+        return $this->emailVerified;
+    }
+
+    public function mfaEnabled(): bool
+    {
+        return $this->mfaEnabled;
     }
 }

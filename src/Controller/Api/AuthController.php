@@ -155,8 +155,12 @@ final class AuthController
 
         return new JsonResponse([
             'id' => $result->id() ?? '',
+            'uuid' => $result->id() ?? '',
             'email' => $result->email() ?? '',
+            'display_name' => $result->displayName(),
+            'email_verified' => $result->emailVerified(),
             'roles' => $result->roles(),
+            'mfa_enabled' => $result->mfaEnabled(),
         ], Response::HTTP_OK);
     }
 

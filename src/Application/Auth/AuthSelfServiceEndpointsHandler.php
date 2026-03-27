@@ -33,7 +33,10 @@ final class AuthSelfServiceEndpointsHandler
             AuthMeEndpointResult::STATUS_SUCCESS,
             $result->id(),
             $result->email(),
-            $result->roles()
+            $result->roles(),
+            $result->displayName(),
+            $result->emailVerified(),
+            $result->mfaEnabled()
         );
     }
 
