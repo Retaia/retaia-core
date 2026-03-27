@@ -377,8 +377,6 @@ final class WorkflowApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $agents = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertSame(0, $agents['total'] ?? null);
-        self::assertSame(5, $agents['limit'] ?? null);
-        self::assertSame(0, $agents['offset'] ?? null);
         self::assertIsArray($agents['items'] ?? null);
         self::assertCount(0, $agents['items'] ?? []);
 
@@ -476,6 +474,60 @@ final class WorkflowApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
         $invalidSidecars = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertSame('VALIDATION_FAILED', $invalidSidecars['code'] ?? null);
+    }
+
+    public function testOpsAgentsReturnsRegisteredAgentRuntimeProjection(): void
+    {
+        $client = $this->createAuthenticatedClient('agent@retaia.local');
+        $this->registerDefaultAgent($client);
+
+        /** @var Connection $connection */
+        $connection = static::getContainer()->get(Connection::class);
+        $connection->insert('processing_job', [
+            'id' => 'ops-agent-busy-1',
+            'asset_uuid' => '11111111-1111-4111-8111-111111111111',
+            'job_type' => 'extract_facts',
+            'state_version' => '1',
+            'status' => 'claimed',
+            'correlation_id' => null,
+            'claimed_by' => '11111111-1111-4111-8111-111111111111',
+            'lock_token' => 'lock-1',
+            'fencing_token' => 2,
+            'locked_until' => (new \DateTimeImmutable('+5 minutes'))->format('Y-m-d H:i:s'),
+            'result_payload' => null,
+            'created_at' => '2026-02-10 09:59:00',
+            'updated_at' => '2026-02-10 10:00:00',
+        ]);
+
+        $this->authenticateClient($client, 'admin@retaia.local');
+        $client->request('GET', '/api/v1/ops/agents?status=online_busy&limit=10&offset=0');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        self::assertSame(1, $payload['total'] ?? null);
+        self::assertCount(1, $payload['items'] ?? []);
+        self::assertArrayNotHasKey('limit', $payload);
+        self::assertArrayNotHasKey('offset', $payload);
+
+        $agent = $payload['items'][0] ?? null;
+        self::assertIsArray($agent);
+        self::assertSame('11111111-1111-4111-8111-111111111111', $agent['agent_id'] ?? null);
+        self::assertSame('ffmpeg-worker', $agent['agent_name'] ?? null);
+        self::assertSame('1.0.0', $agent['agent_version'] ?? null);
+        self::assertSame('online_busy', $agent['status'] ?? null);
+        self::assertSame(false, $agent['identity_conflict'] ?? null);
+        self::assertSame('linux', $agent['os_name'] ?? null);
+        self::assertSame('6.8', $agent['os_version'] ?? null);
+        self::assertSame('x86_64', $agent['arch'] ?? null);
+        self::assertContains('extract_facts', $agent['effective_capabilities'] ?? []);
+        self::assertSame([], $agent['capability_warnings'] ?? null);
+        self::assertIsString($agent['last_seen_at'] ?? null);
+        self::assertIsString($agent['last_register_at'] ?? null);
+        self::assertNull($agent['last_heartbeat_at'] ?? null);
+        self::assertNull($agent['current_job'] ?? null);
+        self::assertSame(1, $agent['debug']['max_parallel_jobs'] ?? null);
+        self::assertNull($agent['debug']['feature_flags_contract_version'] ?? null);
+        self::assertSame('1.0.0', $agent['debug']['effective_feature_flags_contract_version'] ?? null);
     }
 
     public function testOpsEndpointsRequireAuthentication(): void
@@ -595,7 +647,9 @@ final class WorkflowApiTest extends WebTestCase
     {
         $client = static::createClient();
         $client->disableReboot();
+        static::getContainer()->get('cache.app')->clear();
         $this->ensureWorkflowSchema();
+        $this->resetTwoFactorState($email);
 
         $this->authenticateClient($client, $email);
 
@@ -640,6 +694,21 @@ final class WorkflowApiTest extends WebTestCase
         $asset = new Asset($uuid, 'VIDEO', $filename, $state);
         $entityManager->persist($asset);
         $entityManager->flush();
+    }
+
+    private function resetTwoFactorState(string $email): void
+    {
+        /** @var Connection $connection */
+        $connection = static::getContainer()->get(Connection::class);
+        $userId = $connection->fetchOne('SELECT id FROM app_user WHERE email = :email', ['email' => $email]);
+        if (!is_string($userId) || $userId === '') {
+            return;
+        }
+
+        $cache = static::getContainer()->get('cache.app');
+        if (method_exists($cache, 'deleteItem')) {
+            $cache->deleteItem('auth_2fa_'.sha1($userId));
+        }
     }
 
     private function ensureWorkflowSchema(): void

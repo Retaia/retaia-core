@@ -3,6 +3,7 @@
 namespace App\Controller\Api;
 
 use App\Api\Service\SignedAgentRequestValidator;
+use App\Api\Service\AgentRuntimeStore;
 use App\Application\Job\JobEndpointResult;
 use App\Application\Job\JobEndpointsHandler;
 use App\Api\Service\IdempotencyService;
@@ -26,6 +27,7 @@ final class JobController
         private LoggerInterface $logger,
         private TranslatorInterface $translator,
         private SignedAgentRequestValidator $signedAgentRequestValidator,
+        private AgentRuntimeStore $agentRuntimeStore,
     ) {
     }
 
@@ -112,6 +114,7 @@ final class JobController
             return $this->lockConflictResponse('LOCK_INVALID');
         }
         $this->logger->info('jobs.heartbeat.succeeded', $this->jobContext($job));
+        $this->agentRuntimeStore->touchHeartbeat($this->actorId());
 
         return new JsonResponse($result->payload() ?? [
             'locked_until' => $job->lockedUntil?->format(DATE_ATOM),

@@ -3,6 +3,7 @@
 namespace App\Application\Agent;
 
 use App\Api\Service\AgentSignature\AgentPublicKeyStore;
+use App\Api\Service\AgentRuntimeStore;
 use App\Application\Auth\ResolveAuthenticatedUserResult;
 use App\Application\Auth\ResolveAuthenticatedUserUseCase;
 
@@ -12,6 +13,7 @@ final class RegisterAgentEndpointHandler
         private RegisterAgentUseCase $registerAgentHandler,
         private ResolveAuthenticatedUserUseCase $resolveAuthenticatedUserHandler,
         private AgentPublicKeyStore $agentPublicKeyStore,
+        private AgentRuntimeStore $agentRuntimeStore,
     ) {
     }
 
@@ -61,11 +63,33 @@ final class RegisterAgentEndpointHandler
         }
 
         $this->agentPublicKeyStore->register($agentId, $openPgpFingerprint, $openPgpPublicKey);
+        $resultPayload = $result->payload() ?? [];
+        $serverPolicy = is_array($resultPayload['server_policy'] ?? null) ? $resultPayload['server_policy'] : [];
+        $this->agentRuntimeStore->register([
+            'agent_id' => $agentId,
+            'client_id' => $actorId,
+            'agent_name' => $agentName,
+            'agent_version' => $agentVersion,
+            'os_name' => $osName,
+            'os_version' => $osVersion,
+            'arch' => $arch,
+            'effective_capabilities' => $capabilities,
+            'capability_warnings' => [],
+            'max_parallel_jobs' => is_int($payload['max_parallel_jobs'] ?? null) ? $payload['max_parallel_jobs'] : 1,
+            'feature_flags_contract_version' => $this->nullableString($clientContractVersion),
+            'effective_feature_flags_contract_version' => $this->nullableString($serverPolicy['effective_feature_flags_contract_version'] ?? null),
+        ]);
 
         return new RegisterAgentEndpointResult(
             RegisterAgentEndpointResult::STATUS_REGISTERED,
             null,
-            $result->payload() ?? []
+            $resultPayload + [
+                'effective_capabilities' => array_values(array_map(
+                    static fn (string $capability): string => trim($capability),
+                    array_filter($capabilities, static fn (mixed $capability): bool => is_string($capability) && trim($capability) !== '')
+                )),
+                'capability_warnings' => [],
+            ]
         );
     }
 
@@ -110,5 +134,12 @@ final class RegisterAgentEndpointHandler
         }
 
         return preg_match('/^[0-9]+\.[0-9]+\.[0-9]+$/', $clientContractVersion) === 1;
+    }
+
+    private function nullableString(mixed $value): ?string
+    {
+        $normalized = trim((string) $value);
+
+        return $normalized !== '' ? $normalized : null;
     }
 }

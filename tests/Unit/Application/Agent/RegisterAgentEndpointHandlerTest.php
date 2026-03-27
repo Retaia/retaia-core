@@ -3,6 +3,7 @@
 namespace App\Tests\Unit\Application\Agent;
 
 use App\Api\Service\AgentSignature\AgentPublicKeyStore;
+use App\Api\Service\AgentRuntimeStore;
 use App\Application\Agent\RegisterAgentEndpointHandler;
 use App\Application\Agent\RegisterAgentEndpointResult;
 use App\Application\Agent\RegisterAgentResult;
@@ -25,7 +26,7 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
         $resolver->expects(self::never())->method('handle');
         $keyStore = new AgentPublicKeyStore(new ArrayAdapter());
 
-        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore))->handle([
+        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore, new AgentRuntimeStore(new ArrayAdapter())))->handle([
             'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'worker',
             'agent_version' => '',
@@ -49,7 +50,7 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
         $resolver->expects(self::never())->method('handle');
         $keyStore = new AgentPublicKeyStore(new ArrayAdapter());
 
-        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore))->handle([
+        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore, new AgentRuntimeStore(new ArrayAdapter())))->handle([
             'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'worker',
             'agent_version' => '1.0.0',
@@ -73,7 +74,7 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
         $resolver->expects(self::never())->method('handle');
         $keyStore = new AgentPublicKeyStore(new ArrayAdapter());
 
-        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore))->handle([
+        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore, new AgentRuntimeStore(new ArrayAdapter())))->handle([
             'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'worker',
             'agent_version' => '1.0.0',
@@ -97,7 +98,7 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
         $resolver->expects(self::never())->method('handle');
         $keyStore = new AgentPublicKeyStore(new ArrayAdapter());
 
-        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore))->handle([
+        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore, new AgentRuntimeStore(new ArrayAdapter())))->handle([
             'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'worker',
             'agent_version' => '1.0.0',
@@ -121,7 +122,7 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
         $resolver->expects(self::never())->method('handle');
         $keyStore = new AgentPublicKeyStore(new ArrayAdapter());
 
-        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore))->handle([
+        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore, new AgentRuntimeStore(new ArrayAdapter())))->handle([
             'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'worker',
             'agent_version' => '1.0.0',
@@ -150,7 +151,8 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
         );
         $keyStore = new AgentPublicKeyStore(new ArrayAdapter());
 
-        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore))->handle([
+        $runtimeStore = new AgentRuntimeStore(new ArrayAdapter());
+        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore, $runtimeStore))->handle([
             'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'ffmpeg',
             'agent_version' => '2.1.0',
@@ -164,11 +166,14 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
         ]);
 
         self::assertSame(RegisterAgentEndpointResult::STATUS_REGISTERED, $result->status());
-        self::assertSame(['agent_id' => '11111111-1111-4111-8111-111111111111'], $result->payload());
+        self::assertSame('11111111-1111-4111-8111-111111111111', $result->payload()['agent_id'] ?? null);
+        self::assertSame(['extract_facts'], $result->payload()['effective_capabilities'] ?? null);
+        self::assertSame([], $result->payload()['capability_warnings'] ?? null);
         self::assertSame(
             self::ARMORED_PUBLIC_KEY,
             $keyStore->publicKeyFor('11111111-1111-4111-8111-111111111111', 'ABCD1234EF567890ABCD1234EF567890ABCD1234')
         );
+        self::assertCount(1, $runtimeStore->list());
     }
 
     public function testHandleReturnsUnsupportedContractVersionWhenRegisterHandlerRejects(): void
@@ -184,7 +189,7 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
         );
         $keyStore = new AgentPublicKeyStore(new ArrayAdapter());
 
-        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore))->handle([
+        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore, new AgentRuntimeStore(new ArrayAdapter())))->handle([
             'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'ffmpeg',
             'agent_version' => '2.1.0',

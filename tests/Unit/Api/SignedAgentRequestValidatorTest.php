@@ -6,6 +6,7 @@ use App\Api\Service\AgentSignature\AgentPublicKeyStore;
 use App\Api\Service\AgentSignature\AgentRequestSignatureVerifier;
 use App\Api\Service\AgentSignature\AgentSignatureNonceStore;
 use App\Api\Service\AgentSignature\SignedAgentMessageCanonicalizer;
+use App\Api\Service\AgentRuntimeStore;
 use App\Api\Service\SignedAgentRequestValidator;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
@@ -45,6 +46,7 @@ final class SignedAgentRequestValidatorTest extends TestCase
             new AlwaysInvalidVerifier(),
             new AgentSignatureNonceStore(new ArrayAdapter()),
             new SignedAgentMessageCanonicalizer(),
+            new AgentRuntimeStore(new ArrayAdapter()),
         );
 
         $response = $validator->violationResponse($this->signedRequest());
@@ -62,6 +64,7 @@ final class SignedAgentRequestValidatorTest extends TestCase
             new AlwaysValidVerifier(),
             new AgentSignatureNonceStore(new ArrayAdapter()),
             new SignedAgentMessageCanonicalizer(),
+            new AgentRuntimeStore(new ArrayAdapter()),
         );
 
         self::assertNull($validator->violationResponse($this->signedRequest('nonce-1')));
@@ -88,6 +91,7 @@ final class SignedAgentRequestValidatorTest extends TestCase
             $verifier,
             new AgentSignatureNonceStore(new ArrayAdapter()),
             new SignedAgentMessageCanonicalizer(),
+            new AgentRuntimeStore(new ArrayAdapter()),
         );
     }
 
