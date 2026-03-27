@@ -101,6 +101,16 @@ final class ApiAuthFlowTest extends WebTestCase
         $client->setServerParameter('HTTP_AUTHORIZATION', 'Bearer '.$refreshPayload['access_token']);
         $client->request('GET', '/api/v1/auth/me');
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->setServerParameter('HTTP_AUTHORIZATION', '');
+        $client->jsonRequest('POST', '/api/v1/auth/refresh', [
+            'refresh_token' => $refreshToken,
+            'client_id' => 'interactive-refresh',
+            'client_kind' => 'UI_WEB',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $staleRefreshPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('UNAUTHORIZED', $staleRefreshPayload['code'] ?? null);
     }
 
     public function testRefreshValidatesPayloadAndRejectsInvalidToken(): void

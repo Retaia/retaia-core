@@ -2,6 +2,7 @@
 
 namespace App\Tests\Functional;
 
+use App\Tests\Support\AgentSigningTestHelper;
 use App\Tests\Support\ApiAuthClientTrait;
 use App\Tests\Support\FunctionalSchemaTrait;
 use Doctrine\DBAL\Connection;
@@ -36,6 +37,39 @@ final class JobApiTest extends WebTestCase
         sort($statusCodes);
 
         self::assertSame([Response::HTTP_OK, Response::HTTP_CONFLICT], $statusCodes);
+    }
+
+    public function testClaimRejectsForgedAgentSignature(): void
+    {
+        $client = $this->bootClient();
+        $this->seedJob('job-signature-forged');
+        $this->loginAgent($client);
+
+        $headers = AgentSigningTestHelper::signedHeaders('POST', '/api/v1/jobs/job-signature-forged/claim', []);
+        $headers['HTTP_X_RETAIA_SIGNATURE'] = base64_encode('forged-signature');
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-signature-forged/claim', [], $headers);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame(['X-Retaia-Signature'], $payload['details']['invalid_headers'] ?? null);
+    }
+
+    public function testClaimRejectsReplayNonce(): void
+    {
+        $client = $this->bootClient();
+        $this->seedJob('job-signature-replay');
+        $this->loginAgent($client);
+
+        $headers = AgentSigningTestHelper::signedHeaders('POST', '/api/v1/jobs/job-signature-replay/claim', [], 'job-replay-nonce');
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-signature-replay/claim', [], $headers);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/jobs/job-signature-replay/claim', [], $headers);
+        self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame(['X-Retaia-Signature-Nonce'], $payload['details']['invalid_headers'] ?? null);
     }
 
     public function testLeaseExpiryMakesJobClaimableAgain(): void
