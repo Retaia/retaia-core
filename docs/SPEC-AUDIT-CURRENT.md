@@ -33,16 +33,11 @@ No active runtime finding remains in this audit snapshot.
 
 The current suite is green, but a few broader negative-path checks can still be extended:
 
-- no broad negative coverage for `412 PRECONDITION_FAILED` / `428 PRECONDITION_REQUIRED` across all asset and derived endpoints protected by `If-Match`
 - no exhaustive contract/runtime matrix yet for every optional field on the richer authenticated user/profile shapes
 
 ## Recommended remediation order
 
-### Batch 1: conditional request negative coverage
-
-- extend functional coverage for `If-Match` protected endpoints to assert both `428` and `412` paths consistently
-
-### Batch 2: broader profile-shape guards
+### Batch 1: broader profile-shape guards
 
 - extend auth contract tests to cover optional profile fields more exhaustively across `/auth/me` and related self-service responses
 

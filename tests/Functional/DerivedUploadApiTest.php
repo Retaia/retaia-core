@@ -131,6 +131,84 @@ final class DerivedUploadApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_NOT_FOUND);
     }
 
+    public function testDerivedUploadMutationsRejectMissingIfMatchAcrossProtectedRoutes(): void
+    {
+        $client = $this->login('agent@retaia.local');
+        $this->seedAsset();
+
+        $cases = [
+            [
+                'url' => '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/init',
+                'payload' => [
+                    'kind' => 'proxy_video',
+                    'content_type' => 'video/mp4',
+                    'size_bytes' => 1024,
+                ],
+            ],
+            [
+                'url' => '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/part',
+                'payload' => [
+                    'upload_id' => 'drv_missing_match',
+                    'part_number' => 1,
+                ],
+            ],
+            [
+                'url' => '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/complete',
+                'payload' => [
+                    'upload_id' => 'drv_missing_match',
+                    'total_parts' => 1,
+                ],
+            ],
+        ];
+
+        foreach ($cases as $case) {
+            $this->signedJsonRequestAsAgent($client, 'POST', (string) $case['url'], (array) $case['payload']);
+            $this->assertPreconditionError($client, Response::HTTP_PRECONDITION_REQUIRED, 'PRECONDITION_REQUIRED');
+        }
+    }
+
+    public function testDerivedUploadMutationsRejectStaleIfMatchAcrossProtectedRoutes(): void
+    {
+        $client = $this->login('agent@retaia.local');
+        $this->seedAsset();
+        $client->setServerParameter('HTTP_IF_MATCH', '"stale-revision-etag"');
+
+        $cases = [
+            [
+                'url' => '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/init',
+                'payload' => [
+                    'kind' => 'proxy_video',
+                    'content_type' => 'video/mp4',
+                    'size_bytes' => 1024,
+                ],
+            ],
+            [
+                'url' => '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/part',
+                'payload' => [
+                    'upload_id' => 'drv_stale_match',
+                    'part_number' => 1,
+                ],
+            ],
+            [
+                'url' => '/api/v1/assets/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/derived/upload/complete',
+                'payload' => [
+                    'upload_id' => 'drv_stale_match',
+                    'total_parts' => 1,
+                ],
+            ],
+        ];
+
+        foreach ($cases as $case) {
+            $this->signedJsonRequestAsAgent($client, 'POST', (string) $case['url'], (array) $case['payload']);
+            $this->assertPreconditionError(
+                $client,
+                Response::HTTP_PRECONDITION_FAILED,
+                'PRECONDITION_FAILED',
+                'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+            );
+        }
+    }
+
     private function seedAsset(): void
     {
         $this->ensureDerivedSchema();
@@ -203,5 +281,20 @@ final class DerivedUploadApiTest extends WebTestCase
         self::assertIsString($etag);
 
         return $etag;
+    }
+
+    private function assertPreconditionError(KernelBrowser $client, int $status, string $code, ?string $uuid = null): void
+    {
+        self::assertResponseStatusCodeSame($status);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertIsArray($payload);
+        self::assertSame($code, $payload['code'] ?? null);
+        self::assertIsArray($payload['details'] ?? null);
+        self::assertIsString($payload['details']['current_revision_etag'] ?? null);
+        self::assertIsString($payload['details']['current_state'] ?? null);
+
+        if (is_string($uuid)) {
+            self::assertSame($this->currentRevisionEtag($client, $uuid), $payload['details']['current_revision_etag'] ?? null);
+        }
     }
 }
