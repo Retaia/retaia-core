@@ -50,6 +50,10 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
 
         self::assertSame(200, $me['status']);
         self::assertSame(FixtureUsers::ADMIN_EMAIL, $me['json']['email'] ?? null);
+        self::assertIsString($me['json']['uuid'] ?? null);
+        self::assertArrayHasKey('display_name', $me['json']);
+        self::assertSame(true, $me['json']['email_verified'] ?? null);
+        self::assertSame(false, $me['json']['mfa_enabled'] ?? null);
 
         $logout = $this->requestJson($client, 'POST', '/api/v1/auth/logout', null, [
             'Authorization' => 'Bearer '.$token,

@@ -47,6 +47,9 @@ final class AuthSelfServiceEndpointsHandlerTest extends TestCase
         self::assertSame('u_1', $result->id());
         self::assertSame('admin@retaia.local', $result->email());
         self::assertSame(['ROLE_ADMIN'], $result->roles());
+        self::assertSame('Admin', $result->displayName());
+        self::assertFalse($result->emailVerified());
+        self::assertFalse($result->mfaEnabled());
     }
 
     public function testTwoFactorSetupReturnsAlreadyEnabled(): void
@@ -188,7 +191,27 @@ final class AuthSelfServiceEndpointsHandlerTest extends TestCase
 
         return new AuthSelfServiceEndpointsHandler(
             new ResolveAuthenticatedUserHandler($authenticatedUserGateway),
-            new GetAuthMeProfileHandler(),
+            new GetAuthMeProfileHandler(
+                new class implements \App\User\Repository\UserRepositoryInterface {
+                    public function findByEmail(string $email): ?\App\Entity\User
+                    {
+                        return null;
+                    }
+
+                    public function findById(string $id): ?\App\Entity\User
+                    {
+                        return null;
+                    }
+
+                    public function save(\App\Entity\User $user): void
+                    {
+                    }
+                },
+                new \App\User\Service\TwoFactorService(
+                    new \Symfony\Component\Cache\Adapter\ArrayAdapter(),
+                    new \App\User\Service\TwoFactorSecretCipher('v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', 'v1')
+                )
+            ),
             new SetupTwoFactorHandler($twoFactorGateway),
             new EnableTwoFactorHandler($twoFactorGateway),
             new DisableTwoFactorHandler($twoFactorGateway),
