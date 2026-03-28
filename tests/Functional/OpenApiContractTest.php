@@ -715,6 +715,7 @@ final class OpenApiContractTest extends WebTestCase
         $this->ensureProcessingJobTable($connection);
         $this->ensureIngestScanTable($connection);
         $this->ensureUnmatchedSidecarTable($connection);
+        $this->ensureUserAuthSessionTable($connection);
         $this->ensureAgentRuntimeTable($connection);
     }
 

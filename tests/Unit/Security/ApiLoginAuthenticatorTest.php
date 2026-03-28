@@ -3,10 +3,13 @@
 namespace App\Tests\Unit\Security;
 
 use App\Auth\UserAccessTokenService;
+use App\Auth\UserAuthSessionRepository;
 use App\Entity\User;
 use App\Security\ApiLoginAuthenticator;
 use App\User\Service\TwoFactorSecretCipher;
 use App\User\Service\TwoFactorService;
+use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
@@ -202,8 +205,18 @@ final class ApiLoginAuthenticatorTest extends TestCase
                 'v2'
             )
         );
-        $userTokens = new UserAccessTokenService(new ArrayAdapter(), 'test-secret', 3600);
+        $userTokens = new UserAccessTokenService(new UserAuthSessionRepository($this->connection()), 'test-secret', 3600);
 
         return new ApiLoginAuthenticator(new NullLogger(), $this->translator(), $twoFactor, $userTokens);
+    }
+
+    private function connection(): Connection
+    {
+        $connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]);
+        $connection->executeStatement('CREATE TABLE user_auth_session (session_id VARCHAR(32) PRIMARY KEY NOT NULL, access_token CLOB NOT NULL, refresh_token VARCHAR(255) NOT NULL, access_expires_at INTEGER NOT NULL, refresh_expires_at INTEGER NOT NULL, user_id VARCHAR(32) NOT NULL, email VARCHAR(180) NOT NULL, client_id VARCHAR(64) NOT NULL, client_kind VARCHAR(32) NOT NULL, created_at INTEGER NOT NULL, last_used_at INTEGER NOT NULL)');
+        $connection->executeStatement('CREATE UNIQUE INDEX uniq_user_auth_session_refresh_token ON user_auth_session (refresh_token)');
+        $connection->executeStatement('CREATE INDEX idx_user_auth_session_user_id ON user_auth_session (user_id)');
+
+        return $connection;
     }
 }

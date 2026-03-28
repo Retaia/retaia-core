@@ -2,6 +2,8 @@
 
 namespace App\Tests\Functional;
 
+use App\Tests\Support\FunctionalSchemaTrait;
+use Doctrine\DBAL\Connection;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\HttpFoundation\Response;
@@ -9,6 +11,7 @@ use Symfony\Component\HttpFoundation\Response;
 final class LocalizationApiTest extends WebTestCase
 {
     use RecreateDatabaseTrait;
+    use FunctionalSchemaTrait;
 
     public function testApiUsesFrenchMessageWhenAcceptLanguageIsFrench(): void
     {
@@ -42,6 +45,10 @@ final class LocalizationApiTest extends WebTestCase
 
     private function loginAdmin($client): void
     {
+        /** @var Connection $connection */
+        $connection = static::getContainer()->get(Connection::class);
+        $this->ensureUserAuthSessionTable($connection);
+
         $client->jsonRequest('POST', '/api/v1/auth/login', [
             'email' => 'admin@retaia.local',
             'password' => 'change-me',

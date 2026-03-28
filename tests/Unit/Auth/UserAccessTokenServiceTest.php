@@ -3,15 +3,16 @@
 namespace App\Tests\Unit\Auth;
 
 use App\Auth\UserAccessTokenService;
+use App\Auth\UserAuthSessionRepository;
 use App\Entity\User;
+use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Cache\Adapter\ArrayAdapter;
 
 final class UserAccessTokenServiceTest extends TestCase
 {
     public function testIssueIncludesRefreshTokenAndExpiresIn(): void
     {
-        $service = new UserAccessTokenService(new ArrayAdapter(), 'test-secret', 3600, 86400);
+        $service = $this->service();
         $user = new User('u-1', 'user@example.test', 'hash', ['ROLE_USER'], true);
 
         $payload = $service->issue($user, 'interactive-default', 'UI_WEB');
@@ -23,7 +24,7 @@ final class UserAccessTokenServiceTest extends TestCase
 
     public function testRefreshRotatesTokensAndInvalidatesPreviousAccessToken(): void
     {
-        $service = new UserAccessTokenService(new ArrayAdapter(), 'test-secret', 3600, 86400);
+        $service = $this->service();
         $user = new User('u-1', 'user@example.test', 'hash', ['ROLE_USER'], true);
 
         $firstIssue = $service->issue($user, 'interactive-default', 'UI_WEB');
@@ -38,7 +39,7 @@ final class UserAccessTokenServiceTest extends TestCase
 
     public function testSessionsAreTrackedAndCanBeRevokedIndividually(): void
     {
-        $service = new UserAccessTokenService(new ArrayAdapter(), 'test-secret', 3600, 86400);
+        $service = $this->service();
         $user = new User('u-1', 'user@example.test', 'hash', ['ROLE_USER'], true);
 
         $firstIssue = $service->issue($user, 'interactive-a', 'UI_WEB');
@@ -64,11 +65,26 @@ final class UserAccessTokenServiceTest extends TestCase
 
     public function testRefreshRejectsClientMismatch(): void
     {
-        $service = new UserAccessTokenService(new ArrayAdapter(), 'test-secret', 3600, 86400);
+        $service = $this->service();
         $user = new User('u-1', 'user@example.test', 'hash', ['ROLE_USER'], true);
         $issued = $service->issue($user, 'interactive-default', 'UI_WEB');
 
         self::assertNull($service->refresh((string) $issued['refresh_token'], 'other-client', null));
         self::assertNull($service->refresh((string) $issued['refresh_token'], null, 'AGENT'));
+    }
+
+    private function service(): UserAccessTokenService
+    {
+        return new UserAccessTokenService(new UserAuthSessionRepository($this->connection()), 'test-secret', 3600, 86400);
+    }
+
+    private function connection(): \Doctrine\DBAL\Connection
+    {
+        $connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]);
+        $connection->executeStatement('CREATE TABLE user_auth_session (session_id VARCHAR(32) PRIMARY KEY NOT NULL, access_token CLOB NOT NULL, refresh_token VARCHAR(255) NOT NULL, access_expires_at INTEGER NOT NULL, refresh_expires_at INTEGER NOT NULL, user_id VARCHAR(32) NOT NULL, email VARCHAR(180) NOT NULL, client_id VARCHAR(64) NOT NULL, client_kind VARCHAR(32) NOT NULL, created_at INTEGER NOT NULL, last_used_at INTEGER NOT NULL)');
+        $connection->executeStatement('CREATE UNIQUE INDEX uniq_user_auth_session_refresh_token ON user_auth_session (refresh_token)');
+        $connection->executeStatement('CREATE INDEX idx_user_auth_session_user_id ON user_auth_session (user_id)');
+
+        return $connection;
     }
 }
