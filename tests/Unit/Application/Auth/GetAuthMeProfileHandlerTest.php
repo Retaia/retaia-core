@@ -7,8 +7,10 @@ use App\Entity\User;
 use App\User\Repository\UserRepositoryInterface;
 use App\User\Service\TwoFactorSecretCipher;
 use App\User\Service\TwoFactorService;
+use App\User\UserTwoFactorState;
+use App\User\UserTwoFactorStateRepository;
+use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Cache\Adapter\ArrayAdapter;
 
 final class GetAuthMeProfileHandlerTest extends TestCase
 {
@@ -32,13 +34,13 @@ final class GetAuthMeProfileHandlerTest extends TestCase
 
     private function twoFactorService(string $enabledUserId): TwoFactorService
     {
-        $cache = new ArrayAdapter();
-        $cacheItem = $cache->getItem('auth_2fa_'.sha1($enabledUserId));
-        $cacheItem->set(['enabled' => true]);
-        $cache->save($cacheItem);
+        $connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]);
+        $connection->executeStatement('CREATE TABLE user_two_factor_state (user_id VARCHAR(32) PRIMARY KEY NOT NULL, enabled BOOLEAN NOT NULL, pending_secret_encrypted CLOB DEFAULT NULL, secret_encrypted CLOB DEFAULT NULL, recovery_code_hashes CLOB NOT NULL, legacy_recovery_code_sha256 CLOB NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)');
+        $repository = new UserTwoFactorStateRepository($connection);
+        $repository->save(new UserTwoFactorState($enabledUserId, true, null, null, [], [], 1, 1));
 
         return new TwoFactorService(
-            $cache,
+            $repository,
             new TwoFactorSecretCipher('v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', 'v1')
         );
     }

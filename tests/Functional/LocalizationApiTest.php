@@ -48,6 +48,7 @@ final class LocalizationApiTest extends WebTestCase
         /** @var Connection $connection */
         $connection = static::getContainer()->get(Connection::class);
         $this->ensureUserAuthSessionTable($connection);
+        $this->ensureUserTwoFactorStateTable($connection);
 
         $client->jsonRequest('POST', '/api/v1/auth/login', [
             'email' => 'admin@retaia.local',

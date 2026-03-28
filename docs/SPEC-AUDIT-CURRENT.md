@@ -29,23 +29,6 @@ The codebase also still contains several structural shortcuts that are below the
 
 ## Findings
 
-### P1. 2FA state and recovery codes are still only stored in `cache.app`
-
-- Runtime location: [`src/User/Service/TwoFactorService.php:8`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/User/Service/TwoFactorService.php:8)
-- Critical lines:
-  - [`src/User/Service/TwoFactorService.php:13`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/User/Service/TwoFactorService.php:13)
-  - [`src/User/Service/TwoFactorService.php:49`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/User/Service/TwoFactorService.php:49)
-  - [`src/User/Service/TwoFactorService.php:78`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/User/Service/TwoFactorService.php:78)
-  - [`src/User/Service/TwoFactorService.php:125`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/User/Service/TwoFactorService.php:125)
-  - [`src/User/Service/TwoFactorService.php:188`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/User/Service/TwoFactorService.php:188)
-  - [`src/User/Service/TwoFactorService.php:213`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/User/Service/TwoFactorService.php:213)
-- Impact:
-  - enabled MFA, pending setup secrets and recovery codes disappear with cache eviction or restart
-  - the repo can claim MFA is enabled at one moment and silently forget that state later
-  - security posture depends on cache durability instead of a persistent security store
-- Why this is a quick fix:
-  - the feature behaves like a real MFA subsystem at the API level, but the backing state is still ephemeral application cache
-
 ### P1. Technical client registry, technical access tokens, device flows and MCP challenges are all cache-backed
 
 - Runtime location: [`src/Auth/AuthClientStateStore.php:8`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthClientStateStore.php:8)
@@ -124,21 +107,6 @@ The codebase also still contains several structural shortcuts that are below the
   - purge/ingest can report success while some persistence-side effects are skipped
 - Why this is a quick fix:
   - test-environment resilience is implemented directly in production code paths through broad `catch (\Throwable)`
-
-### P2. `UserAccessTokenService` now persists correctly, but still owns raw SQL instead of a dedicated repository boundary
-
-- Runtime location: [`src/Auth/UserAccessTokenService.php:15`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/UserAccessTokenService.php:15)
-- Critical lines:
-  - [`src/Auth/UserAccessTokenService.php:299`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/UserAccessTokenService.php:299)
-  - [`src/Auth/UserAccessTokenService.php:330`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/UserAccessTokenService.php:330)
-  - [`src/Auth/UserAccessTokenService.php:361`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/UserAccessTokenService.php:361)
-  - [`src/Auth/UserAccessTokenService.php:389`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/UserAccessTokenService.php:389)
-- Impact:
-  - session semantics and storage are still tightly coupled in one class
-  - future work on eviction, indexing, audit logging or alternate persistence will require editing core auth logic directly
-  - unit tests have to exercise SQL-backed internals through the service instead of testing a repository separately
-- Why this is below the target quality bar:
-  - for core auth state, the service should orchestrate token/session rules over a `UserAuthSessionRepositoryInterface`, not embed DBAL queries directly
 
 ### P2. Technical client auth is still modeled as a monolithic cache-backed state store instead of repositories per concern
 
@@ -224,7 +192,6 @@ No remaining secondary gap is tracked in this snapshot.
 
 ### Batch 1: auth state persistence hardening
 
-- move `TwoFactorService` state and recovery codes to persistent user security storage
 - replace `AuthClientStateStore` cache-backed registry/flows/tokens/challenges with persistent auth-client tables
 
 ### Batch 2: agent-signing persistence hardening
@@ -235,7 +202,6 @@ No remaining secondary gap is tracked in this snapshot.
 
 ### Batch 3: introduce missing repository boundaries on already-persistent runtime state
 
-- extract a `UserAuthSessionRepositoryInterface` from `UserAccessTokenService`
 - promote/split `AgentRuntimeStore` into a repository and, if needed, a projection layer
 - stop adding new DB-backed “service/store” classes without an explicit persistence boundary
 
