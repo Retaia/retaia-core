@@ -2,7 +2,7 @@
 
 namespace App\Controller\Api;
 
-use App\Api\Service\AgentRuntimeStore;
+use App\Api\Service\AgentRuntimeRepositoryInterface;
 use App\Application\Auth\ResolveAdminActorHandler;
 use App\Application\Auth\ResolveAdminActorResult;
 use App\Asset\Repository\AssetRepositoryInterface;
@@ -39,7 +39,7 @@ final class OpsController
         private IngestDiagnosticsRepository $ingestDiagnostics,
         private OperationLockRepository $locks,
         private JobRepository $jobs,
-        private AgentRuntimeStore $agentRuntimeStore,
+        private AgentRuntimeRepositoryInterface $agentRuntimeRepository,
         private AssetRepositoryInterface $assets,
         private Connection $connection,
         private WatchPathResolver $watchPathResolver,
@@ -268,7 +268,7 @@ final class OpsController
      */
     private function projectAgents(): array
     {
-        $entries = $this->agentRuntimeStore->list();
+        $entries = $this->agentRuntimeRepository->findAll();
         $clientUsage = [];
         foreach ($entries as $entry) {
             $clientId = (string) ($entry['client_id'] ?? '');

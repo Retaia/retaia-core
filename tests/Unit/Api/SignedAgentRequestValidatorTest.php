@@ -2,7 +2,7 @@
 
 namespace App\Tests\Unit\Api;
 
-use App\Api\Service\AgentRuntimeStore;
+use App\Api\Service\AgentRuntimeRepository;
 use App\Api\Service\AgentSignature\AgentPublicKeyRecord;
 use App\Api\Service\AgentSignature\AgentPublicKeyRepository;
 use App\Api\Service\AgentSignature\AgentRequestSignatureVerifier;
@@ -48,7 +48,7 @@ final class SignedAgentRequestValidatorTest extends TestCase
             new AlwaysInvalidVerifier(),
             $this->nonceRepository(),
             new SignedAgentMessageCanonicalizer(),
-            $this->runtimeStore(),
+            $this->runtimeRepository(),
         );
 
         $response = $validator->violationResponse($this->signedRequest());
@@ -66,7 +66,7 @@ final class SignedAgentRequestValidatorTest extends TestCase
             new AlwaysValidVerifier(),
             $this->nonceRepository(),
             new SignedAgentMessageCanonicalizer(),
-            $this->runtimeStore(),
+            $this->runtimeRepository(),
         );
 
         self::assertNull($validator->violationResponse($this->signedRequest('nonce-1')));
@@ -93,7 +93,7 @@ final class SignedAgentRequestValidatorTest extends TestCase
             $verifier,
             $this->nonceRepository(),
             new SignedAgentMessageCanonicalizer(),
-            $this->runtimeStore(),
+            $this->runtimeRepository(),
         );
     }
 
@@ -107,9 +107,9 @@ final class SignedAgentRequestValidatorTest extends TestCase
         return new AgentSignatureNonceRepository($this->connection());
     }
 
-    private function runtimeStore(): AgentRuntimeStore
+    private function runtimeRepository(): AgentRuntimeRepository
     {
-        return new AgentRuntimeStore($this->connection());
+        return new AgentRuntimeRepository($this->connection());
     }
 
     private function connection(): Connection

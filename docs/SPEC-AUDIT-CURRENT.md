@@ -23,9 +23,9 @@ Important context:
 
 No concrete OpenAPI path/schema drift remains identified in this snapshot.
 
-That does not mean the runtime is free of shortcuts. A deeper implementation review still shows several production-grade quick fixes and minimal implementations that should be treated as active engineering debt, especially around MCP signature semantics, operational projections and a few remaining structural boundaries.
+That does not mean the runtime is free of shortcuts. A deeper implementation review still shows several production-grade quick fixes and minimal implementations that should be treated as active engineering debt, especially around MCP signature semantics, operational projections and remaining prod-path error masking.
 
-The codebase also still contains several structural shortcuts that are below the quality bar expected for long-lived core runtime code: production code that still masks infrastructure failures too broadly, DB-backed runtime persistence still exposed as ad hoc stores, and operational projections coupled directly to transport/controller concerns.
+The codebase also still contains several structural shortcuts that are below the quality bar expected for long-lived core runtime code: production code that still masks infrastructure failures too broadly, and operational projections coupled directly to transport/controller concerns.
 
 ## Findings
 
@@ -68,18 +68,6 @@ The codebase also still contains several structural shortcuts that are below the
   - purge/ingest can report success while some persistence-side effects are skipped
 - Why this is a quick fix:
   - test-environment resilience is implemented directly in production code paths through broad `catch (\Throwable)`
-
-### P3. `AgentRuntimeStore` is DB-backed but still acts as an ad hoc persistence layer instead of a repository
-
-- Runtime location: [`src/Api/Service/AgentRuntimeStore.php:7`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentRuntimeStore.php:7)
-- Critical lines:
-  - [`src/Api/Service/AgentRuntimeStore.php:71`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentRuntimeStore.php:71)
-  - [`src/Api/Service/AgentRuntimeStore.php:104`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentRuntimeStore.php:104)
-- Impact:
-  - naming suggests a lightweight service/store, but it is already a persistence boundary with SQL and projection logic
-  - controller and runtime mutation code are coupled to this ad hoc type instead of a clearer repository + projection split
-- Why this is below the target quality bar:
-  - at this point it should be promoted to a repository (or split into repository + projector) to make ops runtime state an explicit domain concern
 
 ### P3. Several runtime services still combine domain orchestration with infrastructure details in the same class
 
@@ -124,17 +112,12 @@ No remaining secondary gap is tracked in this snapshot.
 
 ## Recommended remediation order
 
-### Batch 1: introduce missing repository boundaries on already-persistent runtime state
-
-- promote/split `AgentRuntimeStore` into a repository and, if needed, a projection layer
-- stop adding new DB-backed “service/store” classes without an explicit persistence boundary
-
-### Batch 2: remove prod-path “minimal test schema” fallbacks
+### Batch 1: remove prod-path “minimal test schema” fallbacks
 
 - replace broad `catch (\Throwable)` masking with explicit optional-table handling or environment-scoped test helpers
 - make ingest/purge fail loudly when prod persistence is inconsistent
 
-### Batch 3: finish the operational model behind `/ops/agents`
+### Batch 2: finish the operational model behind `/ops/agents`
 
 - introduce a proper technical `client_id` model for registered agents
 - add enough job execution history to populate `current_job`, `last_successful_job`, and `last_failed_job` without inventing timestamps
