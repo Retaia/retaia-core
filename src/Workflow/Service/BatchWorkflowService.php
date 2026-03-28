@@ -366,8 +366,11 @@ final class BatchWorkflowService
 
         $fields = $asset->getFields();
         $paths = is_array($fields['paths'] ?? null) ? $fields['paths'] : [];
-        $storageId = trim((string) ($paths['storage_id'] ?? $this->storageRegistry->defaultStorageId()));
+        $storageId = trim((string) ($paths['storage_id'] ?? ''));
+        if ($storageId === '') {
+            throw new \RuntimeException(sprintf('Asset %s is missing canonical paths.storage_id.', $asset->getUuid()));
+        }
 
-        return $this->storageRegistry->get($storageId === '' ? $this->storageRegistry->defaultStorageId() : $storageId)->storage;
+        return $this->storageRegistry->get($storageId)->storage;
     }
 }

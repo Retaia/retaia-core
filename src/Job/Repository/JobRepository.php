@@ -482,16 +482,8 @@ final class JobRepository
         }
 
         $paths = is_array($fields['paths'] ?? null) ? $fields['paths'] : [];
-        $storageId = trim((string) ($paths['storage_id'] ?? $this->storageRegistry->defaultStorageId()));
-        if ($storageId === '') {
-            $storageId = $this->storageRegistry->defaultStorageId();
-        }
-
-        $fallbackOriginal = $this->sanitizeRelativePath('INBOX/'.$assetFilename);
-        $original = $this->sanitizeRelativePath((string) ($paths['original_relative'] ?? ''));
-        if ($original === '') {
-            $original = $fallbackOriginal;
-        }
+        $storageId = $this->requiredStorageId($paths, $assetFilename);
+        $original = $this->requiredOriginalRelativePath($paths, $assetFilename);
         $sidecars = $this->sanitizeRelativePaths(is_array($paths['sidecars_relative'] ?? null) ? $paths['sidecars_relative'] : []);
 
         return [
@@ -530,5 +522,34 @@ final class JobRepository
         }
 
         return array_values(array_unique($result));
+    }
+
+    /**
+     * @param array<string, mixed> $paths
+     */
+    private function requiredStorageId(array $paths, string $assetFilename): string
+    {
+        $storageId = trim((string) ($paths['storage_id'] ?? ''));
+        if ($storageId === '') {
+            throw new \RuntimeException(sprintf('Asset "%s" is missing canonical paths.storage_id.', $assetFilename));
+        }
+        if (!$this->storageRegistry->has($storageId)) {
+            throw new \RuntimeException(sprintf('Asset "%s" references unknown storage "%s".', $assetFilename, $storageId));
+        }
+
+        return $storageId;
+    }
+
+    /**
+     * @param array<string, mixed> $paths
+     */
+    private function requiredOriginalRelativePath(array $paths, string $assetFilename): string
+    {
+        $original = $this->sanitizeRelativePath((string) ($paths['original_relative'] ?? ''));
+        if ($original === '') {
+            throw new \RuntimeException(sprintf('Asset "%s" is missing canonical paths.original_relative.', $assetFilename));
+        }
+
+        return $original;
     }
 }

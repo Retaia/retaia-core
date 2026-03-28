@@ -257,22 +257,43 @@ final class AssetReadGateway implements AssetReadGatewayPort
     private function sourceFromFields(array $fields, string $filename): array
     {
         $paths = is_array($fields['paths'] ?? null) ? $fields['paths'] : [];
-        $storageId = trim((string) ($paths['storage_id'] ?? $this->storageRegistry->defaultStorageId()));
-        if ($storageId === '') {
-            $storageId = $this->storageRegistry->defaultStorageId();
-        }
-
-        $fallbackOriginal = $this->sanitizeRelativePath('INBOX/'.$filename);
-        $original = $this->sanitizeRelativePath((string) ($paths['original_relative'] ?? ''));
-        if ($original === '') {
-            $original = $fallbackOriginal;
-        }
+        $storageId = $this->requiredStorageId($paths, $filename);
+        $original = $this->requiredOriginalRelativePath($paths, $filename);
 
         return [
             'storage_id' => $storageId,
             'original_relative' => $original,
             'sidecars_relative' => $this->sanitizeRelativePaths(is_array($paths['sidecars_relative'] ?? null) ? $paths['sidecars_relative'] : []),
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $paths
+     */
+    private function requiredStorageId(array $paths, string $filename): string
+    {
+        $storageId = trim((string) ($paths['storage_id'] ?? ''));
+        if ($storageId === '') {
+            throw new \RuntimeException(sprintf('Asset "%s" is missing canonical paths.storage_id.', $filename));
+        }
+        if (!$this->storageRegistry->has($storageId)) {
+            throw new \RuntimeException(sprintf('Asset "%s" references unknown storage "%s".', $filename, $storageId));
+        }
+
+        return $storageId;
+    }
+
+    /**
+     * @param array<string, mixed> $paths
+     */
+    private function requiredOriginalRelativePath(array $paths, string $filename): string
+    {
+        $original = $this->sanitizeRelativePath((string) ($paths['original_relative'] ?? ''));
+        if ($original === '') {
+            throw new \RuntimeException(sprintf('Asset "%s" is missing canonical paths.original_relative.', $filename));
+        }
+
+        return $original;
     }
 
     /**

@@ -591,6 +591,11 @@ final class AssetStateMachineApiTest extends WebTestCase
         $asset1->setTags(['wedding']);
         $asset1->setNotes('first review');
         $asset1->setFields([
+            'paths' => [
+                'storage_id' => 'nas-main',
+                'original_relative' => 'INBOX/rush-001.mov',
+                'sidecars_relative' => [],
+            ],
             'camera' => 'a7s',
             'captured_at' => '2026-01-10T12:00:00Z',
             'duration' => 120,
@@ -619,6 +624,11 @@ final class AssetStateMachineApiTest extends WebTestCase
 
         $asset2 = new Asset('22222222-2222-2222-2222-222222222222', 'AUDIO', 'voice-001.wav', AssetState::PROCESSED);
         $asset2->setFields([
+            'paths' => [
+                'storage_id' => 'nas-main',
+                'original_relative' => 'INBOX/voice-001.wav',
+                'sidecars_relative' => [],
+            ],
             'captured_at' => '2026-01-20T12:00:00Z',
             'duration' => 30,
             'gps_latitude' => 48.8566,
@@ -628,6 +638,11 @@ final class AssetStateMachineApiTest extends WebTestCase
         ]);
         $asset3 = new Asset('33333333-3333-3333-3333-333333333333', 'PHOTO', 'archive-001.jpg', AssetState::ARCHIVED);
         $asset3->setFields([
+            'paths' => [
+                'storage_id' => 'nas-main',
+                'original_relative' => 'ARCHIVE/archive-001.jpg',
+                'sidecars_relative' => [],
+            ],
             'captured_at' => '2026-02-15T12:00:00Z',
             'review_processing_version' => '3',
             'facts_done' => true,
@@ -650,6 +665,13 @@ final class AssetStateMachineApiTest extends WebTestCase
         }
 
         $asset = new Asset('44444444-4444-4444-4444-444444444444', 'VIDEO', 'purged.mov', AssetState::PURGED);
+        $asset->setFields([
+            'paths' => [
+                'storage_id' => 'nas-main',
+                'original_relative' => 'REJECTS/purged.mov',
+                'sidecars_relative' => [],
+            ],
+        ]);
         $entityManager->persist($asset);
         $entityManager->flush();
     }
