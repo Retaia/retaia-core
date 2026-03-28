@@ -8,7 +8,6 @@ Spec baseline: `specs/api/openapi/v1.yaml` from `retaia-docs@b6eb0447cf3c9d3bf3d
 ### P3. Several runtime services still combine domain orchestration with infrastructure details in the same class
 
 - Representative locations:
-  - [`src/Workflow/Service/BatchWorkflowService.php:192`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Workflow/Service/BatchWorkflowService.php:192)
   - [`src/Command/IngestEnqueueStableCommand.php:103`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Command/IngestEnqueueStableCommand.php:103)
 - Impact:
   - business rules, SQL access and side-effect coordination remain interleaved
@@ -21,5 +20,4 @@ Spec baseline: `specs/api/openapi/v1.yaml` from `retaia-docs@b6eb0447cf3c9d3bf3d
 
 ### Batch 1: continue decomposing remaining god services
 
-- keep reducing SQL / side-effect coordination inside `BatchWorkflowService`
 - split operational command-side logic in `IngestEnqueueStableCommand` into narrower collaborators

@@ -7,10 +7,9 @@ use App\Asset\Repository\AssetRepositoryInterface;
 use App\Asset\Service\AssetStateMachine;
 use App\Asset\Service\StateConflictException;
 use App\Entity\Asset;
-use App\Derived\DerivedFileRepositoryInterface;
 use App\Lock\OperationLockType;
 use App\Lock\Repository\OperationLockRepository;
-use App\Storage\BusinessStorageRegistryInterface;
+use App\Workflow\BatchMoveReportRepositoryInterface;
 use Doctrine\DBAL\Connection;
 
 final class BatchWorkflowService
@@ -20,8 +19,8 @@ final class BatchWorkflowService
         private AssetStateMachine $stateMachine,
         private Connection $connection,
         private OperationLockRepository $locks,
-        private DerivedFileRepositoryInterface $derivedFiles,
-        private ?BusinessStorageRegistryInterface $storageRegistry = null,
+        private BatchMoveReportRepositoryInterface $batchMoveReports,
+        private AssetPurgeStorageService $assetPurgeStorage,
     ) {
     }
 
@@ -115,7 +114,7 @@ final class BatchWorkflowService
             'errors' => $errors,
         ];
 
-        $this->storeBatchReport($batchId, $report);
+        $this->batchMoveReports->store($batchId, $report);
 
         return $report;
     }
@@ -191,18 +190,7 @@ final class BatchWorkflowService
      */
     public function getBatchReport(string $batchId): ?array
     {
-        $row = $this->connection->fetchAssociative(
-            'SELECT payload FROM batch_move_report WHERE batch_id = :batchId',
-            ['batchId' => $batchId]
-        );
-
-        if (!is_array($row) || !is_string($row['payload'] ?? null)) {
-            return null;
-        }
-
-        $decoded = json_decode((string) $row['payload'], true);
-
-        return is_array($decoded) ? $decoded : null;
+        return $this->batchMoveReports->find($batchId);
     }
 
     public function previewPurge(Asset $asset): array
@@ -241,7 +229,7 @@ final class BatchWorkflowService
         }
 
         try {
-            if (!$this->deleteAssetAndDerivedFiles($asset)) {
+            if (!$this->assetPurgeStorage->deleteAssetAndDerivedFiles($asset)) {
                 return false;
             }
             $this->stateMachine->transition($asset, AssetState::PURGED);
@@ -270,107 +258,4 @@ final class BatchWorkflowService
         }));
     }
 
-    /**
-     * @param array<string, mixed> $payload
-     */
-    private function storeBatchReport(string $batchId, array $payload): void
-    {
-        $this->connection->insert('batch_move_report', [
-            'batch_id' => $batchId,
-            'payload' => json_encode($payload, JSON_THROW_ON_ERROR),
-            'created_at' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
-        ]);
-    }
-
-    private function deleteAssetAndDerivedFiles(Asset $asset): bool
-    {
-        $storage = $this->storageForAsset($asset);
-        if ($storage !== null) {
-            $fields = $asset->getFields();
-            $paths = [
-                is_array($fields['paths'] ?? null) ? (string) (($fields['paths']['original_relative'] ?? '')) : '',
-            ];
-            $sidecars = is_array($fields['paths']['sidecars_relative'] ?? null) ? $fields['paths']['sidecars_relative'] : [];
-            foreach ($sidecars as $sidecar) {
-                $paths[] = (string) $sidecar;
-            }
-
-            foreach ($paths as $path) {
-                $normalized = $this->normalizeRelativePath($path);
-                if ($normalized === null) {
-                    continue;
-                }
-
-                try {
-                    $storage->deleteFile($normalized);
-                } catch (\Throwable) {
-                    return false;
-                }
-            }
-        }
-
-        $paths = $this->derivedFiles->listStoragePathsByAsset($asset->getUuid());
-
-        if ($storage !== null) {
-            foreach ($paths as $path) {
-                $storagePath = $this->normalizeRelativePath($path);
-                if ($storagePath === null) {
-                    continue;
-                }
-
-                try {
-                    $storage->deleteFile($storagePath);
-                } catch (\Throwable) {
-                    return false;
-                }
-            }
-        }
-
-        $this->derivedFiles->deleteByAsset($asset->getUuid());
-
-        if ($storage !== null) {
-            foreach ([
-                '.derived/'.$asset->getUuid(),
-                'ARCHIVE/.derived/'.$asset->getUuid(),
-                'REJECTS/.derived/'.$asset->getUuid(),
-                'derived/'.$asset->getUuid(),
-                'ARCHIVE/derived/'.$asset->getUuid(),
-                'REJECTS/derived/'.$asset->getUuid(),
-            ] as $directory) {
-                try {
-                    $storage->deleteDirectory($directory);
-                } catch (\Throwable) {
-                    return false;
-                }
-            }
-        }
-
-        return true;
-    }
-
-    private function normalizeRelativePath(string $path): ?string
-    {
-        $normalized = ltrim(trim($path), '/');
-        if ($normalized === '' || str_contains($normalized, "\0") || str_contains($normalized, '../') || str_contains($normalized, '..\\')) {
-            return null;
-        }
-
-        return $normalized;
-    }
-
-    private function storageForAsset(Asset $asset): ?\App\Storage\BusinessStorageInterface
-    {
-        if (!$this->storageRegistry instanceof BusinessStorageRegistryInterface) {
-            return null;
-        }
-
-        $fields = $asset->getFields();
-        $paths = is_array($fields['paths'] ?? null) ? $fields['paths'] : [];
-        $storageId = trim((string) ($paths['storage_id'] ?? ''));
-        if ($storageId === '') {
-            throw new \RuntimeException(sprintf('Asset %s is missing canonical paths.storage_id.', $asset->getUuid()));
-        }
-
-        return $this->storageRegistry->get($storageId)->storage;
-    }
 }
