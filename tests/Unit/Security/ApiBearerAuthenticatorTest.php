@@ -55,7 +55,7 @@ final class ApiBearerAuthenticatorTest extends TestCase
     {
         $connection = $this->connection();
         $tokenRepository = new TechnicalAccessTokenRepository($connection);
-        $tokenRepository->save(new TechnicalAccessTokenRecord('agent-client', 'client-token', ClientKind::AGENT, time()));
+        $tokenRepository->save(new TechnicalAccessTokenRecord('agent-client', 'client-token', ClientKind::AGENT, 1_700_000_000));
 
         $authenticator = $this->authenticator(
             new UserAccessTokenService(new UserAuthSessionRepository($connection), 'test-secret', 3600),

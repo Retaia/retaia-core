@@ -275,7 +275,6 @@ final class AuthMcpService
         return $client;
     }
 
-    /**
     private function normalizeFingerprint(string $fingerprint): ?string
     {
         $normalized = strtoupper(preg_replace('/\s+/', '', trim($fingerprint)) ?? '');
@@ -295,7 +294,6 @@ final class AuthMcpService
 
     /**
      * Lightweight signature validation until a dedicated OpenPGP library is introduced.
-     *
      */
     private function isValidSignature(string $signature, string $challenge, AuthClientRegistryEntry $client): bool
     {
