@@ -31,13 +31,16 @@ That does not mean the runtime is free of shortcuts. A deeper implementation rev
 
 - Representative locations:
   - [`src/Workflow/Service/BatchWorkflowService.php:192`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Workflow/Service/BatchWorkflowService.php:192)
-  - [`src/Command/IngestEnqueueStableCommand.php:399`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Command/IngestEnqueueStableCommand.php:399)
+  - [`src/Command/IngestEnqueueStableCommand.php:103`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Command/IngestEnqueueStableCommand.php:103)
 - Impact:
   - business rules, SQL access and side-effect coordination remain interleaved
   - these classes are harder to reason about, mock cleanly or replace piecemeal
   - the codebase keeps growing around “god services” instead of stable domain/infrastructure seams
 - Why this is below the target quality bar:
   - the core pattern should be: application service/use case orchestrates, repositories/gateways persist, lower-level adapters handle transport or filesystem concerns
+- Progress already made:
+  - existing proxy materialization and derived-file persistence have been extracted out of `IngestEnqueueStableCommand` into a dedicated service/repository seam
+  - the remaining ingest debt is now mostly asset creation, auxiliary sidecar attachment and job-enqueue orchestration still concentrated in the command
 
 ## Coverage gaps in current tests
 
