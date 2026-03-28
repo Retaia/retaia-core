@@ -660,8 +660,12 @@ final class JobApiTest extends WebTestCase
         $client->disableReboot();
         /** @var Connection $connection */
         $connection = self::getContainer()->get(Connection::class);
+        $this->ensureAuthClientTables($connection);
         $this->ensureUserAuthSessionTable($connection);
         $this->ensureUserTwoFactorStateTable($connection);
+        $connection->executeStatement('DELETE FROM auth_client_access_token');
+        $connection->executeStatement('DELETE FROM auth_device_flow');
+        $connection->executeStatement('DELETE FROM auth_mcp_challenge');
         $connection->executeStatement('DELETE FROM user_auth_session');
         $connection->executeStatement('DELETE FROM user_two_factor_state');
         $cache = self::getContainer()->get('cache.app');

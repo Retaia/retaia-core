@@ -14,6 +14,7 @@ trait ApiAuthClientTrait
     {
         /** @var Connection $connection */
         $connection = static::getContainer()->get(Connection::class);
+        $this->ensureAuthClientTables($connection);
         $this->ensureUserAuthSessionTable($connection);
         $this->ensureUserTwoFactorStateTable($connection);
 
@@ -88,6 +89,7 @@ trait ApiAuthClientTrait
     {
         /** @var Connection $connection */
         $connection = static::getContainer()->get(Connection::class);
+        $this->ensureAuthClientTables($connection);
         $this->ensureUserAuthSessionTable($connection);
         $this->ensureUserTwoFactorStateTable($connection);
         $this->ensureAgentRuntimeTable($connection);

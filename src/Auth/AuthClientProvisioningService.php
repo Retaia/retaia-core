@@ -7,7 +7,7 @@ use App\Domain\AuthClient\ClientKind;
 final class AuthClientProvisioningService
 {
     public function __construct(
-        private AuthClientStateStore $stateStore,
+        private AuthClientRegistryRepositoryInterface $registryRepository,
     ) {
     }
 
@@ -23,12 +23,16 @@ final class AuthClientProvisioningService
         $clientId = strtolower($clientKind).'-'.bin2hex(random_bytes(6));
         $secretKey = bin2hex(random_bytes(24));
 
-        $registry = $this->stateStore->registry();
-        $registry[$clientId] = [
-            'client_kind' => $clientKind,
-            'secret_key' => $secretKey,
-        ];
-        $this->stateStore->saveRegistry($registry);
+        $this->registryRepository->save(new AuthClientRegistryEntry(
+            $clientId,
+            $clientKind,
+            $secretKey,
+            null,
+            null,
+            null,
+            null,
+            null,
+        ));
 
         return [
             'client_id' => $clientId,
