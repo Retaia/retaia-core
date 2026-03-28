@@ -2,16 +2,16 @@
 
 namespace App\Tests\Unit\Api;
 
-use App\Api\Service\AgentSignature\AgentPublicKeyStore;
-use App\Api\Service\AgentSignature\AgentRequestSignatureVerifier;
-use App\Api\Service\AgentSignature\AgentSignatureNonceStore;
-use App\Api\Service\AgentSignature\SignedAgentMessageCanonicalizer;
 use App\Api\Service\AgentRuntimeStore;
+use App\Api\Service\AgentSignature\AgentPublicKeyRecord;
+use App\Api\Service\AgentSignature\AgentPublicKeyRepository;
+use App\Api\Service\AgentSignature\AgentRequestSignatureVerifier;
+use App\Api\Service\AgentSignature\AgentSignatureNonceRepository;
+use App\Api\Service\AgentSignature\SignedAgentMessageCanonicalizer;
 use App\Api\Service\SignedAgentRequestValidator;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\HttpFoundation\Request;
 
 final class SignedAgentRequestValidatorTest extends TestCase
@@ -41,12 +41,12 @@ final class SignedAgentRequestValidatorTest extends TestCase
 
     public function testRejectsForgedSignature(): void
     {
-        $store = $this->keyStore();
-        $store->register(self::agentId(), self::fingerprint(), 'public-key');
+        $store = $this->publicKeyRepository();
+        $store->save(new AgentPublicKeyRecord(self::agentId(), self::fingerprint(), 'public-key', 1710000000));
         $validator = new SignedAgentRequestValidator(
             $store,
             new AlwaysInvalidVerifier(),
-            new AgentSignatureNonceStore(new ArrayAdapter()),
+            $this->nonceRepository(),
             new SignedAgentMessageCanonicalizer(),
             $this->runtimeStore(),
         );
@@ -59,12 +59,12 @@ final class SignedAgentRequestValidatorTest extends TestCase
 
     public function testRejectsReplayNonce(): void
     {
-        $store = $this->keyStore();
-        $store->register(self::agentId(), self::fingerprint(), 'public-key');
+        $store = $this->publicKeyRepository();
+        $store->save(new AgentPublicKeyRecord(self::agentId(), self::fingerprint(), 'public-key', 1710000000));
         $validator = new SignedAgentRequestValidator(
             $store,
             new AlwaysValidVerifier(),
-            new AgentSignatureNonceStore(new ArrayAdapter()),
+            $this->nonceRepository(),
             new SignedAgentMessageCanonicalizer(),
             $this->runtimeStore(),
         );
@@ -89,17 +89,22 @@ final class SignedAgentRequestValidatorTest extends TestCase
     private function validator(AgentRequestSignatureVerifier $verifier): SignedAgentRequestValidator
     {
         return new SignedAgentRequestValidator(
-            $this->keyStore(),
+            $this->publicKeyRepository(),
             $verifier,
-            new AgentSignatureNonceStore(new ArrayAdapter()),
+            $this->nonceRepository(),
             new SignedAgentMessageCanonicalizer(),
             $this->runtimeStore(),
         );
     }
 
-    private function keyStore(): AgentPublicKeyStore
+    private function publicKeyRepository(): AgentPublicKeyRepository
     {
-        return new AgentPublicKeyStore(new ArrayAdapter());
+        return new AgentPublicKeyRepository($this->connection());
+    }
+
+    private function nonceRepository(): AgentSignatureNonceRepository
+    {
+        return new AgentSignatureNonceRepository($this->connection());
     }
 
     private function runtimeStore(): AgentRuntimeStore
@@ -114,6 +119,9 @@ final class SignedAgentRequestValidatorTest extends TestCase
             'memory' => true,
         ]);
         $connection->executeStatement("CREATE TABLE agent_runtime (agent_id VARCHAR(36) PRIMARY KEY NOT NULL, client_id VARCHAR(64) NOT NULL, agent_name VARCHAR(255) NOT NULL, agent_version VARCHAR(64) NOT NULL, os_name VARCHAR(32) DEFAULT NULL, os_version VARCHAR(64) DEFAULT NULL, arch VARCHAR(32) DEFAULT NULL, effective_capabilities CLOB NOT NULL, capability_warnings CLOB NOT NULL, last_register_at DATETIME NOT NULL, last_seen_at DATETIME NOT NULL, last_heartbeat_at DATETIME DEFAULT NULL, max_parallel_jobs INTEGER NOT NULL, feature_flags_contract_version VARCHAR(32) DEFAULT NULL, effective_feature_flags_contract_version VARCHAR(32) DEFAULT NULL, server_time_skew_seconds INTEGER DEFAULT NULL)");
+        $connection->executeStatement('CREATE TABLE agent_public_key (agent_id VARCHAR(36) PRIMARY KEY NOT NULL, openpgp_fingerprint VARCHAR(40) NOT NULL, openpgp_public_key CLOB NOT NULL, updated_at INTEGER NOT NULL)');
+        $connection->executeStatement('CREATE TABLE agent_signature_nonce (nonce_key VARCHAR(64) PRIMARY KEY NOT NULL, agent_id VARCHAR(36) NOT NULL, expires_at INTEGER NOT NULL, consumed_at INTEGER NOT NULL)');
+        $connection->executeStatement('CREATE INDEX idx_agent_signature_nonce_expires_at ON agent_signature_nonce (expires_at)');
 
         return $connection;
     }

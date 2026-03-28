@@ -23,34 +23,11 @@ Important context:
 
 No concrete OpenAPI path/schema drift remains identified in this snapshot.
 
-That does not mean the runtime is free of shortcuts. A deeper implementation review still shows several production-grade quick fixes and minimal implementations that should be treated as active engineering debt, especially around remaining agent-signing persistence, MCP signature semantics and operational projections.
+That does not mean the runtime is free of shortcuts. A deeper implementation review still shows several production-grade quick fixes and minimal implementations that should be treated as active engineering debt, especially around MCP signature semantics, operational projections and a few remaining structural boundaries.
 
-The codebase also still contains several structural shortcuts that are below the quality bar expected for long-lived core runtime code: cache-backed security stores with no repository boundary, production code that still masks infrastructure failures too broadly, and operational projections coupled directly to transport/controller concerns.
+The codebase also still contains several structural shortcuts that are below the quality bar expected for long-lived core runtime code: production code that still masks infrastructure failures too broadly, DB-backed runtime persistence still exposed as ad hoc stores, and operational projections coupled directly to transport/controller concerns.
 
 ## Findings
-
-### P1. Agent public keys are still stored in `cache.app`
-
-- Runtime location: [`src/Api/Service/AgentSignature/AgentPublicKeyStore.php:8`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentSignature/AgentPublicKeyStore.php:8)
-- Critical lines: [`src/Api/Service/AgentSignature/AgentPublicKeyStore.php:12`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentSignature/AgentPublicKeyStore.php:12), [`src/Api/Service/AgentSignature/AgentPublicKeyStore.php:34`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentSignature/AgentPublicKeyStore.php:34), [`src/Api/Service/AgentSignature/AgentPublicKeyStore.php:66`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentSignature/AgentPublicKeyStore.php:66)
-- Impact:
-  - registered agent keys disappear on cache flush or restart
-  - multi-node behavior depends on cache topology rather than explicit persistence
-  - signed agent requests can fail after a perfectly valid previous registration
-- Why this is a quick fix:
-  - the runtime now persists `agent_runtime` in DB, but the key material required to validate the same agent is still only cache-backed
-  - this is not a stable source of truth for a security-sensitive registry
-
-### P1. Signature replay protection is only cache-backed
-
-- Runtime location: [`src/Api/Service/AgentSignature/AgentSignatureNonceStore.php:8`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentSignature/AgentSignatureNonceStore.php:8)
-- Critical lines: [`src/Api/Service/AgentSignature/AgentSignatureNonceStore.php:10`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentSignature/AgentSignatureNonceStore.php:10), [`src/Api/Service/AgentSignature/AgentSignatureNonceStore.php:24`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentSignature/AgentSignatureNonceStore.php:24)
-- Impact:
-  - replay protection is best-effort if the cache is local or volatile
-  - a restart reopens the replay window
-  - a multi-node topology can accept the same nonce on two different API nodes if the cache is not strongly shared
-- Why this is a quick fix:
-  - it closes the happy-path security story locally, but not with the guarantees expected from a real replay-protection store
 
 ### P2. MCP signature validation is still explicitly lightweight and non-OpenPGP
 
@@ -91,19 +68,6 @@ The codebase also still contains several structural shortcuts that are below the
   - purge/ingest can report success while some persistence-side effects are skipped
 - Why this is a quick fix:
   - test-environment resilience is implemented directly in production code paths through broad `catch (\Throwable)`
-
-### P2. Agent signing still lacks repository-grade boundaries around trust material and replay state
-
-- Runtime locations:
-  - [`src/Api/Service/AgentSignature/AgentPublicKeyStore.php:8`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentSignature/AgentPublicKeyStore.php:8)
-  - [`src/Api/Service/AgentSignature/AgentSignatureNonceStore.php:8`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentSignature/AgentSignatureNonceStore.php:8)
-  - [`src/Api/Service/SignedAgentRequestValidator.php:14`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/SignedAgentRequestValidator.php:14)
-- Impact:
-  - the validator still speaks directly to cache-shaped stores and transport headers
-  - trust material, replay control and request validation are coupled too early in the stack
-  - it is harder to evolve toward durable storage, auditing and stronger verification semantics independently
-- Why this is below the target quality bar:
-  - key registry and nonce consumption should sit behind repository/port interfaces, with the request validator focused on HTTP validation/orchestration only
 
 ### P3. `AgentRuntimeStore` is DB-backed but still acts as an ad hoc persistence layer instead of a repository
 
@@ -160,26 +124,17 @@ No remaining secondary gap is tracked in this snapshot.
 
 ## Recommended remediation order
 
-### Batch 1: auth state persistence hardening
-
-- move `AgentPublicKeyStore` to a persistent DB-backed repository
-- move `AgentSignatureNonceStore` to a durable/shared atomic store
-
-### Batch 2: agent-signing persistence hardening
-
-- keep the current GPG verification path, but stop depending on volatile cache state for trust and replay guarantees
-
-### Batch 3: introduce missing repository boundaries on already-persistent runtime state
+### Batch 1: introduce missing repository boundaries on already-persistent runtime state
 
 - promote/split `AgentRuntimeStore` into a repository and, if needed, a projection layer
 - stop adding new DB-backed “service/store” classes without an explicit persistence boundary
 
-### Batch 4: remove prod-path “minimal test schema” fallbacks
+### Batch 2: remove prod-path “minimal test schema” fallbacks
 
 - replace broad `catch (\Throwable)` masking with explicit optional-table handling or environment-scoped test helpers
 - make ingest/purge fail loudly when prod persistence is inconsistent
 
-### Batch 5: finish the operational model behind `/ops/agents`
+### Batch 3: finish the operational model behind `/ops/agents`
 
 - introduce a proper technical `client_id` model for registered agents
 - add enough job execution history to populate `current_job`, `last_successful_job`, and `last_failed_job` without inventing timestamps

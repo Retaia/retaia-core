@@ -2,9 +2,9 @@
 
 namespace App\Api\Service;
 
-use App\Api\Service\AgentSignature\AgentPublicKeyStore;
+use App\Api\Service\AgentSignature\AgentPublicKeyRepositoryInterface;
 use App\Api\Service\AgentSignature\AgentRequestSignatureVerifier;
-use App\Api\Service\AgentSignature\AgentSignatureNonceStore;
+use App\Api\Service\AgentSignature\AgentSignatureNonceRepositoryInterface;
 use App\Api\Service\AgentSignature\SignedAgentMessageCanonicalizer;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -15,9 +15,9 @@ final class SignedAgentRequestValidator
     private const SIGNATURE_TTL_SECONDS = 300;
 
     public function __construct(
-        private AgentPublicKeyStore $publicKeyStore,
+        private AgentPublicKeyRepositoryInterface $publicKeyRepository,
         private AgentRequestSignatureVerifier $signatureVerifier,
-        private AgentSignatureNonceStore $nonceStore,
+        private AgentSignatureNonceRepositoryInterface $nonceRepository,
         private SignedAgentMessageCanonicalizer $messageCanonicalizer,
         private AgentRuntimeStore $agentRuntimeStore,
     ) {
@@ -76,7 +76,7 @@ final class SignedAgentRequestValidator
 
         $publicKey = trim((string) ($payload['openpgp_public_key'] ?? ''));
         if ($publicKey === '') {
-            $publicKey = (string) ($this->publicKeyStore->publicKeyFor($headerAgentId, $normalizedHeaderFingerprint) ?? '');
+            $publicKey = (string) ($this->publicKeyRepository->findByAgentIdAndFingerprint($headerAgentId, $normalizedHeaderFingerprint)?->publicKey ?? '');
         }
         if ($publicKey === '') {
             return $this->unauthorizedResponse(['X-Retaia-OpenPGP-Fingerprint']);
@@ -89,7 +89,7 @@ final class SignedAgentRequestValidator
         }
 
         $nonce = trim((string) $request->headers->get('X-Retaia-Signature-Nonce', ''));
-        if (!$this->nonceStore->consume($headerAgentId, $nonce, self::SIGNATURE_TTL_SECONDS)) {
+        if (!$this->nonceRepository->consume($headerAgentId, $nonce, self::SIGNATURE_TTL_SECONDS)) {
             return $this->unauthorizedResponse(['X-Retaia-Signature-Nonce']);
         }
 

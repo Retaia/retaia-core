@@ -4,8 +4,9 @@ namespace App\Tests\Unit\Controller;
 
 use App\Api\Service\AssetRequestPreconditionService;
 use App\Api\Service\AgentRuntimeStore;
-use App\Api\Service\AgentSignature\AgentPublicKeyStore;
-use App\Api\Service\AgentSignature\AgentSignatureNonceStore;
+use App\Api\Service\AgentSignature\AgentPublicKeyRecord;
+use App\Api\Service\AgentSignature\AgentPublicKeyRepository;
+use App\Api\Service\AgentSignature\AgentSignatureNonceRepository;
 use App\Api\Service\AgentSignature\GpgCliAgentRequestSignatureVerifier;
 use App\Api\Service\AgentSignature\SignedAgentMessageCanonicalizer;
 use App\Api\Service\SignedAgentRequestValidator;
@@ -23,9 +24,9 @@ use App\Controller\Api\DerivedController;
 use App\Entity\Asset;
 use App\Tests\Support\AgentSigningTestHelper;
 use App\Tests\Support\InMemoryDerivedGateway;
+use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Contracts\Translation\TranslatorInterface;
@@ -106,15 +107,16 @@ final class DerivedControllerTest extends TestCase
             }
         };
 
-        $store = new AgentPublicKeyStore(new ArrayAdapter());
+        $connection = $this->connection();
+        $store = new AgentPublicKeyRepository($connection);
         $material = AgentSigningTestHelper::publicMaterial();
-        $store->register($material['agent_id'], $material['fingerprint'], $material['public_key']);
+        $store->save(new AgentPublicKeyRecord($material['agent_id'], $material['fingerprint'], $material['public_key'], 1710000000));
         $validator = new SignedAgentRequestValidator(
             $store,
             new GpgCliAgentRequestSignatureVerifier(),
-            new AgentSignatureNonceStore(new ArrayAdapter()),
+            new AgentSignatureNonceRepository($connection),
             new SignedAgentMessageCanonicalizer(),
-            $this->runtimeStore(),
+            new AgentRuntimeStore($connection),
         );
 
         return new DerivedController(
@@ -168,15 +170,17 @@ final class DerivedControllerTest extends TestCase
         return $translator;
     }
 
-    private function runtimeStore(): AgentRuntimeStore
+    private function connection(): Connection
     {
         $connection = DriverManager::getConnection([
             'driver' => 'pdo_sqlite',
             'memory' => true,
         ]);
         $connection->executeStatement("CREATE TABLE agent_runtime (agent_id VARCHAR(36) PRIMARY KEY NOT NULL, client_id VARCHAR(64) NOT NULL, agent_name VARCHAR(255) NOT NULL, agent_version VARCHAR(64) NOT NULL, os_name VARCHAR(32) DEFAULT NULL, os_version VARCHAR(64) DEFAULT NULL, arch VARCHAR(32) DEFAULT NULL, effective_capabilities CLOB NOT NULL, capability_warnings CLOB NOT NULL, last_register_at DATETIME NOT NULL, last_seen_at DATETIME NOT NULL, last_heartbeat_at DATETIME DEFAULT NULL, max_parallel_jobs INTEGER NOT NULL, feature_flags_contract_version VARCHAR(32) DEFAULT NULL, effective_feature_flags_contract_version VARCHAR(32) DEFAULT NULL, server_time_skew_seconds INTEGER DEFAULT NULL)");
+        $connection->executeStatement('CREATE TABLE agent_public_key (agent_id VARCHAR(36) PRIMARY KEY NOT NULL, openpgp_fingerprint VARCHAR(40) NOT NULL, openpgp_public_key CLOB NOT NULL, updated_at INTEGER NOT NULL)');
+        $connection->executeStatement('CREATE TABLE agent_signature_nonce (nonce_key VARCHAR(64) PRIMARY KEY NOT NULL, agent_id VARCHAR(36) NOT NULL, expires_at INTEGER NOT NULL, consumed_at INTEGER NOT NULL)');
+        $connection->executeStatement('CREATE INDEX idx_agent_signature_nonce_expires_at ON agent_signature_nonce (expires_at)');
 
-        return new AgentRuntimeStore($connection);
+        return $connection;
     }
-
 }

@@ -2,7 +2,8 @@
 
 namespace App\Application\Agent;
 
-use App\Api\Service\AgentSignature\AgentPublicKeyStore;
+use App\Api\Service\AgentSignature\AgentPublicKeyRecord;
+use App\Api\Service\AgentSignature\AgentPublicKeyRepositoryInterface;
 use App\Api\Service\AgentRuntimeStore;
 use App\Application\Auth\ResolveAuthenticatedUserResult;
 use App\Application\Auth\ResolveAuthenticatedUserUseCase;
@@ -12,7 +13,7 @@ final class RegisterAgentEndpointHandler
     public function __construct(
         private RegisterAgentUseCase $registerAgentHandler,
         private ResolveAuthenticatedUserUseCase $resolveAuthenticatedUserHandler,
-        private AgentPublicKeyStore $agentPublicKeyStore,
+        private AgentPublicKeyRepositoryInterface $agentPublicKeyRepository,
         private AgentRuntimeStore $agentRuntimeStore,
     ) {
     }
@@ -62,7 +63,12 @@ final class RegisterAgentEndpointHandler
             );
         }
 
-        $this->agentPublicKeyStore->register($agentId, $openPgpFingerprint, $openPgpPublicKey);
+        $this->agentPublicKeyRepository->save(new AgentPublicKeyRecord(
+            $agentId,
+            strtoupper(preg_replace('/\s+/', '', $openPgpFingerprint) ?? ''),
+            $openPgpPublicKey,
+            time(),
+        ));
         $resultPayload = $result->payload() ?? [];
         $serverPolicy = is_array($resultPayload['server_policy'] ?? null) ? $resultPayload['server_policy'] : [];
         $this->agentRuntimeStore->register([

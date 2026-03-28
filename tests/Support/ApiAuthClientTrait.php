@@ -93,5 +93,6 @@ trait ApiAuthClientTrait
         $this->ensureUserAuthSessionTable($connection);
         $this->ensureUserTwoFactorStateTable($connection);
         $this->ensureAgentRuntimeTable($connection);
+        $this->ensureAgentSignatureTables($connection);
     }
 }
