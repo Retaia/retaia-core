@@ -132,12 +132,23 @@ Required keys:
 
 - `APP_STORAGE_IDS`: comma-separated storage ids
 - `APP_STORAGE_DEFAULT_ID`: default storage id when multiple storages exist
-- `APP_STORAGE_<ID>_DRIVER`: currently `local`
-- `APP_STORAGE_<ID>_ROOT_PATH`: storage root path
+- `APP_STORAGE_<ID>_DRIVER`: `local` or `smb`
 - `APP_STORAGE_<ID>_WATCH_DIRECTORY`: relative ingest watch directory inside that storage
 
 Optional keys per storage:
 
+- For `local`:
+  - `APP_STORAGE_<ID>_ROOT_PATH`: storage root path
+- For `smb`:
+  - `APP_STORAGE_<ID>_HOST`
+  - `APP_STORAGE_<ID>_SHARE`
+  - `APP_STORAGE_<ID>_USERNAME`
+  - `APP_STORAGE_<ID>_PASSWORD`
+  - `APP_STORAGE_<ID>_ROOT_PATH`: optional prefix path inside the share
+  - `APP_STORAGE_<ID>_WORKGROUP`
+  - `APP_STORAGE_<ID>_TIMEOUT_SECONDS`
+  - `APP_STORAGE_<ID>_SMB_VERSION_MIN`
+  - `APP_STORAGE_<ID>_SMB_VERSION_MAX`
 - `APP_STORAGE_<ID>_INGEST_ENABLED`: `1` or `0`
 - `APP_STORAGE_<ID>_MANAGED_DIRECTORIES`: comma-separated managed relative directories
 
@@ -166,6 +177,28 @@ APP_STORAGE_NAS_ALT_ROOT_PATH=/mnt/retaia-alt
 APP_STORAGE_NAS_ALT_WATCH_DIRECTORY=INBOX
 APP_STORAGE_NAS_ALT_INGEST_ENABLED=0
 ```
+
+SMB-backed example:
+
+```dotenv
+APP_STORAGE_IDS=nas-main
+APP_STORAGE_DEFAULT_ID=nas-main
+APP_STORAGE_NAS_MAIN_DRIVER=smb
+APP_STORAGE_NAS_MAIN_HOST=fileserver.local
+APP_STORAGE_NAS_MAIN_SHARE=media
+APP_STORAGE_NAS_MAIN_ROOT_PATH=retaia
+APP_STORAGE_NAS_MAIN_WATCH_DIRECTORY=INBOX
+APP_STORAGE_NAS_MAIN_USERNAME=retaia
+APP_STORAGE_NAS_MAIN_PASSWORD=change-me
+APP_STORAGE_NAS_MAIN_WORKGROUP=WORKGROUP
+APP_STORAGE_NAS_MAIN_TIMEOUT_SECONDS=20
+APP_STORAGE_NAS_MAIN_SMB_VERSION_MIN=SMB2
+APP_STORAGE_NAS_MAIN_SMB_VERSION_MAX=SMB3_11
+```
+
+Runtime note:
+
+- the production image installs `samba-client`, which provides the `smbclient` binary required by the SMB Flysystem adapter
 
 ## Ingest Polling
 

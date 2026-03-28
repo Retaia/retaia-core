@@ -10,6 +10,7 @@
         "doctrine/doctrine-bundle": "^3.2",
         "doctrine/doctrine-migrations-bundle": "^4.0",
         "doctrine/orm": "^3.6",
+        "jerodev/flysystem-v3-smb-adapter": "^1.2",
         "lcobucci/jwt": "^5.5",
         "league/flysystem": "^3.29",
         "league/flysystem-local": "^3.29",

@@ -36,9 +36,20 @@ Variables storage metier :
 
 - `APP_STORAGE_IDS`: liste des storages declares, separes par des virgules
 - `APP_STORAGE_DEFAULT_ID`: storage par defaut
-- `APP_STORAGE_<ID>_DRIVER`: backend du storage (`local` aujourd'hui)
-- `APP_STORAGE_<ID>_ROOT_PATH`: racine du storage dans le conteneur
+- `APP_STORAGE_<ID>_DRIVER`: backend du storage (`local` ou `smb`)
 - `APP_STORAGE_<ID>_WATCH_DIRECTORY`: dossier de polling relatif a la racine
+- si `DRIVER=local` :
+  - `APP_STORAGE_<ID>_ROOT_PATH`: racine du storage dans le conteneur
+- si `DRIVER=smb` :
+  - `APP_STORAGE_<ID>_HOST`
+  - `APP_STORAGE_<ID>_SHARE`
+  - `APP_STORAGE_<ID>_USERNAME`
+  - `APP_STORAGE_<ID>_PASSWORD`
+  - optionnel : `APP_STORAGE_<ID>_ROOT_PATH` (prefixe dans le share)
+  - optionnel : `APP_STORAGE_<ID>_WORKGROUP`
+  - optionnel : `APP_STORAGE_<ID>_TIMEOUT_SECONDS`
+  - optionnel : `APP_STORAGE_<ID>_SMB_VERSION_MIN`
+  - optionnel : `APP_STORAGE_<ID>_SMB_VERSION_MAX`
 - `APP_STORAGE_<ID>_INGEST_ENABLED`: optionnel, `1` ou `0`
 - `APP_STORAGE_<ID>_MANAGED_DIRECTORIES`: optionnel, liste de repertoires geres
 
@@ -50,6 +61,24 @@ export APP_STORAGE_DEFAULT_ID=nas-main
 export APP_STORAGE_NAS_MAIN_DRIVER=local
 export APP_STORAGE_NAS_MAIN_ROOT_PATH=/var/local/RETAIA
 export APP_STORAGE_NAS_MAIN_WATCH_DIRECTORY=INBOX
+```
+
+Exemple SMB :
+
+```bash
+export APP_STORAGE_IDS=nas-main
+export APP_STORAGE_DEFAULT_ID=nas-main
+export APP_STORAGE_NAS_MAIN_DRIVER=smb
+export APP_STORAGE_NAS_MAIN_HOST=fileserver.local
+export APP_STORAGE_NAS_MAIN_SHARE=media
+export APP_STORAGE_NAS_MAIN_ROOT_PATH=retaia
+export APP_STORAGE_NAS_MAIN_WATCH_DIRECTORY=INBOX
+export APP_STORAGE_NAS_MAIN_USERNAME=retaia
+export APP_STORAGE_NAS_MAIN_PASSWORD=change-me
+export APP_STORAGE_NAS_MAIN_WORKGROUP=WORKGROUP
+export APP_STORAGE_NAS_MAIN_TIMEOUT_SECONDS=20
+export APP_STORAGE_NAS_MAIN_SMB_VERSION_MIN=SMB2
+export APP_STORAGE_NAS_MAIN_SMB_VERSION_MAX=SMB3_11
 ```
 
 Structure attendue cote hote dans `RETAIA_INGEST_HOST_DIR`:
