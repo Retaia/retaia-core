@@ -8,6 +8,7 @@ use App\Derived\DerivedFileRepositoryInterface;
 use App\Entity\Asset;
 use App\Ingest\Repository\IngestDiagnosticsRepository;
 use App\Ingest\Service\ExistingProxyAttachmentService;
+use App\Ingest\Service\ExistingProxyFilesystemInterface;
 use App\Ingest\Service\WatchPathResolver;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
@@ -17,12 +18,14 @@ final class ExistingProxyAttachmentServiceTest extends TestCase
 {
     public function testCanUseReturnsTrueWhenProxyFileExists(): void
     {
-        $root = sys_get_temp_dir().'/retaia-existing-proxy-'.bin2hex(random_bytes(4));
-        mkdir($root.'/INBOX', 0777, true);
-        file_put_contents($root.'/INBOX/proxy.mp4', 'proxy-data');
+        $root = $this->projectRoot();
+        $filesystem = $this->createMock(ExistingProxyFilesystemInterface::class);
+        $filesystem->expects(self::once())->method('isFile')->with($root, 'INBOX/proxy.mp4')->willReturn(true);
+        $filesystem->expects(self::once())->method('fileSize')->with($root, 'INBOX/proxy.mp4')->willReturn(10);
 
         $service = new ExistingProxyAttachmentService(
-            $this->watchPathResolver($root),
+            $this->watchPathResolver(),
+            $filesystem,
             $this->diagnosticsRepository(),
             $this->createMock(AssetRepositoryInterface::class),
             $this->createMock(DerivedFileRepositoryInterface::class),
@@ -38,10 +41,7 @@ final class ExistingProxyAttachmentServiceTest extends TestCase
 
     public function testAttachToAssetMaterializesProxyAndUpdatesFields(): void
     {
-        $root = sys_get_temp_dir().'/retaia-attach-proxy-'.bin2hex(random_bytes(4));
-        mkdir($root.'/INBOX', 0777, true);
-        file_put_contents($root.'/INBOX/proxy.jpg', 'proxy-data');
-
+        $root = $this->projectRoot();
         $asset = new Asset(
             uuid: 'asset-1',
             mediaType: 'PHOTO',
@@ -68,8 +68,27 @@ final class ExistingProxyAttachmentServiceTest extends TestCase
             '.derived/asset-1/proxy.jpg',
         );
 
+        $filesystem = $this->createMock(ExistingProxyFilesystemInterface::class);
+        $filesystem->expects(self::once())
+            ->method('materializeToDerived')
+            ->with($root, 'asset-1', 'proxy_photo', 'INBOX/proxy.jpg')
+            ->willReturn('.derived/asset-1/proxy.jpg');
+        $filesystem->expects(self::exactly(2))
+            ->method('isFile')
+            ->with($root, '.derived/asset-1/proxy.jpg')
+            ->willReturn(true);
+        $filesystem->expects(self::once())
+            ->method('fileSize')
+            ->with($root, '.derived/asset-1/proxy.jpg')
+            ->willReturn(10);
+        $filesystem->expects(self::once())
+            ->method('hashSha256')
+            ->with($root, '.derived/asset-1/proxy.jpg')
+            ->willReturn('hash');
+
         $service = new ExistingProxyAttachmentService(
-            $this->watchPathResolver($root),
+            $this->watchPathResolver(),
+            $filesystem,
             $this->diagnosticsRepository(),
             $assets,
             $derivedFiles,
@@ -85,23 +104,32 @@ final class ExistingProxyAttachmentServiceTest extends TestCase
         self::assertTrue((bool) ($asset->getFields()['proxy_done'] ?? false));
         self::assertContains('.derived/asset-1/proxy.jpg', $asset->getFields()['paths']['sidecars_relative'] ?? []);
         self::assertStringContainsString('/api/v1/assets/asset-1/derived/proxy_photo', (string) ($asset->getFields()['derived']['proxy_photo_url'] ?? ''));
-        self::assertFileExists($root.'/.derived/asset-1/proxy.jpg');
-        self::assertFileDoesNotExist($root.'/INBOX/proxy.jpg');
     }
 
     public function testCanUseFallsBackToExistingDerivedFile(): void
     {
-        $root = sys_get_temp_dir().'/retaia-existing-derived-'.bin2hex(random_bytes(4));
-        mkdir($root.'/INBOX', 0777, true);
-        mkdir($root.'/.derived/asset-1', 0777, true);
-        file_put_contents($root.'/.derived/asset-1/proxy.mp4', 'proxy-data');
-
+        $root = $this->projectRoot();
         $derivedFiles = $this->createMock(DerivedFileRepositoryInterface::class);
         $derivedFiles->expects(self::once())->method('findLatestByAssetAndKind')->with('asset-1', 'proxy_video')
             ->willReturn(new DerivedFile('d-1', 'asset-1', 'proxy_video', 'video/mp4', 10, 'hash', '.derived/asset-1/proxy.mp4', new \DateTimeImmutable()));
 
+        $filesystem = $this->createMock(ExistingProxyFilesystemInterface::class);
+        $filesystem->expects(self::exactly(2))
+            ->method('isFile')
+            ->willReturnCallback(static function (string $actualRoot, string $relativePath) use ($root): bool {
+                TestCase::assertSame($root, $actualRoot);
+
+                return match ($relativePath) {
+                    'INBOX/missing.mp4' => false,
+                    '.derived/asset-1/proxy.mp4' => true,
+                    default => throw new \LogicException(sprintf('Unexpected path %s', $relativePath)),
+                };
+            });
+        $filesystem->expects(self::once())->method('fileSize')->with($root, '.derived/asset-1/proxy.mp4')->willReturn(10);
+
         $service = new ExistingProxyAttachmentService(
-            $this->watchPathResolver($root),
+            $this->watchPathResolver(),
+            $filesystem,
             $this->diagnosticsRepository(),
             $this->createMock(AssetRepositoryInterface::class),
             $derivedFiles,
@@ -115,9 +143,14 @@ final class ExistingProxyAttachmentServiceTest extends TestCase
         ], 'asset-1'));
     }
 
-    private function watchPathResolver(string $root): WatchPathResolver
+    private function watchPathResolver(): WatchPathResolver
     {
-        return new WatchPathResolver($root, 'INBOX');
+        return new WatchPathResolver($this->projectRoot(), 'src');
+    }
+
+    private function projectRoot(): string
+    {
+        return dirname(__DIR__, 4);
     }
 
     private function diagnosticsRepository(): IngestDiagnosticsRepository

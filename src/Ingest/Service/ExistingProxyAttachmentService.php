@@ -11,6 +11,7 @@ final class ExistingProxyAttachmentService
 {
     public function __construct(
         private WatchPathResolver $watchPathResolver,
+        private ExistingProxyFilesystemInterface $filesystem,
         private IngestDiagnosticsRepository $ingestDiagnostics,
         private AssetRepositoryInterface $assets,
         private DerivedFileRepositoryInterface $derivedFiles,
@@ -29,12 +30,8 @@ final class ExistingProxyAttachmentService
         }
 
         $root = rtrim($this->watchPathResolver->resolveRoot(), DIRECTORY_SEPARATOR);
-        $absolutePath = $root.DIRECTORY_SEPARATOR.$path;
-        if (is_file($absolutePath)) {
-            $size = filesize($absolutePath);
-            if (is_int($size) && $size > 0) {
-                return true;
-            }
+        if ($this->filesystem->isFile($root, $path)) {
+            return $this->filesystem->fileSize($root, $path) > 0;
         }
 
         $existing = $this->derivedFiles->findLatestByAssetAndKind($assetUuid, $kind);
@@ -42,14 +39,11 @@ final class ExistingProxyAttachmentService
             return false;
         }
 
-        $derivedAbsolutePath = $root.DIRECTORY_SEPARATOR.$existing->storagePath;
-        if (!is_file($derivedAbsolutePath)) {
+        if (!$this->filesystem->isFile($root, $existing->storagePath)) {
             return false;
         }
 
-        $derivedSize = filesize($derivedAbsolutePath);
-
-        return is_int($derivedSize) && $derivedSize > 0;
+        return $this->filesystem->fileSize($root, $existing->storagePath) > 0;
     }
 
     /**
@@ -110,10 +104,9 @@ final class ExistingProxyAttachmentService
     private function persistDerivedFile(string $assetUuid, string $kind, string $proxyPath): string
     {
         $root = rtrim($this->watchPathResolver->resolveRoot(), DIRECTORY_SEPARATOR);
-        $storagePath = $this->materializeExistingProxyToDerived($root, $assetUuid, $kind, $proxyPath);
-        $absolutePath = $root.DIRECTORY_SEPARATOR.$storagePath;
-        $size = is_file($absolutePath) ? filesize($absolutePath) : 0;
-        $sha256 = is_file($absolutePath) ? hash_file('sha256', $absolutePath) : null;
+        $storagePath = $this->filesystem->materializeToDerived($root, $assetUuid, $kind, $proxyPath);
+        $size = $this->filesystem->isFile($root, $storagePath) ? $this->filesystem->fileSize($root, $storagePath) : 0;
+        $sha256 = $this->filesystem->isFile($root, $storagePath) ? $this->filesystem->hashSha256($root, $storagePath) : null;
 
         $this->derivedFiles->upsertMaterialized(
             $assetUuid,
@@ -136,43 +129,5 @@ final class ExistingProxyAttachmentService
             'proxy_audio' => in_array($ext, ['mp3'], true) ? 'audio/mpeg' : 'audio/mp4',
             default => 'video/mp4',
         };
-    }
-
-    private function materializeExistingProxyToDerived(string $root, string $assetUuid, string $kind, string $proxyPath): string
-    {
-        $baseName = pathinfo($proxyPath, PATHINFO_FILENAME);
-        $extension = strtolower(pathinfo($proxyPath, PATHINFO_EXTENSION));
-        if ($extension === 'lrf') {
-            $extension = 'mp4';
-        }
-
-        $safeName = preg_replace('/[^A-Za-z0-9._-]+/', '_', $baseName) ?: $kind;
-        $targetFileName = $safeName.'.'.$extension;
-        $targetStoragePath = sprintf('.derived/%s/%s', $assetUuid, $targetFileName);
-        $targetAbsolutePath = $root.DIRECTORY_SEPARATOR.$targetStoragePath;
-
-        if (!is_dir(dirname($targetAbsolutePath)) && !mkdir(dirname($targetAbsolutePath), 0777, true) && !is_dir(dirname($targetAbsolutePath))) {
-            throw new \RuntimeException(sprintf('Unable to create derived directory for %s', $targetStoragePath));
-        }
-
-        if (is_file($targetAbsolutePath)) {
-            return $targetStoragePath;
-        }
-
-        $sourceAbsolutePath = $root.DIRECTORY_SEPARATOR.$proxyPath;
-        if (!is_file($sourceAbsolutePath)) {
-            throw new \RuntimeException(sprintf('Proxy source file not found: %s', $proxyPath));
-        }
-
-        if (@rename($sourceAbsolutePath, $targetAbsolutePath)) {
-            return $targetStoragePath;
-        }
-
-        if (!@copy($sourceAbsolutePath, $targetAbsolutePath)) {
-            throw new \RuntimeException(sprintf('Unable to move proxy %s into %s', $proxyPath, $targetStoragePath));
-        }
-        @unlink($sourceAbsolutePath);
-
-        return $targetStoragePath;
     }
 }

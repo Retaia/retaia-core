@@ -54,6 +54,7 @@ services:
     App\Api\Service\AgentJobProjectionRepositoryInterface: '@App\Api\Service\AgentJobProjectionRepository'
     App\Api\Service\AgentSignature\AgentPublicKeyRepositoryInterface: '@App\Api\Service\AgentSignature\AgentPublicKeyRepository'
     App\Api\Service\AgentSignature\AgentSignatureNonceRepositoryInterface: '@App\Api\Service\AgentSignature\AgentSignatureNonceRepository'
+    App\Ingest\Service\ExistingProxyFilesystemInterface: '@App\Ingest\Service\ExistingProxyFilesystem'
     App\Application\Agent\RegisterAgentUseCase: '@App\Application\Agent\RegisterAgentHandler'
     App\Application\Auth\ResolveAuthenticatedUserUseCase: '@App\Application\Auth\ResolveAuthenticatedUserHandler'
     App\Application\Auth\Port\AuthenticatedClientGateway: '@App\Infrastructure\Auth\AuthenticatedClientGateway'
