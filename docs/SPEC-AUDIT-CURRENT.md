@@ -23,22 +23,9 @@ Important context:
 
 No concrete OpenAPI path/schema drift remains identified in this snapshot.
 
-That does not mean the runtime is free of shortcuts. A deeper implementation review still shows a small number of production-grade quick fixes and structural shortcuts that should be treated as active engineering debt, now mostly around MCP signature semantics and a few remaining service boundaries.
+That does not mean the runtime is free of shortcuts. A deeper implementation review still shows a small number of structural shortcuts that should be treated as active engineering debt, now mostly around service boundaries that still mix orchestration and infrastructure details.
 
 ## Findings
-
-### P2. MCP signature validation is still explicitly lightweight and non-OpenPGP
-
-- Runtime location: [`src/Auth/AuthMcpService.php:101`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthMcpService.php:101)
-- Critical lines:
-  - [`src/Auth/AuthMcpService.php:102`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthMcpService.php:102)
-  - [`src/Auth/AuthMcpService.php:106`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthMcpService.php:106)
-  - [`src/Auth/AuthMcpService.php:114`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthMcpService.php:114)
-- Impact:
-  - the code path models MCP signing as an HMAC derived from public key material, not as a real OpenPGP signature verification flow
-  - if MCP endpoints are reintroduced or expanded, they would still rely on an acknowledged shortcut
-- Why this is a quick fix:
-  - the code itself labels it as a “Lightweight signature validation until a dedicated OpenPGP library is introduced”
 
 ### P3. Several runtime services still combine domain orchestration with infrastructure details in the same class
 
@@ -72,13 +59,14 @@ No remaining secondary gap is tracked in this snapshot.
 
 ## Recommended remediation order
 
-### Batch 1: replace the remaining acknowledged cryptographic shortcut for MCP signing
+### Batch 1: continue decomposing remaining god services
 
-- remove the lightweight HMAC-like MCP verification path
-- introduce a real OpenPGP verification flow or a dedicated verifier abstraction with equivalent guarantees
+- extract persistence and low-level side effects out of `DerivedUploadService`
+- keep reducing SQL / filesystem coordination inside `BatchWorkflowService`
+- split operational command-side logic in `IngestEnqueueStableCommand` into narrower collaborators
 
 ## Bottom line
 
 The repo is currently aligned with the current OpenAPI v1 runtime contract to the extent verified by the implemented runtime and current local validation suite.
 
-However, this snapshot still contains real quick fixes in production code, now concentrated around MCP signature semantics and a few structural service boundaries. The remaining work is now less about path/schema drift and more about replacing those shortcuts with durable runtime models.
+However, this snapshot still contains structural shortcuts in production code, now concentrated around service decomposition and separation of concerns rather than contract drift or missing persistence. The remaining work is now mostly about keeping the runtime model maintainable as the codebase grows.

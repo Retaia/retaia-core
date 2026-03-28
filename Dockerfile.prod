@@ -8,6 +8,7 @@ WORKDIR /var/www/html
 
 ENV APP_ENV=prod
 ENV APP_DEBUG=0
+RUN apk add --no-cache gnupg
 
 COPY composer.json composer.lock symfony.lock ./
 RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --no-scripts
