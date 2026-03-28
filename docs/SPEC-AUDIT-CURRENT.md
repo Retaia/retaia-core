@@ -5,6 +5,95 @@ Spec baseline: `specs/api/openapi/v1.yaml` from `retaia-docs@b6eb0447cf3c9d3bf3d
 
 ## Findings
 
+### P1. Asset metadata still carries concurrent business links for the same storage identity
+
+- Representative locations:
+  - [`src/Command/IngestEnqueueStableCommand.php:246`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Command/IngestEnqueueStableCommand.php:246)
+  - [`src/Ingest/Service/ExistingProxyAttachmentService.php:73`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Service/ExistingProxyAttachmentService.php:73)
+  - [`src/Infrastructure/Asset/AssetReadGateway.php:258`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Infrastructure/Asset/AssetReadGateway.php:258)
+  - [`src/Job/Repository/JobRepository.php:485`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Job/Repository/JobRepository.php:485)
+  - [`src/Workflow/Service/BatchWorkflowService.php:371`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Workflow/Service/BatchWorkflowService.php:371)
+- Impact:
+  - the asset storage identity is still duplicated between `fields['storage_id']` and `fields['paths']['storage_id']`
+  - runtime readers and workflows still accept either representation, so a partially-updated asset can silently drift and still “work”
+  - every storage-aware subsystem built on top of assets inherits this ambiguity
+- Why this is below the target quality bar:
+  - asset storage identity must have a single business source of truth
+  - fallbacks between parallel fields are a migration crutch, not a stable model
+- Target state:
+  - keep only `fields['paths']['storage_id']`
+  - remove `fields['storage_id']`
+  - remove all runtime fallbacks that read one or the other
+
+### P1. Asset path identity is still duplicated between legacy flat fields and the structured `paths` block
+
+- Representative locations:
+  - [`src/Infrastructure/Asset/AssetReadGateway.php:264`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Infrastructure/Asset/AssetReadGateway.php:264)
+  - [`src/Job/Repository/JobRepository.php:491`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Job/Repository/JobRepository.php:491)
+  - [`src/Command/IngestApplyOutboxCommand.php:67`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Command/IngestApplyOutboxCommand.php:67)
+  - [`src/Workflow/Service/BatchWorkflowService.php:291`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Workflow/Service/BatchWorkflowService.php:291)
+- Impact:
+  - `source_path` and `current_path` still coexist with `paths.original_relative`
+  - readers and batch flows still fallback across these fields
+  - the app can therefore keep inconsistent path snapshots without failing fast
+- Why this is below the target quality bar:
+  - path identity must also have one primary representation
+  - state transitions, requeue, purge, and job payload projection should not infer path semantics from legacy leftovers
+- Target state:
+  - keep asset path identity only in `fields['paths']`
+  - remove `source_path`, `current_path`, and other flat path duplicates from runtime writes
+  - migrate all readers and workflows to the structured representation only
+
+### P1. Derived files are still modeled through two concurrent links: repository rows and `derived_manifest`
+
+- Representative locations:
+  - [`src/Derived/DerivedFileRepository.php:60`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Derived/DerivedFileRepository.php:60)
+  - [`src/Ingest/Service/ExistingProxyAttachmentService.php:78`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Service/ExistingProxyAttachmentService.php:78)
+  - [`src/Command/IngestApplyOutboxCommand.php:194`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Command/IngestApplyOutboxCommand.php:194)
+  - [`src/Application/Job/SubmitJobHandler.php:236`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Application/Job/SubmitJobHandler.php:236)
+- Impact:
+  - the canonical derived relation already exists in `asset_derived_file`
+  - the same relation is still duplicated in `fields['derived']['derived_manifest']`
+  - ingest, outbox moves, and job submit patches update both representations, so they can drift independently
+- Why this is below the target quality bar:
+  - derived files must have a single persisted business link
+  - asset fields should not duplicate repository state when that state already has its own table and repository
+- Target state:
+  - keep derived linkage only in `asset_derived_file`
+  - build any manifest/view payload as a projection
+  - remove runtime writes to `fields['derived']['derived_manifest']`
+
+### P2. Sidecar lists currently mix two different concepts and therefore keep a secondary concurrent link for derived files
+
+- Representative locations:
+  - [`src/Command/IngestEnqueueStableCommand.php:269`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Command/IngestEnqueueStableCommand.php:269)
+  - [`src/Ingest/Service/ExistingProxyAttachmentService.php:68`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Service/ExistingProxyAttachmentService.php:68)
+  - [`src/Command/IngestApplyOutboxCommand.php:185`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Command/IngestApplyOutboxCommand.php:185)
+- Impact:
+  - `paths.sidecars_relative` contains both true auxiliary sidecars and materialized derived/proxy files
+  - the same derived refs therefore exist in both sidecar lists and `asset_derived_file`
+  - this blurs the domain boundary between “sidecar attached to the original” and “derived output generated/materialized for the asset”
+- Why this is below the target quality bar:
+  - auxiliary sidecars and derived files are not the same business concept
+  - keeping both in one list creates another concurrent link for derived files
+- Target state:
+  - keep `paths.sidecars_relative` only for true auxiliary sidecars
+  - project derived files exclusively from the derived repository/table
+  - stop copying derived storage paths into sidecar lists
+
+### P2. Derived upload now deduces storage from the asset, but still depends on the duplicated asset storage fields
+
+- Representative locations:
+  - [`src/Derived/Service/DerivedUploadService.php:122`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Derived/Service/DerivedUploadService.php:122)
+- Impact:
+  - the service no longer takes `storage_id` directly, which is correct
+  - however, it still resolves that storage through `paths.storage_id ?? fields.storage_id`
+  - as long as asset storage identity is duplicated, derived upload remains coupled to a non-canonical fallback
+- Why this is below the target quality bar:
+  - derived upload should depend on the asset’s single canonical storage identity, not on parallel legacy fields
+- Target state:
+  - once asset storage identity is normalized, make derived upload read only that one field
+
 ### P3. Several runtime services still combine domain orchestration with infrastructure details in the same class
 
 - Representative locations:
@@ -64,18 +153,31 @@ Spec baseline: `specs/api/openapi/v1.yaml` from `retaia-docs@b6eb0447cf3c9d3bf3d
 
 ## Recommended remediation order
 
-### Batch 1: make path-based admin flows storage-aware
+### Batch 1: normalize the asset storage and path model to a single source of truth
+
+- keep only `fields['paths']` as the canonical asset location/storage block
+- remove flat duplicates like `fields['storage_id']`, `source_path`, and `current_path`
+- remove all readers/workflows/job projections that fallback across legacy fields
+
+### Batch 2: collapse derived file linkage to one canonical representation
+
+- keep derived persistence only in `asset_derived_file`
+- stop writing `fields['derived']['derived_manifest']`
+- stop copying derived refs into `paths.sidecars_relative`
+- generate manifest-like payloads as read projections only
+
+### Batch 3: make path-based admin flows storage-aware
 
 - remove path-only UUID derivation in ops/admin flows
 - resolve assets with explicit storage context when a relative path is used as input
 
-### Batch 2: make the Flysystem backend configurable
+### Batch 4: make the Flysystem backend configurable
 
 - add first-class SMB backend support behind `BusinessStorageInterface`
 - remove the hardcoded local-only factory
 - keep the application/storage seam stable while finishing backend portability
 
-### Batch 3: continue decomposing remaining god services
+### Batch 5: continue decomposing remaining god services
 
 - keep reducing SQL / side-effect coordination inside `BatchWorkflowService`
 - split operational command-side logic in `IngestEnqueueStableCommand` into narrower collaborators
