@@ -242,8 +242,6 @@ final class IngestEnqueueStableCommand extends Command
             [],
             null,
             [
-                'storage_id' => $storageId,
-                'source_path' => $sourcePath,
                 'review_processing_version' => '1',
                 'processing_profile' => $this->processingProfileFromMediaType($this->mediaTypeFromPath($sourcePath)),
                 'paths' => [
@@ -274,8 +272,8 @@ final class IngestEnqueueStableCommand extends Command
         }
         $this->ingestDiagnostics->clearUnmatchedSidecar($sidecarPath);
 
-        $paths['storage_id'] = (string) ($paths['storage_id'] ?? $storageId);
-        $paths['original_relative'] = (string) ($paths['original_relative'] ?? $originalPath);
+        $paths['storage_id'] = $storageId;
+        $paths['original_relative'] = $originalPath;
         $paths['sidecars_relative'] = array_values(array_unique($sidecars));
         $fields['paths'] = $paths;
         $asset->setFields($fields);
@@ -299,7 +297,7 @@ final class IngestEnqueueStableCommand extends Command
     {
         $fields = $asset->getFields();
         $paths = is_array($fields['paths'] ?? null) ? $fields['paths'] : [];
-        $assetStorageId = trim((string) ($paths['storage_id'] ?? $fields['storage_id'] ?? ''));
+        $assetStorageId = trim((string) ($paths['storage_id'] ?? ''));
         if ($assetStorageId === '' || $assetStorageId === $storageId) {
             return true;
         }

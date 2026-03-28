@@ -119,7 +119,7 @@ final class DerivedUploadService
 
         $fields = $asset->getFields();
         $paths = is_array($fields['paths'] ?? null) ? $fields['paths'] : [];
-        $storageId = trim((string) ($paths['storage_id'] ?? $fields['storage_id'] ?? ''));
+        $storageId = trim((string) ($paths['storage_id'] ?? ''));
         if ($storageId === '') {
             throw new \RuntimeException(sprintf('Asset %s is missing storage_id for derived persistence.', $assetUuid));
         }

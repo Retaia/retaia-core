@@ -605,8 +605,6 @@ final class JobApiTest extends WebTestCase
                 'tags' => '[]',
                 'notes' => null,
                 'fields' => json_encode([
-                    'storage_id' => 'nas-main',
-                    'source_path' => 'INBOX/'.$jobId.'.mov',
                     'paths' => [
                         'storage_id' => 'nas-main',
                         'original_relative' => 'INBOX/'.$jobId.'.mov',

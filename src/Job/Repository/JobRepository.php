@@ -482,17 +482,17 @@ final class JobRepository
         }
 
         $paths = is_array($fields['paths'] ?? null) ? $fields['paths'] : [];
-        $storageId = trim((string) ($paths['storage_id'] ?? $fields['storage_id'] ?? $this->storageRegistry->defaultStorageId()));
+        $storageId = trim((string) ($paths['storage_id'] ?? $this->storageRegistry->defaultStorageId()));
         if ($storageId === '') {
             $storageId = $this->storageRegistry->defaultStorageId();
         }
 
         $fallbackOriginal = $this->sanitizeRelativePath('INBOX/'.$assetFilename);
-        $original = $this->sanitizeRelativePath((string) ($paths['original_relative'] ?? $fields['current_path'] ?? $fields['source_path'] ?? ''));
+        $original = $this->sanitizeRelativePath((string) ($paths['original_relative'] ?? ''));
         if ($original === '') {
             $original = $fallbackOriginal;
         }
-        $sidecars = $this->sanitizeRelativePaths(is_array($paths['sidecars_relative'] ?? null) ? $paths['sidecars_relative'] : ($fields['sidecars_relative'] ?? []));
+        $sidecars = $this->sanitizeRelativePaths(is_array($paths['sidecars_relative'] ?? null) ? $paths['sidecars_relative'] : []);
 
         return [
             'storage_id' => $storageId,

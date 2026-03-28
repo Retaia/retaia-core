@@ -42,7 +42,13 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
             AssetState::ARCHIVED,
             [],
             null,
-            ['source_path' => 'INBOX/rush.mov']
+            [
+                'paths' => [
+                    'storage_id' => 'nas-main',
+                    'original_relative' => 'INBOX/rush.mov',
+                    'sidecars_relative' => [],
+                ],
+            ]
         );
         $entityManager->persist($asset);
         $entityManager->flush();
@@ -57,7 +63,7 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
         $assetReloaded = $entityManager->find(Asset::class, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
         self::assertInstanceOf(Asset::class, $assetReloaded);
         $fields = $assetReloaded->getFields();
-        self::assertSame('ARCHIVE/rush.mov', $fields['current_path'] ?? null);
+        self::assertSame('ARCHIVE/rush.mov', $fields['paths']['original_relative'] ?? null);
         self::assertIsArray($fields['path_history'] ?? null);
         self::assertSame(1, count($fields['path_history']));
 
@@ -92,7 +98,13 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
             AssetState::ARCHIVED,
             [],
             null,
-            ['source_path' => 'INBOX/a/rush.mov']
+            [
+                'paths' => [
+                    'storage_id' => 'nas-main',
+                    'original_relative' => 'INBOX/a/rush.mov',
+                    'sidecars_relative' => [],
+                ],
+            ]
         );
         $assetTwo = new Asset(
             'aaaaaa22-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
@@ -101,7 +113,13 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
             AssetState::ARCHIVED,
             [],
             null,
-            ['source_path' => 'INBOX/b/rush.mov']
+            [
+                'paths' => [
+                    'storage_id' => 'nas-main',
+                    'original_relative' => 'INBOX/b/rush.mov',
+                    'sidecars_relative' => [],
+                ],
+            ]
         );
         $entityManager->persist($assetOne);
         $entityManager->persist($assetTwo);
@@ -151,7 +169,13 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
                 AssetState::ARCHIVED,
                 [],
                 null,
-                ['source_path' => sprintf('INBOX/%02d/rush.mov', $i)]
+                [
+                    'paths' => [
+                        'storage_id' => 'nas-main',
+                        'original_relative' => sprintf('INBOX/%02d/rush.mov', $i),
+                        'sidecars_relative' => [],
+                    ],
+                ]
             );
             $entityManager->persist($asset);
         }
@@ -204,8 +228,11 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
             [],
             null,
             [
-                'source_path' => 'INBOX/rush.mov',
-                'current_path' => 'ARCHIVE/rush.mov',
+                'paths' => [
+                    'storage_id' => 'nas-main',
+                    'original_relative' => 'INBOX/rush.mov',
+                    'sidecars_relative' => [],
+                ],
                 'path_history' => [
                     [
                         'from' => 'INBOX/rush.mov',
@@ -262,8 +289,9 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
             [],
             null,
             [
-                'source_path' => 'INBOX/clip.mov',
                 'paths' => [
+                    'storage_id' => 'nas-main',
+                    'original_relative' => 'INBOX/clip.mov',
                     'sidecars_relative' => ['.derived/ffffffff-ffff-ffff-ffff-ffffffffffff/proxy.mp4'],
                 ],
                 'derived' => [
@@ -347,8 +375,9 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
             [],
             null,
             [
-                'source_path' => 'INBOX/keep.mov',
                 'paths' => [
+                    'storage_id' => 'nas-main',
+                    'original_relative' => 'INBOX/keep.mov',
                     'sidecars_relative' => ['.derived/'.$keepUuid.'/proxy.mp4'],
                 ],
                 'derived' => [
@@ -366,8 +395,9 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
             [],
             null,
             [
-                'source_path' => 'INBOX/reject.mov',
                 'paths' => [
+                    'storage_id' => 'nas-main',
+                    'original_relative' => 'INBOX/reject.mov',
                     'sidecars_relative' => ['.derived/'.$rejectUuid.'/proxy.mp4'],
                 ],
                 'derived' => [
@@ -453,9 +483,10 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
             [],
             null,
             [
-                'source_path' => 'INBOX/a.mov',
                 'paths' => [
                     'storage_id' => 'unknown-storage',
+                    'original_relative' => 'INBOX/a.mov',
+                    'sidecars_relative' => [],
                 ],
             ]
         );
@@ -466,7 +497,13 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
             AssetState::REJECTED,
             [],
             null,
-            ['source_path' => 'INBOX/b.mov']
+            [
+                'paths' => [
+                    'storage_id' => 'nas-main',
+                    'original_relative' => 'INBOX/b.mov',
+                    'sidecars_relative' => [],
+                ],
+            ]
         );
         $entityManager->persist($archived);
         $entityManager->persist($rejected);
