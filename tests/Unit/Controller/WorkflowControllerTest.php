@@ -21,6 +21,7 @@ use App\Asset\AssetRevisionTag;
 use App\Asset\AssetState;
 use App\Asset\Repository\AssetRepositoryInterface;
 use App\Asset\Service\AssetStateMachine;
+use App\Derived\DerivedFileRepositoryInterface;
 use App\Controller\Api\WorkflowController;
 use App\Entity\Asset;
 use App\Entity\User;
@@ -39,7 +40,7 @@ final class WorkflowControllerTest extends TestCase
     {
         $repo = new InMemoryAssetRepo([$this->asset('a2', AssetState::REJECTED)]);
         $connection = $this->createMock(Connection::class);
-        $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false));
+        $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false), $this->derivedFiles());
         $controller = $this->controller($workflows, $repo, $this->idempotencyPassthrough(), $this->translator(), true, null, false);
 
         $request = Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{"asset_uuids":["a2"],"confirm":true}');
@@ -52,7 +53,7 @@ final class WorkflowControllerTest extends TestCase
     {
         $repo = new InMemoryAssetRepo([$this->asset('a2', AssetState::REJECTED)]);
         $connection = $this->createMock(Connection::class);
-        $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false));
+        $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false), $this->derivedFiles());
         $controller = $this->controller($workflows, $repo, $this->idempotencyPassthrough(), $this->translator(), false, null, false);
 
         $request = Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{"asset_uuids":[],"confirm":false}');
@@ -68,7 +69,9 @@ final class WorkflowControllerTest extends TestCase
         $repo = new InMemoryAssetRepo([$rejected, $ready]);
         $connection = $this->createMock(Connection::class);
         $connection->method('fetchOne')->willReturn(0);
-        $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false));
+        $derivedFiles = $this->derivedFiles();
+        $derivedFiles->method('listStoragePathsByAsset')->willReturn([]);
+        $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false), $derivedFiles);
         $controller = $this->controller($workflows, $repo, $this->idempotencyPassthrough(), $this->translator(), false, null, false);
 
         $request = Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{"asset_uuids":["a2","a3"],"confirm":true}');
@@ -89,7 +92,9 @@ final class WorkflowControllerTest extends TestCase
         $repo = new InMemoryAssetRepo([$rejected, $ready]);
         $connection = $this->createMock(Connection::class);
         $connection->method('fetchOne')->willReturn(0);
-        $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false));
+        $derivedFiles = $this->derivedFiles();
+        $derivedFiles->method('listStoragePathsByAsset')->willReturn([]);
+        $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false), $derivedFiles);
         $idempotency = $this->idempotencyPassthrough();
         $translator = $this->translator();
         $controller = $this->controller($workflows, $repo, $idempotency, $translator, false, null, false);
@@ -148,6 +153,14 @@ final class WorkflowControllerTest extends TestCase
         $locks->method('release');
 
         return $locks;
+    }
+
+    private function derivedFiles(): DerivedFileRepositoryInterface
+    {
+        $derivedFiles = $this->createMock(DerivedFileRepositoryInterface::class);
+        $derivedFiles->method('listStoragePathsByAsset')->willReturn([]);
+
+        return $derivedFiles;
     }
 
     private function controller(

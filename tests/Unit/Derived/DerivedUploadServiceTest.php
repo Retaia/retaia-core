@@ -2,105 +2,88 @@
 
 namespace App\Tests\Unit\Derived;
 
+use App\Derived\DerivedFile;
+use App\Derived\DerivedFileRepositoryInterface;
+use App\Derived\DerivedUploadSession;
+use App\Derived\DerivedUploadSessionRepositoryInterface;
 use App\Derived\Service\DerivedUploadService;
-use Doctrine\DBAL\Connection;
 use PHPUnit\Framework\TestCase;
 
 final class DerivedUploadServiceTest extends TestCase
 {
     public function testInitCreatesOpenUploadSession(): void
     {
-        $connection = $this->createMock(Connection::class);
-        $connection
-            ->expects(self::once())
-            ->method('insert')
-            ->with(
-                'derived_upload_session',
-                self::callback(static fn (array $values): bool => ($values['asset_uuid'] ?? null) === 'asset-1'
-                    && ($values['status'] ?? null) === 'open'
-                    && is_string($values['upload_id'] ?? null)
-                    && strlen((string) $values['upload_id']) === 24)
-            );
+        $sessions = $this->createMock(DerivedUploadSessionRepositoryInterface::class);
+        $files = $this->createMock(DerivedFileRepositoryInterface::class);
+        $sessions->expects(self::once())->method('create')->with('asset-1', 'proxy', 'video/mp4', 1024, null)
+            ->willReturn(new DerivedUploadSession('upload-1', 'asset-1', 'proxy', 'video/mp4', 1024, null, 'open', 0));
 
-        $service = new DerivedUploadService($connection);
+        $service = new DerivedUploadService($sessions, $files);
         $result = $service->init('asset-1', 'proxy', 'video/mp4', 1024, null);
 
         self::assertSame('open', $result['status']);
         self::assertSame(5 * 1024 * 1024, $result['part_size_bytes']);
-        self::assertIsString($result['upload_id']);
+        self::assertSame('upload-1', $result['upload_id']);
     }
 
     public function testAddPartRejectsInvalidOrClosedSession(): void
     {
-        $connection = $this->createMock(Connection::class);
-        $connection->expects(self::once())->method('fetchAssociative')->willReturn(['status' => 'completed']);
-        $connection->expects(self::never())->method('update');
+        $sessions = $this->createMock(DerivedUploadSessionRepositoryInterface::class);
+        $files = $this->createMock(DerivedFileRepositoryInterface::class);
+        $sessions->expects(self::once())->method('find')->with('up-1')
+            ->willReturn(new DerivedUploadSession('up-1', 'asset-1', 'proxy', 'video/mp4', 1, null, 'completed', 1));
+        $sessions->expects(self::never())->method('updateHighestPartCount');
 
-        $service = new DerivedUploadService($connection);
+        $service = new DerivedUploadService($sessions, $files);
+
         self::assertFalse($service->addPart('up-1', 1));
     }
 
     public function testAddPartUpdatesHighestPartCount(): void
     {
-        $connection = $this->createMock(Connection::class);
-        $connection->expects(self::once())->method('fetchAssociative')->willReturn([
-            'upload_id' => 'up-2',
-            'status' => 'open',
-            'parts_count' => 2,
-        ]);
-        $connection
-            ->expects(self::once())
-            ->method('update')
-            ->with(
-                'derived_upload_session',
-                self::callback(static fn (array $values): bool => ($values['parts_count'] ?? null) === 5),
-                ['upload_id' => 'up-2']
-            );
+        $sessions = $this->createMock(DerivedUploadSessionRepositoryInterface::class);
+        $files = $this->createMock(DerivedFileRepositoryInterface::class);
+        $sessions->expects(self::once())->method('find')->with('up-2')
+            ->willReturn(new DerivedUploadSession('up-2', 'asset-2', 'proxy', 'video/mp4', 1, null, 'open', 2));
+        $sessions->expects(self::once())->method('updateHighestPartCount')->with('up-2', 5);
 
-        $service = new DerivedUploadService($connection);
+        $service = new DerivedUploadService($sessions, $files);
+
         self::assertTrue($service->addPart('up-2', 5));
     }
 
     public function testCompleteReturnsNullWhenSessionCannotBeCompleted(): void
     {
-        $connection = $this->createMock(Connection::class);
-        $connection->expects(self::exactly(3))
-            ->method('fetchAssociative')
+        $sessions = $this->createMock(DerivedUploadSessionRepositoryInterface::class);
+        $files = $this->createMock(DerivedFileRepositoryInterface::class);
+        $sessions->expects(self::exactly(4))->method('find')
             ->willReturnOnConsecutiveCalls(
-                false,
-                ['status' => 'completed'],
-                ['status' => 'open', 'asset_uuid' => 'other', 'parts_count' => 5],
+                null,
+                new DerivedUploadSession('up-2', 'asset-1', 'proxy', 'video/mp4', 1, null, 'completed', 1),
+                new DerivedUploadSession('up-3', 'other', 'proxy', 'video/mp4', 1, null, 'open', 5),
+                new DerivedUploadSession('up-4', 'asset-1', 'proxy', 'video/mp4', 1, null, 'open', 0),
             );
-        $connection->expects(self::never())->method('insert');
+        $files->expects(self::never())->method('create');
 
-        $service = new DerivedUploadService($connection);
+        $service = new DerivedUploadService($sessions, $files);
 
         self::assertNull($service->complete('asset-1', 'up-1', 1));
         self::assertNull($service->complete('asset-1', 'up-2', 1));
         self::assertNull($service->complete('asset-1', 'up-3', 1));
+        self::assertNull($service->complete('asset-1', 'up-4', 1));
     }
 
     public function testCompleteCreatesDerivedFileAndMarksSessionCompleted(): void
     {
-        $connection = $this->createMock(Connection::class);
-        $connection->expects(self::once())->method('fetchAssociative')->willReturn([
-            'upload_id' => 'up-4',
-            'asset_uuid' => 'asset-4',
-            'kind' => 'proxy',
-            'content_type' => 'video/mp4',
-            'size_bytes' => 2000,
-            'sha256' => 'hash',
-            'status' => 'open',
-            'parts_count' => 2,
-        ]);
-        $connection->expects(self::once())->method('insert');
-        $connection->expects(self::once())->method('update')->with(
-            'derived_upload_session',
-            self::callback(static fn (array $values): bool => ($values['status'] ?? null) === 'completed'),
-            ['upload_id' => 'up-4']
-        );
+        $sessions = $this->createMock(DerivedUploadSessionRepositoryInterface::class);
+        $files = $this->createMock(DerivedFileRepositoryInterface::class);
+        $sessions->expects(self::once())->method('find')->with('up-4')
+            ->willReturn(new DerivedUploadSession('up-4', 'asset-4', 'proxy', 'video/mp4', 2000, 'hash', 'open', 2));
+        $files->expects(self::once())->method('create')->with('asset-4', 'proxy', 'video/mp4', 2000, 'hash')
+            ->willReturn(new DerivedFile('d-4', 'asset-4', 'proxy', 'video/mp4', 2000, 'hash', '/derived/asset-4/d-4', new \DateTimeImmutable('2026-01-01T10:00:00+00:00')));
+        $sessions->expects(self::once())->method('markCompleted')->with('up-4');
 
-        $service = new DerivedUploadService($connection);
+        $service = new DerivedUploadService($sessions, $files);
         $result = $service->complete('asset-4', 'up-4', 2);
 
         self::assertIsArray($result);
@@ -111,35 +94,19 @@ final class DerivedUploadServiceTest extends TestCase
 
     public function testListAndFindNormalizeRows(): void
     {
-        $connection = $this->createMock(Connection::class);
-        $connection->expects(self::once())->method('fetchAllAssociative')->willReturn([
-            [
-                'id' => 'd-1',
-                'asset_uuid' => 'asset-7',
-                'kind' => 'proxy',
-                'content_type' => 'video/mp4',
-                'size_bytes' => 77,
-                'sha256' => 'hash',
-                'storage_path' => '/tmp/x',
-                'created_at' => '2026-01-01 10:00:00',
-            ],
-        ]);
-        $connection->expects(self::exactly(2))->method('fetchAssociative')
+        $sessions = $this->createMock(DerivedUploadSessionRepositoryInterface::class);
+        $files = $this->createMock(DerivedFileRepositoryInterface::class);
+        $files->expects(self::once())->method('listByAsset')->with('asset-7')
+            ->willReturn([
+                new DerivedFile('d-1', 'asset-7', 'proxy', 'video/mp4', 77, 'hash', '/tmp/x', new \DateTimeImmutable('2026-01-01T10:00:00+00:00')),
+            ]);
+        $files->expects(self::exactly(2))->method('findLatestByAssetAndKind')
             ->willReturnOnConsecutiveCalls(
-                [
-                    'id' => 'd-2',
-                    'asset_uuid' => 'asset-7',
-                    'kind' => 'thumbnail',
-                    'content_type' => 'image/png',
-                    'size_bytes' => 10,
-                    'sha256' => null,
-                    'storage_path' => '/tmp/y',
-                    'created_at' => '2026-01-01 10:05:00',
-                ],
-                false
+                new DerivedFile('d-2', 'asset-7', 'thumbnail', 'image/png', 10, null, '/tmp/y', new \DateTimeImmutable('2026-01-01T10:05:00+00:00')),
+                null,
             );
 
-        $service = new DerivedUploadService($connection);
+        $service = new DerivedUploadService($sessions, $files);
         $list = $service->listForAsset('asset-7');
         $found = $service->findByAssetAndKind('asset-7', 'thumbnail');
         $notFound = $service->findByAssetAndKind('asset-7', 'missing');

@@ -30,7 +30,6 @@ That does not mean the runtime is free of shortcuts. A deeper implementation rev
 ### P3. Several runtime services still combine domain orchestration with infrastructure details in the same class
 
 - Representative locations:
-  - [`src/Derived/Service/DerivedUploadService.php:47`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Derived/Service/DerivedUploadService.php:47)
   - [`src/Workflow/Service/BatchWorkflowService.php:192`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Workflow/Service/BatchWorkflowService.php:192)
   - [`src/Command/IngestEnqueueStableCommand.php:399`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Command/IngestEnqueueStableCommand.php:399)
 - Impact:
@@ -61,9 +60,9 @@ No remaining secondary gap is tracked in this snapshot.
 
 ### Batch 1: continue decomposing remaining god services
 
-- extract persistence and low-level side effects out of `DerivedUploadService`
 - keep reducing SQL / filesystem coordination inside `BatchWorkflowService`
 - split operational command-side logic in `IngestEnqueueStableCommand` into narrower collaborators
+- continue extracting purge-side file and filesystem coordination out of `BatchWorkflowService`
 
 ## Bottom line
 
