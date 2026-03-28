@@ -25,6 +25,8 @@ No concrete OpenAPI path/schema drift remains identified in this snapshot.
 
 That does not mean the runtime is free of shortcuts. A deeper implementation review still shows several production-grade quick fixes and minimal implementations that should be treated as active engineering debt, especially around remaining auth/security persistence, agent signing and operational projections.
 
+The codebase also still contains several structural shortcuts that are below the quality bar expected for long-lived core runtime code: services that mix orchestration with SQL persistence, cache-backed registries with no repository boundary, and operational projections coupled directly to transport/controller concerns.
+
 ## Findings
 
 ### P1. 2FA state and recovery codes are still only stored in `cache.app`
@@ -123,6 +125,73 @@ That does not mean the runtime is free of shortcuts. A deeper implementation rev
 - Why this is a quick fix:
   - test-environment resilience is implemented directly in production code paths through broad `catch (\Throwable)`
 
+### P2. `UserAccessTokenService` now persists correctly, but still owns raw SQL instead of a dedicated repository boundary
+
+- Runtime location: [`src/Auth/UserAccessTokenService.php:15`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/UserAccessTokenService.php:15)
+- Critical lines:
+  - [`src/Auth/UserAccessTokenService.php:299`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/UserAccessTokenService.php:299)
+  - [`src/Auth/UserAccessTokenService.php:330`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/UserAccessTokenService.php:330)
+  - [`src/Auth/UserAccessTokenService.php:361`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/UserAccessTokenService.php:361)
+  - [`src/Auth/UserAccessTokenService.php:389`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/UserAccessTokenService.php:389)
+- Impact:
+  - session semantics and storage are still tightly coupled in one class
+  - future work on eviction, indexing, audit logging or alternate persistence will require editing core auth logic directly
+  - unit tests have to exercise SQL-backed internals through the service instead of testing a repository separately
+- Why this is below the target quality bar:
+  - for core auth state, the service should orchestrate token/session rules over a `UserAuthSessionRepositoryInterface`, not embed DBAL queries directly
+
+### P2. Technical client auth is still modeled as a monolithic cache-backed state store instead of repositories per concern
+
+- Runtime locations:
+  - [`src/Auth/AuthClientStateStore.php:8`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthClientStateStore.php:8)
+  - [`src/Auth/AuthClientAdminService.php:8`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthClientAdminService.php:8)
+  - [`src/Auth/AuthClientDeviceFlowService.php:10`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthClientDeviceFlowService.php:10)
+  - [`src/Auth/AuthMcpService.php:12`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthMcpService.php:12)
+- Impact:
+  - registry entries, active tokens, device flows and MCP challenges all share one coarse storage abstraction
+  - lifecycle rules for distinct domains are entangled behind one cache-shaped API
+  - replacing this with durable storage later will be a cross-cutting refactor rather than an isolated repository swap
+- Why this is below the target quality bar:
+  - these concerns should be split into explicit repositories/stores such as client registry, active technical tokens, device-flow state and MCP challenge store, each with a domain-specific contract
+
+### P2. Agent signing still lacks repository-grade boundaries around trust material and replay state
+
+- Runtime locations:
+  - [`src/Api/Service/AgentSignature/AgentPublicKeyStore.php:8`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentSignature/AgentPublicKeyStore.php:8)
+  - [`src/Api/Service/AgentSignature/AgentSignatureNonceStore.php:8`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentSignature/AgentSignatureNonceStore.php:8)
+  - [`src/Api/Service/SignedAgentRequestValidator.php:14`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/SignedAgentRequestValidator.php:14)
+- Impact:
+  - the validator still speaks directly to cache-shaped stores and transport headers
+  - trust material, replay control and request validation are coupled too early in the stack
+  - it is harder to evolve toward durable storage, auditing and stronger verification semantics independently
+- Why this is below the target quality bar:
+  - key registry and nonce consumption should sit behind repository/port interfaces, with the request validator focused on HTTP validation/orchestration only
+
+### P3. `AgentRuntimeStore` is DB-backed but still acts as an ad hoc persistence layer instead of a repository
+
+- Runtime location: [`src/Api/Service/AgentRuntimeStore.php:7`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentRuntimeStore.php:7)
+- Critical lines:
+  - [`src/Api/Service/AgentRuntimeStore.php:71`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentRuntimeStore.php:71)
+  - [`src/Api/Service/AgentRuntimeStore.php:104`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentRuntimeStore.php:104)
+- Impact:
+  - naming suggests a lightweight service/store, but it is already a persistence boundary with SQL and projection logic
+  - controller and runtime mutation code are coupled to this ad hoc type instead of a clearer repository + projection split
+- Why this is below the target quality bar:
+  - at this point it should be promoted to a repository (or split into repository + projector) to make ops runtime state an explicit domain concern
+
+### P3. Several runtime services still combine domain orchestration with infrastructure details in the same class
+
+- Representative locations:
+  - [`src/Derived/Service/DerivedUploadService.php:47`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Derived/Service/DerivedUploadService.php:47)
+  - [`src/Workflow/Service/BatchWorkflowService.php:192`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Workflow/Service/BatchWorkflowService.php:192)
+  - [`src/Command/IngestEnqueueStableCommand.php:399`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Command/IngestEnqueueStableCommand.php:399)
+- Impact:
+  - business rules, SQL access and side-effect coordination remain interleaved
+  - these classes are harder to reason about, mock cleanly or replace piecemeal
+  - the codebase keeps growing around “god services” instead of stable domain/infrastructure seams
+- Why this is below the target quality bar:
+  - the core pattern should be: application service/use case orchestrates, repositories/gateways persist, lower-level adapters handle transport or filesystem concerns
+
 ### P3. `/ops/agents` is still a partial operational projection
 
 - Runtime location: [`src/Controller/Api/OpsController.php:289`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Controller/Api/OpsController.php:289)
@@ -164,12 +233,18 @@ No remaining secondary gap is tracked in this snapshot.
 - move `AgentSignatureNonceStore` to a durable/shared atomic store
 - keep the current GPG verification path, but stop depending on volatile cache state for trust and replay guarantees
 
-### Batch 3: remove prod-path “minimal test schema” fallbacks
+### Batch 3: introduce missing repository boundaries on already-persistent runtime state
+
+- extract a `UserAuthSessionRepositoryInterface` from `UserAccessTokenService`
+- promote/split `AgentRuntimeStore` into a repository and, if needed, a projection layer
+- stop adding new DB-backed “service/store” classes without an explicit persistence boundary
+
+### Batch 4: remove prod-path “minimal test schema” fallbacks
 
 - replace broad `catch (\Throwable)` masking with explicit optional-table handling or environment-scoped test helpers
 - make ingest/purge fail loudly when prod persistence is inconsistent
 
-### Batch 4: finish the operational model behind `/ops/agents`
+### Batch 5: finish the operational model behind `/ops/agents`
 
 - introduce a proper technical `client_id` model for registered agents
 - add enough job execution history to populate `current_job`, `last_successful_job`, and `last_failed_job` without inventing timestamps
