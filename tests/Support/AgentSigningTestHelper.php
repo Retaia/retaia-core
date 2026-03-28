@@ -26,6 +26,13 @@ final class AgentSigningTestHelper
         ];
     }
 
+    public static function signMessage(string $message): string
+    {
+        $material = self::ensureMaterial();
+
+        return self::sign($material['home'], $message);
+    }
+
     /**
      * @param array<string, mixed>|null $payload
      * @return array<string, string>

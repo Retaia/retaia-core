@@ -2,6 +2,7 @@
 
 namespace App\Auth;
 
+use App\Api\Service\AgentSignature\AgentRequestSignatureVerifier;
 use App\Domain\AuthClient\ClientKind;
 
 final class AuthMcpService
@@ -13,6 +14,7 @@ final class AuthMcpService
         private AuthMcpChallengeRepositoryInterface $challengeRepository,
         private AuthClientAdminService $adminService,
         private AuthClientPolicyService $policyService,
+        private AgentRequestSignatureVerifier $signatureVerifier,
     ) {
     }
 
@@ -292,9 +294,6 @@ final class AuthMcpService
         return $normalized !== '' ? $normalized : null;
     }
 
-    /**
-     * Lightweight signature validation until a dedicated OpenPGP library is introduced.
-     */
     private function isValidSignature(string $signature, string $challenge, AuthClientRegistryEntry $client): bool
     {
         $publicKey = (string) ($client->openPgpPublicKey ?? '');
@@ -303,8 +302,6 @@ final class AuthMcpService
             return false;
         }
 
-        $expected = rtrim(strtr(base64_encode(hash_hmac('sha256', $challenge, $publicKey.'|'.$fingerprint, true)), '+/', '-_'), '=');
-
-        return hash_equals($expected, $signature);
+        return $this->signatureVerifier->verify($publicKey, $fingerprint, $challenge, $signature);
     }
 }
