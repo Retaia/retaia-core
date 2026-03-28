@@ -3,7 +3,6 @@
 namespace App\Auth;
 
 use App\Entity\User;
-use Doctrine\DBAL\Connection;
 use Lcobucci\JWT\Configuration;
 use Lcobucci\JWT\Signer\Hmac\Sha256;
 use Lcobucci\JWT\Signer\Key\InMemory;
@@ -17,7 +16,7 @@ final class UserAccessTokenService
     private Configuration $jwt;
 
     public function __construct(
-        private Connection $connection,
+        private UserAuthSessionRepositoryInterface $sessions,
         #[Autowire('%kernel.secret%')]
         string $secret,
         #[Autowire('%app.user_token_ttl_seconds%')]
@@ -51,12 +50,12 @@ final class UserAccessTokenService
         }
 
         $session = $this->sessionByRefreshToken($normalizedRefreshToken);
-        if (!is_array($session)) {
+        if (!$session instanceof UserAuthSession) {
             return null;
         }
 
-        $activeClientId = (string) ($session['client_id'] ?? '');
-        $activeClientKind = (string) ($session['client_kind'] ?? '');
+        $activeClientId = $session->clientId;
+        $activeClientKind = $session->clientKind;
 
         if ($clientId !== null && $clientId !== '' && !hash_equals($activeClientId, $clientId)) {
             return null;
@@ -66,8 +65,8 @@ final class UserAccessTokenService
             return null;
         }
 
-        $userId = (string) ($session['user_id'] ?? '');
-        $email = (string) ($session['email'] ?? '');
+        $userId = $session->userId;
+        $email = $session->email;
         if ($userId === '' || $email === '' || $activeClientId === '' || $activeClientKind === '') {
             return null;
         }
@@ -109,16 +108,15 @@ final class UserAccessTokenService
         }
 
         $active = $this->sessionBySessionId($sessionId);
-        if (!is_array($active)) {
+        if (!$active instanceof UserAuthSession) {
             return null;
         }
 
-        if (!hash_equals((string) ($active['access_token'] ?? ''), $rawToken)) {
+        if (!hash_equals($active->accessToken, $rawToken)) {
             return null;
         }
 
-        $active['last_used_at'] = time();
-        $this->persistSession($active);
+        $this->persistSession($active->withLastUsedAt(time()));
 
         return [
             'user_id' => $userId,
@@ -142,11 +140,11 @@ final class UserAccessTokenService
         }
 
         $active = $this->sessionBySessionId($sessionId);
-        if (!is_array($active)) {
+        if (!$active instanceof UserAuthSession) {
             return false;
         }
 
-        if (!hash_equals((string) ($active['access_token'] ?? ''), $rawToken)) {
+        if (!hash_equals($active->accessToken, $rawToken)) {
             return false;
         }
 
@@ -162,21 +160,21 @@ final class UserAccessTokenService
     {
         $items = [];
         foreach ($this->sessionsByUserId($userId) as $session) {
-            if (!is_array($session) || !hash_equals((string) ($session['user_id'] ?? ''), $userId)) {
+            if (!$session instanceof UserAuthSession || !hash_equals($session->userId, $userId)) {
                 continue;
             }
 
-            $sessionId = trim((string) ($session['session_id'] ?? ''));
+            $sessionId = trim($session->sessionId);
             if ($sessionId === '') {
                 continue;
             }
 
             $items[] = [
                 'session_id' => $sessionId,
-                'client_id' => (string) ($session['client_id'] ?? ''),
-                'created_at' => $this->formatTimestamp((int) ($session['created_at'] ?? 0)),
-                'last_used_at' => $this->formatTimestamp((int) ($session['last_used_at'] ?? 0)),
-                'expires_at' => $this->formatTimestamp((int) ($session['refresh_expires_at'] ?? 0)),
+                'client_id' => $session->clientId,
+                'created_at' => $this->formatTimestamp($session->createdAt),
+                'last_used_at' => $this->formatTimestamp($session->lastUsedAt),
+                'expires_at' => $this->formatTimestamp($session->refreshExpiresAt),
                 'is_current' => hash_equals($sessionId, $currentSessionId),
                 'device_label' => null,
                 'browser' => null,
@@ -202,7 +200,7 @@ final class UserAccessTokenService
     public function revokeSession(string $userId, string $sessionId, string $currentSessionId): string
     {
         $active = $this->sessionBySessionId($sessionId);
-        if (!is_array($active) || !hash_equals((string) ($active['user_id'] ?? ''), $userId)) {
+        if (!$active instanceof UserAuthSession || !hash_equals($active->userId, $userId)) {
             return 'NOT_FOUND';
         }
 
@@ -220,11 +218,11 @@ final class UserAccessTokenService
         $revoked = 0;
 
         foreach ($this->sessionsByUserId($userId) as $session) {
-            $sessionId = (string) ($session['session_id'] ?? '');
+            $sessionId = $session->sessionId;
             if (
-                !is_array($session)
+                !$session instanceof UserAuthSession
                 || $sessionId === ''
-                || !hash_equals((string) ($session['user_id'] ?? ''), $userId)
+                || !hash_equals($session->userId, $userId)
                 || hash_equals((string) $sessionId, $currentSessionId)
             ) {
                 continue;
@@ -240,18 +238,18 @@ final class UserAccessTokenService
     /**
      * @return array{access_token: string, token_type: string, expires_in: int, refresh_token: string, client_id: string, client_kind: string}
      */
-    private function issueForPrincipal(string $userId, string $email, string $clientId, string $clientKind, ?array $session = null): array
+    private function issueForPrincipal(string $userId, string $email, string $clientId, string $clientKind, ?UserAuthSession $session = null): array
     {
         $issuedAt = time();
         $now = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->setTimestamp($issuedAt);
         $expiresAt = $now->modify(sprintf('+%d seconds', $this->ttlSeconds));
         $refreshExpiresAt = $now->modify(sprintf('+%d seconds', $this->refreshTtlSeconds));
         $refreshToken = rtrim(strtr(base64_encode(random_bytes(48)), '+/', '-_'), '=');
-        $sessionId = trim((string) ($session['session_id'] ?? ''));
+        $sessionId = trim((string) ($session?->sessionId ?? ''));
         if ($sessionId === '') {
             $sessionId = bin2hex(random_bytes(16));
         }
-        $createdAt = (int) ($session['created_at'] ?? $issuedAt);
+        $createdAt = (int) ($session?->createdAt ?? $issuedAt);
 
         $token = $this->jwt->builder()
             ->issuedBy('retaia-core')
@@ -267,19 +265,19 @@ final class UserAccessTokenService
             ->getToken($this->jwt->signer(), $this->jwt->signingKey())
             ->toString();
 
-        $this->persistSession([
-            'session_id' => $sessionId,
-            'access_token' => $token,
-            'refresh_token' => $refreshToken,
-            'access_expires_at' => $expiresAt->getTimestamp(),
-            'refresh_expires_at' => $refreshExpiresAt->getTimestamp(),
-            'user_id' => $userId,
-            'email' => $email,
-            'client_id' => $clientId,
-            'client_kind' => $clientKind,
-            'created_at' => $createdAt,
-            'last_used_at' => $issuedAt,
-        ]);
+        $this->persistSession(new UserAuthSession(
+            $sessionId,
+            $token,
+            $refreshToken,
+            $expiresAt->getTimestamp(),
+            $refreshExpiresAt->getTimestamp(),
+            $userId,
+            $email,
+            $clientId,
+            $clientKind,
+            $createdAt,
+            $issuedAt,
+        ));
 
         return [
             'access_token' => $token,
@@ -291,129 +289,57 @@ final class UserAccessTokenService
         ];
     }
 
-    /**
-     * @return array<string, array<string, mixed>>
-     */
-    private function sessionByRefreshToken(string $refreshToken): ?array
+    private function sessionByRefreshToken(string $refreshToken): ?UserAuthSession
     {
-        $row = $this->connection->fetchAssociative(
-            'SELECT session_id, access_token, refresh_token, access_expires_at, refresh_expires_at, user_id, email, client_id, client_kind, created_at, last_used_at
-             FROM user_auth_session
-             WHERE refresh_token = :refreshToken
-             LIMIT 1',
-            ['refreshToken' => $refreshToken]
-        );
-
-        if (!is_array($row)) {
+        $session = $this->sessions->findByRefreshToken($refreshToken);
+        if (!$session instanceof UserAuthSession) {
             return null;
         }
 
-        $normalized = $this->normalizeStoredSession($row);
-        if ($normalized === null) {
-            $this->deleteSession((string) ($row['session_id'] ?? ''));
+        if ($session->refreshExpiresAt <= time()) {
+            $this->deleteSession($session->sessionId);
             return null;
         }
 
-        if ((int) ($normalized['refresh_expires_at'] ?? 0) <= time()) {
-            $this->deleteSession((string) ($normalized['session_id'] ?? ''));
-            return null;
-        }
-
-        return $normalized;
+        return $session;
     }
 
-    /**
-     * @return array<string, mixed>|null
-     */
-    private function sessionBySessionId(string $sessionId): ?array
+    private function sessionBySessionId(string $sessionId): ?UserAuthSession
     {
-        $row = $this->connection->fetchAssociative(
-            'SELECT session_id, access_token, refresh_token, access_expires_at, refresh_expires_at, user_id, email, client_id, client_kind, created_at, last_used_at
-             FROM user_auth_session
-             WHERE session_id = :sessionId
-             LIMIT 1',
-            ['sessionId' => $sessionId]
-        );
-
-        if (!is_array($row)) {
+        $session = $this->sessions->findBySessionId($sessionId);
+        if (!$session instanceof UserAuthSession) {
             return null;
         }
 
-        $normalized = $this->normalizeStoredSession($row);
-        if ($normalized === null) {
+        if ($session->refreshExpiresAt <= time()) {
             $this->deleteSession($sessionId);
             return null;
         }
 
-        if ((int) ($normalized['refresh_expires_at'] ?? 0) <= time()) {
-            $this->deleteSession($sessionId);
-            return null;
-        }
-
-        return $normalized;
+        return $session;
     }
 
     /**
-     * @return array<int, array<string, mixed>>
+     * @return list<UserAuthSession>
      */
     private function sessionsByUserId(string $userId): array
     {
-        $rows = $this->connection->fetchAllAssociative(
-            'SELECT session_id, access_token, refresh_token, access_expires_at, refresh_expires_at, user_id, email, client_id, client_kind, created_at, last_used_at
-             FROM user_auth_session
-             WHERE user_id = :userId',
-            ['userId' => $userId]
-        );
-
         $sessions = [];
-        foreach ($rows as $row) {
-            $normalized = $this->normalizeStoredSession($row);
-            if ($normalized === null) {
-                $this->deleteSession((string) ($row['session_id'] ?? ''));
+        foreach ($this->sessions->findByUserId($userId) as $session) {
+            if ($session->refreshExpiresAt <= time()) {
+                $this->deleteSession($session->sessionId);
                 continue;
             }
 
-            if ((int) ($normalized['refresh_expires_at'] ?? 0) <= time()) {
-                $this->deleteSession((string) ($normalized['session_id'] ?? ''));
-                continue;
-            }
-
-            $sessions[] = $normalized;
+            $sessions[] = $session;
         }
 
         return $sessions;
     }
 
-    /**
-     * @param array<string, mixed> $session
-     */
-    private function persistSession(array $session): void
+    private function persistSession(UserAuthSession $session): void
     {
-        $normalized = $this->normalizeStoredSession($session);
-        if ($normalized === null) {
-            return;
-        }
-
-        $data = [
-            'session_id' => (string) $normalized['session_id'],
-            'access_token' => (string) $normalized['access_token'],
-            'refresh_token' => (string) $normalized['refresh_token'],
-            'access_expires_at' => (int) $normalized['access_expires_at'],
-            'refresh_expires_at' => (int) $normalized['refresh_expires_at'],
-            'user_id' => (string) $normalized['user_id'],
-            'email' => (string) $normalized['email'],
-            'client_id' => (string) $normalized['client_id'],
-            'client_kind' => (string) $normalized['client_kind'],
-            'created_at' => (int) $normalized['created_at'],
-            'last_used_at' => (int) $normalized['last_used_at'],
-        ];
-
-        if ($this->sessionExists((string) $normalized['session_id'])) {
-            $this->connection->update('user_auth_session', $data, ['session_id' => (string) $normalized['session_id']]);
-            return;
-        }
-
-        $this->connection->insert('user_auth_session', $data);
+        $this->sessions->save($session);
     }
 
     private function deleteSession(string $sessionId): void
@@ -423,59 +349,7 @@ final class UserAccessTokenService
             return;
         }
 
-        $this->connection->delete('user_auth_session', ['session_id' => $sessionId]);
-    }
-
-    private function sessionExists(string $sessionId): bool
-    {
-        return (int) $this->connection->fetchOne(
-            'SELECT COUNT(*) FROM user_auth_session WHERE session_id = :sessionId',
-            ['sessionId' => $sessionId]
-        ) > 0;
-    }
-
-    /**
-     * @param array<string, mixed> $session
-     * @return array<string, mixed>|null
-     */
-    private function normalizeStoredSession(array $session): ?array
-    {
-        $userId = trim((string) ($session['user_id'] ?? ''));
-        $email = trim((string) ($session['email'] ?? ''));
-        $clientId = trim((string) ($session['client_id'] ?? ''));
-        $clientKind = trim((string) ($session['client_kind'] ?? ''));
-        $accessToken = trim((string) ($session['access_token'] ?? ''));
-        $refreshToken = trim((string) ($session['refresh_token'] ?? ''));
-        if ($userId === '' || $email === '' || $clientId === '' || $clientKind === '' || $accessToken === '' || $refreshToken === '') {
-            return null;
-        }
-
-        $sessionId = trim((string) ($session['session_id'] ?? ''));
-        if ($sessionId === '' || str_contains($sessionId, '|')) {
-            return null;
-        }
-
-        $createdAt = (int) ($session['created_at'] ?? ($session['issued_at'] ?? time()));
-        $lastUsedAt = (int) ($session['last_used_at'] ?? ($session['issued_at'] ?? $createdAt));
-        $accessExpiresAt = (int) ($session['access_expires_at'] ?? 0);
-        $refreshExpiresAt = (int) ($session['refresh_expires_at'] ?? 0);
-        if ($refreshExpiresAt <= 0) {
-            return null;
-        }
-
-        return [
-            'session_id' => $sessionId,
-            'access_token' => $accessToken,
-            'refresh_token' => $refreshToken,
-            'access_expires_at' => $accessExpiresAt,
-            'refresh_expires_at' => $refreshExpiresAt,
-            'user_id' => $userId,
-            'email' => $email,
-            'client_id' => $clientId,
-            'client_kind' => $clientKind,
-            'created_at' => $createdAt,
-            'last_used_at' => $lastUsedAt,
-        ];
+        $this->sessions->delete($sessionId);
     }
 
     private function formatTimestamp(int $timestamp): ?string

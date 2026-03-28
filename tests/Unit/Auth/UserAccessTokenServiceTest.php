@@ -3,8 +3,8 @@
 namespace App\Tests\Unit\Auth;
 
 use App\Auth\UserAccessTokenService;
+use App\Auth\UserAuthSessionRepository;
 use App\Entity\User;
-use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\TestCase;
 
@@ -75,10 +75,10 @@ final class UserAccessTokenServiceTest extends TestCase
 
     private function service(): UserAccessTokenService
     {
-        return new UserAccessTokenService($this->connection(), 'test-secret', 3600, 86400);
+        return new UserAccessTokenService(new UserAuthSessionRepository($this->connection()), 'test-secret', 3600, 86400);
     }
 
-    private function connection(): Connection
+    private function connection(): \Doctrine\DBAL\Connection
     {
         $connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]);
         $connection->executeStatement('CREATE TABLE user_auth_session (session_id VARCHAR(32) PRIMARY KEY NOT NULL, access_token CLOB NOT NULL, refresh_token VARCHAR(255) NOT NULL, access_expires_at INTEGER NOT NULL, refresh_expires_at INTEGER NOT NULL, user_id VARCHAR(32) NOT NULL, email VARCHAR(180) NOT NULL, client_id VARCHAR(64) NOT NULL, client_kind VARCHAR(32) NOT NULL, created_at INTEGER NOT NULL, last_used_at INTEGER NOT NULL)');

@@ -5,6 +5,7 @@ namespace App\Tests\Unit\Security;
 use App\Auth\AuthClientStateStore;
 use App\Auth\ClientAccessTokenResolver;
 use App\Auth\UserAccessTokenService;
+use App\Auth\UserAuthSessionRepository;
 use App\Domain\AuthClient\ClientKind;
 use App\Entity\User;
 use App\Security\ApiBearerAuthenticator;
@@ -36,7 +37,7 @@ final class ApiBearerAuthenticatorTest extends TestCase
     public function testAuthenticateBuildsPassportForUserToken(): void
     {
         $cache = new ArrayAdapter();
-        $userTokens = new UserAccessTokenService($this->connection(), 'test-secret', 3600);
+        $userTokens = new UserAccessTokenService(new UserAuthSessionRepository($this->connection()), 'test-secret', 3600);
         $stateStore = new AuthClientStateStore($cache);
         $authenticator = $this->authenticator($userTokens, new ClientAccessTokenResolver($stateStore));
         $user = new User('user-1', 'user@example.test', 'hash');
@@ -63,7 +64,7 @@ final class ApiBearerAuthenticatorTest extends TestCase
         ]);
 
         $authenticator = $this->authenticator(
-            new UserAccessTokenService($this->connection(), 'test-secret', 3600),
+            new UserAccessTokenService(new UserAuthSessionRepository($this->connection()), 'test-secret', 3600),
             new ClientAccessTokenResolver($stateStore)
         );
 
@@ -121,7 +122,7 @@ final class ApiBearerAuthenticatorTest extends TestCase
         $cache = new ArrayAdapter();
 
         return new ApiBearerAuthenticator(
-            $userTokens ?? new UserAccessTokenService($this->connection(), 'test-secret', 3600),
+            $userTokens ?? new UserAccessTokenService(new UserAuthSessionRepository($this->connection()), 'test-secret', 3600),
             $clientResolver ?? new ClientAccessTokenResolver(new AuthClientStateStore($cache)),
             $translator ?? $this->createStub(TranslatorInterface::class),
         );

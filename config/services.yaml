@@ -42,6 +42,7 @@ services:
     App\User\Repository\UserRepositoryInterface: '@App\User\Repository\UserRepository'
     App\User\Repository\PasswordResetTokenRepositoryInterface: '@App\User\Repository\PasswordResetTokenRepository'
     App\Asset\Repository\AssetRepositoryInterface: '@App\Asset\Repository\AssetRepository'
+    App\Auth\UserAuthSessionRepositoryInterface: '@App\Auth\UserAuthSessionRepository'
     App\Application\Agent\RegisterAgentUseCase: '@App\Application\Agent\RegisterAgentHandler'
     App\Application\Auth\ResolveAuthenticatedUserUseCase: '@App\Application\Auth\ResolveAuthenticatedUserHandler'
     App\Application\Auth\Port\PasswordResetRequestRateLimiterGateway: '@App\Infrastructure\Auth\PasswordResetRequestRateLimiterGateway'
