@@ -42,6 +42,21 @@ That does not mean the runtime is free of shortcuts. A deeper implementation rev
   - existing proxy materialization and derived-file persistence have been extracted out of `IngestEnqueueStableCommand` into a dedicated service/repository seam
   - the remaining ingest debt is now mostly asset creation, auxiliary sidecar attachment and job-enqueue orchestration still concentrated in the command
 
+### P3. Filesystem access is still handled through local ad hoc seams instead of a repo-wide storage abstraction
+
+- Representative locations:
+  - [`src/Ingest/Service/ExistingProxyFilesystem.php:5`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Service/ExistingProxyFilesystem.php:5)
+  - [`src/Ingest/Service/FilesystemFilePoller.php:7`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Service/FilesystemFilePoller.php:7)
+  - [`src/Workflow/Service/BatchWorkflowService.php:373`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Workflow/Service/BatchWorkflowService.php:373)
+- Impact:
+  - filesystem concerns are being extracted case by case, but each flow still defines its own local seam and path conventions
+  - the repo has no single storage abstraction for local disk vs future alternate backends
+  - cross-cutting concerns like move/copy/delete semantics, path normalization and test doubles are still fragmented
+- Why this is below the target quality bar:
+  - if filesystem access is part of the runtime model, it should be represented by an explicit storage port reused across ingest, derived, purge and related operational flows
+  - the target remediation should be a dedicated PR introducing a repo-wide abstraction, likely via `league/flysystem`, rather than more one-off wrappers
+  - if network-mounted storage remains a supported runtime target, that batch should also evaluate an SMB adapter such as `jerodev/flysystem-v3-smb-adapter` so the abstraction covers both local disk and SMB-backed volumes explicitly
+
 ## Coverage gaps in current tests
 
 No major test-depth gap is currently tracked relative to the implemented runtime surface.
@@ -66,6 +81,7 @@ No remaining secondary gap is tracked in this snapshot.
 - keep reducing SQL / filesystem coordination inside `BatchWorkflowService`
 - split operational command-side logic in `IngestEnqueueStableCommand` into narrower collaborators
 - continue extracting purge-side file and filesystem coordination out of `BatchWorkflowService`
+- prepare a dedicated filesystem/storage abstraction batch so future refactors stop creating local one-off seams
 
 ## Bottom line
 
