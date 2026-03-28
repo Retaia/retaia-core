@@ -70,8 +70,8 @@ final class ExistingProxyAttachmentService
         if (!in_array($materializedStoragePath, $sidecars, true)) {
             $sidecars[] = $materializedStoragePath;
         }
-        $paths['storage_id'] = (string) ($paths['storage_id'] ?? $storageId);
-        $paths['original_relative'] = (string) ($paths['original_relative'] ?? $originalPath);
+        $paths['storage_id'] = $storageId;
+        $paths['original_relative'] = $originalPath;
         $paths['sidecars_relative'] = array_values(array_unique(array_map('strval', $sidecars)));
 
         $derived = is_array($fields['derived'] ?? null) ? $fields['derived'] : [];

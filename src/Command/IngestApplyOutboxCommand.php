@@ -64,7 +64,8 @@ final class IngestApplyOutboxCommand extends Command
     private function processAsset(Asset $asset): int
     {
         $fields = $asset->getFields();
-        $sourcePath = (string) ($fields['source_path'] ?? '');
+        $paths = is_array($fields['paths'] ?? null) ? $fields['paths'] : [];
+        $sourcePath = (string) ($paths['original_relative'] ?? '');
         if ($sourcePath === '') {
             return 0;
         }
@@ -101,7 +102,8 @@ final class IngestApplyOutboxCommand extends Command
     private function persistPathUpdate(Asset $asset, string $fromRelative, string $toRelative): void
     {
         $fields = $asset->getFields();
-        if (($fields['current_path'] ?? null) === $toRelative) {
+        $paths = is_array($fields['paths'] ?? null) ? $fields['paths'] : [];
+        if (($paths['original_relative'] ?? null) === $toRelative) {
             return;
         }
 
@@ -111,7 +113,8 @@ final class IngestApplyOutboxCommand extends Command
         }
         $last = $history[count($history) - 1] ?? null;
         if (is_array($last) && ($last['from'] ?? null) === $fromRelative && ($last['to'] ?? null) === $toRelative) {
-            $fields['current_path'] = $toRelative;
+            $paths['original_relative'] = $toRelative;
+            $fields['paths'] = $paths;
             $asset->setFields($fields);
             $this->assets->save($asset);
 
@@ -125,7 +128,8 @@ final class IngestApplyOutboxCommand extends Command
             'moved_at' => (new \DateTimeImmutable())->format(DATE_ATOM),
         ];
         $history[] = $entry;
-        $fields['current_path'] = $toRelative;
+        $paths['original_relative'] = $toRelative;
+        $fields['paths'] = $paths;
         $fields['path_history'] = $history;
         $asset->setFields($fields);
         $this->assets->save($asset);
@@ -254,7 +258,7 @@ final class IngestApplyOutboxCommand extends Command
     {
         $fields = $asset->getFields();
         $paths = is_array($fields['paths'] ?? null) ? $fields['paths'] : [];
-        $storageId = trim((string) ($paths['storage_id'] ?? $fields['storage_id'] ?? $this->storageRegistry->defaultStorageId()));
+        $storageId = trim((string) ($paths['storage_id'] ?? $this->storageRegistry->defaultStorageId()));
 
         return $this->storageRegistry->get($storageId === '' ? $this->storageRegistry->defaultStorageId() : $storageId)->storage;
     }

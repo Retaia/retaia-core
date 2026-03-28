@@ -288,8 +288,6 @@ final class BatchWorkflowService
         if ($storage !== null) {
             $fields = $asset->getFields();
             $paths = [
-                (string) ($fields['current_path'] ?? ''),
-                (string) ($fields['source_path'] ?? ''),
                 is_array($fields['paths'] ?? null) ? (string) (($fields['paths']['original_relative'] ?? '')) : '',
             ];
             $sidecars = is_array($fields['paths']['sidecars_relative'] ?? null) ? $fields['paths']['sidecars_relative'] : [];
@@ -368,7 +366,7 @@ final class BatchWorkflowService
 
         $fields = $asset->getFields();
         $paths = is_array($fields['paths'] ?? null) ? $fields['paths'] : [];
-        $storageId = trim((string) ($paths['storage_id'] ?? $fields['storage_id'] ?? $this->storageRegistry->defaultStorageId()));
+        $storageId = trim((string) ($paths['storage_id'] ?? $this->storageRegistry->defaultStorageId()));
 
         return $this->storageRegistry->get($storageId === '' ? $this->storageRegistry->defaultStorageId() : $storageId)->storage;
     }

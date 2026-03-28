@@ -665,9 +665,8 @@ final class WorkflowApiTest extends WebTestCase
         $asset = $entityManager->find(Asset::class, $uuid);
         self::assertInstanceOf(Asset::class, $asset);
         $asset->setFields([
-            'source_path' => 'INBOX/purge-derived.mov',
-            'current_path' => 'REJECTS/purge-derived.mov',
             'paths' => [
+                'storage_id' => 'nas-main',
                 'original_relative' => 'REJECTS/purge-derived.mov',
                 'sidecars_relative' => [
                     'REJECTS/.derived/99999999-9999-4999-8999-999999999999/proxy.mp4',
