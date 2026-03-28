@@ -48,6 +48,7 @@ services:
     App\Auth\TechnicalAccessTokenRepositoryInterface: '@App\Auth\TechnicalAccessTokenRepository'
     App\Auth\AuthDeviceFlowRepositoryInterface: '@App\Auth\AuthDeviceFlowRepository'
     App\Auth\AuthMcpChallengeRepositoryInterface: '@App\Auth\AuthMcpChallengeRepository'
+    App\Api\Service\AgentRuntimeRepositoryInterface: '@App\Api\Service\AgentRuntimeRepository'
     App\Api\Service\AgentSignature\AgentPublicKeyRepositoryInterface: '@App\Api\Service\AgentSignature\AgentPublicKeyRepository'
     App\Api\Service\AgentSignature\AgentSignatureNonceRepositoryInterface: '@App\Api\Service\AgentSignature\AgentSignatureNonceRepository'
     App\Application\Agent\RegisterAgentUseCase: '@App\Application\Agent\RegisterAgentHandler'

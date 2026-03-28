@@ -4,7 +4,7 @@ namespace App\Api\Service;
 
 use Doctrine\DBAL\Connection;
 
-final class AgentRuntimeStore
+final class AgentRuntimeRepository implements AgentRuntimeRepositoryInterface
 {
     public function __construct(
         private Connection $connection,
@@ -14,7 +14,7 @@ final class AgentRuntimeStore
     /**
      * @param array<string, mixed> $entry
      */
-    public function register(array $entry): void
+    public function saveRegistration(array $entry): void
     {
         $agentId = trim((string) ($entry['agent_id'] ?? ''));
         if ($agentId === '') {
@@ -22,7 +22,7 @@ final class AgentRuntimeStore
         }
 
         $now = $this->now();
-        $previous = $this->fetch($agentId);
+        $previous = $this->findOne($agentId);
         $row = [
             'agent_id' => $agentId,
             'client_id' => trim((string) ($entry['client_id'] ?? ($previous['client_id'] ?? 'unknown'))),
@@ -66,7 +66,7 @@ final class AgentRuntimeStore
     /**
      * @return array<int, array<string, mixed>>
      */
-    public function list(): array
+    public function findAll(): array
     {
         $rows = $this->connection->fetchAllAssociative(
             'SELECT agent_id, client_id, agent_name, agent_version, os_name, os_version, arch, effective_capabilities, capability_warnings, last_register_at, last_seen_at, last_heartbeat_at, max_parallel_jobs, feature_flags_contract_version, effective_feature_flags_contract_version, server_time_skew_seconds
@@ -83,7 +83,7 @@ final class AgentRuntimeStore
             return;
         }
 
-        $entry = $this->fetch($agentId);
+        $entry = $this->findOne($agentId);
         if ($entry === null) {
             return;
         }
@@ -99,7 +99,7 @@ final class AgentRuntimeStore
     /**
      * @return array<string, mixed>|null
      */
-    private function fetch(string $agentId): ?array
+    private function findOne(string $agentId): ?array
     {
         $row = $this->connection->fetchAssociative(
             'SELECT agent_id, client_id, agent_name, agent_version, os_name, os_version, arch, effective_capabilities, capability_warnings, last_register_at, last_seen_at, last_heartbeat_at, max_parallel_jobs, feature_flags_contract_version, effective_feature_flags_contract_version, server_time_skew_seconds

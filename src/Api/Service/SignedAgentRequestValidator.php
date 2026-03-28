@@ -19,7 +19,7 @@ final class SignedAgentRequestValidator
         private AgentRequestSignatureVerifier $signatureVerifier,
         private AgentSignatureNonceRepositoryInterface $nonceRepository,
         private SignedAgentMessageCanonicalizer $messageCanonicalizer,
-        private AgentRuntimeStore $agentRuntimeStore,
+        private AgentRuntimeRepositoryInterface $agentRuntimeRepository,
     ) {
     }
 
@@ -93,7 +93,7 @@ final class SignedAgentRequestValidator
             return $this->unauthorizedResponse(['X-Retaia-Signature-Nonce']);
         }
 
-        $this->agentRuntimeStore->touchSeen($headerAgentId);
+        $this->agentRuntimeRepository->touchSeen($headerAgentId);
 
         return null;
     }

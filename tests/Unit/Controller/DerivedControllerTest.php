@@ -3,7 +3,7 @@
 namespace App\Tests\Unit\Controller;
 
 use App\Api\Service\AssetRequestPreconditionService;
-use App\Api\Service\AgentRuntimeStore;
+use App\Api\Service\AgentRuntimeRepository;
 use App\Api\Service\AgentSignature\AgentPublicKeyRecord;
 use App\Api\Service\AgentSignature\AgentPublicKeyRepository;
 use App\Api\Service\AgentSignature\AgentSignatureNonceRepository;
@@ -116,7 +116,7 @@ final class DerivedControllerTest extends TestCase
             new GpgCliAgentRequestSignatureVerifier(),
             new AgentSignatureNonceRepository($connection),
             new SignedAgentMessageCanonicalizer(),
-            new AgentRuntimeStore($connection),
+            new AgentRuntimeRepository($connection),
         );
 
         return new DerivedController(

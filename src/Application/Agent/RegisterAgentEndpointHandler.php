@@ -4,7 +4,7 @@ namespace App\Application\Agent;
 
 use App\Api\Service\AgentSignature\AgentPublicKeyRecord;
 use App\Api\Service\AgentSignature\AgentPublicKeyRepositoryInterface;
-use App\Api\Service\AgentRuntimeStore;
+use App\Api\Service\AgentRuntimeRepositoryInterface;
 use App\Application\Auth\ResolveAuthenticatedUserResult;
 use App\Application\Auth\ResolveAuthenticatedUserUseCase;
 
@@ -14,7 +14,7 @@ final class RegisterAgentEndpointHandler
         private RegisterAgentUseCase $registerAgentHandler,
         private ResolveAuthenticatedUserUseCase $resolveAuthenticatedUserHandler,
         private AgentPublicKeyRepositoryInterface $agentPublicKeyRepository,
-        private AgentRuntimeStore $agentRuntimeStore,
+        private AgentRuntimeRepositoryInterface $agentRuntimeRepository,
     ) {
     }
 
@@ -71,7 +71,7 @@ final class RegisterAgentEndpointHandler
         ));
         $resultPayload = $result->payload() ?? [];
         $serverPolicy = is_array($resultPayload['server_policy'] ?? null) ? $resultPayload['server_policy'] : [];
-        $this->agentRuntimeStore->register([
+        $this->agentRuntimeRepository->saveRegistration([
             'agent_id' => $agentId,
             'client_id' => $actorId,
             'agent_name' => $agentName,
