@@ -124,6 +124,49 @@ composer staging:migrate
 composer staging:health
 ```
 
+## Storage Configuration
+
+Business storage is configured with explicit env vars, not JSON.
+
+Required keys:
+
+- `APP_STORAGE_IDS`: comma-separated storage ids
+- `APP_STORAGE_DEFAULT_ID`: default storage id when multiple storages exist
+- `APP_STORAGE_<ID>_DRIVER`: currently `local`
+- `APP_STORAGE_<ID>_ROOT_PATH`: storage root path
+- `APP_STORAGE_<ID>_WATCH_DIRECTORY`: relative ingest watch directory inside that storage
+
+Optional keys per storage:
+
+- `APP_STORAGE_<ID>_INGEST_ENABLED`: `1` or `0`
+- `APP_STORAGE_<ID>_MANAGED_DIRECTORIES`: comma-separated managed relative directories
+
+Single-storage example:
+
+```dotenv
+APP_STORAGE_IDS=nas-main
+APP_STORAGE_DEFAULT_ID=nas-main
+APP_STORAGE_NAS_MAIN_DRIVER=local
+APP_STORAGE_NAS_MAIN_ROOT_PATH=./docker/RETAIA
+APP_STORAGE_NAS_MAIN_WATCH_DIRECTORY=INBOX
+```
+
+Multi-storage example:
+
+```dotenv
+APP_STORAGE_IDS=nas-main,nas-alt
+APP_STORAGE_DEFAULT_ID=nas-main
+
+APP_STORAGE_NAS_MAIN_DRIVER=local
+APP_STORAGE_NAS_MAIN_ROOT_PATH=/mnt/retaia-main
+APP_STORAGE_NAS_MAIN_WATCH_DIRECTORY=INBOX
+
+APP_STORAGE_NAS_ALT_DRIVER=local
+APP_STORAGE_NAS_ALT_ROOT_PATH=/mnt/retaia-alt
+APP_STORAGE_NAS_ALT_WATCH_DIRECTORY=INBOX
+APP_STORAGE_NAS_ALT_INGEST_ENABLED=0
+```
+
 ## Ingest Polling
 
 Main commands:

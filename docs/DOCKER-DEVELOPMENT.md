@@ -15,6 +15,24 @@ La configuration Docker est centralisée dans `/docker` (ex: `/docker/Caddyfile`
 Le dossier de polling local est `/docker/RETAIA/INBOX` (monté dans le conteneur via `/var/local/RETAIA`).
 Les dossiers locaux disponibles sont aussi `/docker/RETAIA/ARCHIVE` et `/docker/RETAIA/REJECTS`.
 
+Variables storage utilisées par le compose dev :
+
+- `APP_STORAGE_IDS=nas-main`
+- `APP_STORAGE_DEFAULT_ID=nas-main`
+- `APP_STORAGE_NAS_MAIN_DRIVER=local`
+- `APP_STORAGE_NAS_MAIN_ROOT_PATH=/var/local/RETAIA`
+- `APP_STORAGE_NAS_MAIN_WATCH_DIRECTORY=INBOX`
+
+La convention générale pour plusieurs storages est :
+
+- `APP_STORAGE_IDS=<id1>,<id2>,...`
+- `APP_STORAGE_DEFAULT_ID=<id>`
+- `APP_STORAGE_<ID>_DRIVER`
+- `APP_STORAGE_<ID>_ROOT_PATH`
+- `APP_STORAGE_<ID>_WATCH_DIRECTORY`
+- optionnel : `APP_STORAGE_<ID>_INGEST_ENABLED`
+- optionnel : `APP_STORAGE_<ID>_MANAGED_DIRECTORIES`
+
 ## Démarrage
 
 Pre-requis:

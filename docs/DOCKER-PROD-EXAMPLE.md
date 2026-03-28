@@ -32,6 +32,26 @@ Quand les agents tournent sur des workstations (hors reseau Docker du NAS):
 - `DEFAULT_URI`: URL publique canonique de l'API (generation d'URLs hors contexte HTTP)
 - `RETAIA_PROD_HTTP_PORT`: port expose par Caddy (defaut `8080`)
 
+Variables storage metier :
+
+- `APP_STORAGE_IDS`: liste des storages declares, separes par des virgules
+- `APP_STORAGE_DEFAULT_ID`: storage par defaut
+- `APP_STORAGE_<ID>_DRIVER`: backend du storage (`local` aujourd'hui)
+- `APP_STORAGE_<ID>_ROOT_PATH`: racine du storage dans le conteneur
+- `APP_STORAGE_<ID>_WATCH_DIRECTORY`: dossier de polling relatif a la racine
+- `APP_STORAGE_<ID>_INGEST_ENABLED`: optionnel, `1` ou `0`
+- `APP_STORAGE_<ID>_MANAGED_DIRECTORIES`: optionnel, liste de repertoires geres
+
+Exemple simple:
+
+```bash
+export APP_STORAGE_IDS=nas-main
+export APP_STORAGE_DEFAULT_ID=nas-main
+export APP_STORAGE_NAS_MAIN_DRIVER=local
+export APP_STORAGE_NAS_MAIN_ROOT_PATH=/var/local/RETAIA
+export APP_STORAGE_NAS_MAIN_WATCH_DIRECTORY=INBOX
+```
+
 Structure attendue cote hote dans `RETAIA_INGEST_HOST_DIR`:
 
 - `INBOX/`
