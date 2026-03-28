@@ -743,6 +743,13 @@ final class OpenApiContractTest extends WebTestCase
         }
 
         $asset = new Asset($uuid, 'VIDEO', 'contract.mov', $state);
+        $asset->setFields([
+            'paths' => [
+                'storage_id' => 'nas-main',
+                'original_relative' => 'INBOX/contract.mov',
+                'sidecars_relative' => [],
+            ],
+        ]);
         $entityManager->persist($asset);
         $entityManager->flush();
     }
@@ -766,6 +773,11 @@ final class OpenApiContractTest extends WebTestCase
 
         $asset = new Asset($uuid, $mediaType, $filename, $state);
         $asset->setFields(array_replace([
+            'paths' => [
+                'storage_id' => 'nas-main',
+                'original_relative' => 'INBOX/'.$filename,
+                'sidecars_relative' => [],
+            ],
             'captured_at' => '2026-01-10T12:00:00Z',
             'gps_latitude' => 50.8503,
             'gps_longitude' => 4.3517,

@@ -17,20 +17,6 @@ Spec baseline: `specs/api/openapi/v1.yaml` from `retaia-docs@b6eb0447cf3c9d3bf3d
 - Why this is below the target quality bar:
   - the core pattern should be: application service/use case orchestrates, repositories/gateways persist, lower-level adapters handle transport or filesystem concerns
 
-### P2. Some admin flows still resolve assets by relative path without a storage identifier
-
-- Representative locations:
-  - [`src/Controller/Api/OpsController.php:457`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Controller/Api/OpsController.php:457)
-  - [`src/Controller/Api/OpsController.php:535`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Controller/Api/OpsController.php:535)
-- Impact:
-  - once multiple business storages are active simultaneously, the same relative path can exist on more than one storage
-  - path-only admin recovery/requeue flows can therefore resolve the wrong asset UUID or fail to resolve deterministically
-- Why this is below the target quality bar:
-  - storage-aware runtime needs storage-aware lookup semantics end-to-end
-  - any flow that accepts a path as identity must either:
-    - include `storage_id`, or
-    - resolve through a repository query that disambiguates path + storage explicitly
-
 ### P3. Business storage is now Flysystem-backed and multi-storage aware, but the backend is still hardcoded to local disk
 
 - Architecture rule:
@@ -64,18 +50,13 @@ Spec baseline: `specs/api/openapi/v1.yaml` from `retaia-docs@b6eb0447cf3c9d3bf3d
 
 ## Recommended remediation order
 
-### Batch 1: make path-based admin flows storage-aware
-
-- remove path-only UUID derivation in ops/admin flows
-- resolve assets with explicit storage context when a relative path is used as input
-
-### Batch 2: make the Flysystem backend configurable
+### Batch 1: make the Flysystem backend configurable
 
 - add first-class SMB backend support behind `BusinessStorageInterface`
 - remove the hardcoded local-only factory
 - keep the application/storage seam stable while finishing backend portability
 
-### Batch 3: continue decomposing remaining god services
+### Batch 2: continue decomposing remaining god services
 
 - keep reducing SQL / side-effect coordination inside `BatchWorkflowService`
 - split operational command-side logic in `IngestEnqueueStableCommand` into narrower collaborators

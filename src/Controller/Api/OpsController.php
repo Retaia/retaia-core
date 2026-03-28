@@ -401,6 +401,7 @@ final class OpsController
         $payload = $this->payload($request);
         $assetUuid = trim((string) ($payload['asset_uuid'] ?? ''));
         $path = trim((string) ($payload['path'] ?? ''));
+        $storageId = trim((string) ($payload['storage_id'] ?? ''));
         $reason = trim((string) ($payload['reason'] ?? ''));
 
         if ($assetUuid === '' && $path === '') {
@@ -431,6 +432,20 @@ final class OpsController
                 Response::HTTP_BAD_REQUEST
             );
         }
+        if ($path !== '' && $assetUuid === '' && $storageId === '') {
+            return $this->errorResponse(
+                'VALIDATION_FAILED',
+                'storage_id is required when path is provided without asset_uuid',
+                Response::HTTP_BAD_REQUEST
+            );
+        }
+        if ($storageId !== '' && !$this->storageRegistry->has($storageId)) {
+            return $this->errorResponse(
+                'VALIDATION_FAILED',
+                'storage_id must reference a configured storage',
+                Response::HTTP_BAD_REQUEST
+            );
+        }
 
         $includeDerived = true;
         if (array_key_exists('include_derived', $payload)) {
@@ -454,7 +469,7 @@ final class OpsController
         $normalizedPath = ltrim($path, '/');
         $targetAsset = $assetUuid !== ''
             ? $this->assets->findByUuid($assetUuid)
-            : $this->assets->findByUuid($this->assetUuidFromPath($normalizedPath));
+            : $this->assets->findByUuid($this->assetUuidFromStoragePath($storageId, $normalizedPath));
 
         $requeuedAssets = 0;
         $requeuedJobs = 0;
@@ -469,6 +484,7 @@ final class OpsController
             'target' => array_filter([
                 'asset_uuid' => $assetUuid !== '' ? $assetUuid : ($targetAsset?->getUuid()),
                 'path' => $normalizedPath !== '' ? $normalizedPath : null,
+                'storage_id' => $normalizedPath !== '' ? $storageId : null,
             ], static fn (mixed $v): bool => is_string($v) && $v !== ''),
             'requeued_assets' => $requeuedAssets,
             'requeued_jobs' => $requeuedJobs,
@@ -532,9 +548,9 @@ final class OpsController
         return [$requeued, $deduplicated];
     }
 
-    private function assetUuidFromPath(string $path): string
+    private function assetUuidFromStoragePath(string $storageId, string $path): string
     {
-        $hex = md5($path);
+        $hex = md5($storageId.'|'.$path);
 
         return sprintf(
             '%s-%s-%s-%s-%s',

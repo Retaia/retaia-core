@@ -412,6 +412,7 @@ final class WorkflowApiTest extends WebTestCase
         $asset->setFields([
             'proxy_done' => true,
             'paths' => [
+                'storage_id' => 'nas-main',
                 'original_relative' => 'INBOX/requeue.mov',
                 'sidecars_relative' => [],
             ],
@@ -469,6 +470,23 @@ final class WorkflowApiTest extends WebTestCase
         self::assertSame('VALIDATION_FAILED', $unsafePath['code'] ?? null);
 
         $client->jsonRequest('POST', '/api/v1/ops/ingest/requeue', [
+            'path' => 'INBOX/requeue.mov',
+            'reason' => 'manual_recovery',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $missingStorage = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $missingStorage['code'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/ops/ingest/requeue', [
+            'path' => 'INBOX/requeue.mov',
+            'storage_id' => 'unknown-storage',
+            'reason' => 'manual_recovery',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $invalidStorage = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $invalidStorage['code'] ?? null);
+
+        $client->jsonRequest('POST', '/api/v1/ops/ingest/requeue', [
             'asset_uuid' => '11111111-1111-4111-8111-111111111111',
             'reason' => 'manual_recovery',
             'include_sidecars' => 'yes',
@@ -476,6 +494,40 @@ final class WorkflowApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
         $invalidSidecars = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertSame('VALIDATION_FAILED', $invalidSidecars['code'] ?? null);
+    }
+
+    public function testOpsIngestRequeueAcceptsStorageAwarePathTarget(): void
+    {
+        $client = $this->createAuthenticatedClient('admin@retaia.local');
+        $uuid = $this->assetUuidFromStoragePath('nas-main', 'INBOX/requeue-path.mov');
+        $this->seedAsset($uuid, AssetState::READY, 'requeue-path.mov');
+
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = static::getContainer()->get(EntityManagerInterface::class);
+        $asset = $entityManager->find(Asset::class, $uuid);
+        self::assertInstanceOf(Asset::class, $asset);
+        $asset->setFields([
+            'proxy_done' => false,
+            'paths' => [
+                'storage_id' => 'nas-main',
+                'original_relative' => 'INBOX/requeue-path.mov',
+                'sidecars_relative' => [],
+            ],
+        ]);
+        $entityManager->flush();
+
+        $client->jsonRequest('POST', '/api/v1/ops/ingest/requeue', [
+            'path' => 'INBOX/requeue-path.mov',
+            'storage_id' => 'nas-main',
+            'include_derived' => true,
+            'reason' => 'manual_recovery',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_ACCEPTED);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame($uuid, $payload['target']['asset_uuid'] ?? null);
+        self::assertSame('nas-main', $payload['target']['storage_id'] ?? null);
+        self::assertSame('INBOX/requeue-path.mov', $payload['target']['path'] ?? null);
+        self::assertSame(1, $payload['requeued_assets'] ?? null);
     }
 
     public function testOpsAgentsReturnsRegisteredAgentRuntimeProjection(): void
@@ -750,8 +802,29 @@ final class WorkflowApiTest extends WebTestCase
         }
 
         $asset = new Asset($uuid, 'VIDEO', $filename, $state);
+        $asset->setFields([
+            'paths' => [
+                'storage_id' => 'nas-main',
+                'original_relative' => 'INBOX/'.$filename,
+                'sidecars_relative' => [],
+            ],
+        ]);
         $entityManager->persist($asset);
         $entityManager->flush();
+    }
+
+    private function assetUuidFromStoragePath(string $storageId, string $path): string
+    {
+        $hex = md5($storageId.'|'.$path);
+
+        return sprintf(
+            '%s-%s-%s-%s-%s',
+            substr($hex, 0, 8),
+            substr($hex, 8, 4),
+            substr($hex, 12, 4),
+            substr($hex, 16, 4),
+            substr($hex, 20, 12)
+        );
     }
 
     private function resetTwoFactorState(string $email): void
