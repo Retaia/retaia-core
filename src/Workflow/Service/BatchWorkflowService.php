@@ -11,6 +11,7 @@ use App\Lock\OperationLockType;
 use App\Lock\Repository\OperationLockRepository;
 use App\Ingest\Service\WatchPathResolver;
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\Exception\TableNotFoundException;
 
 final class BatchWorkflowService
 {
@@ -313,7 +314,7 @@ final class BatchWorkflowService
                 'SELECT storage_path FROM asset_derived_file WHERE asset_uuid = :assetUuid',
                 ['assetUuid' => $asset->getUuid()]
             );
-        } catch (\Throwable) {
+        } catch (TableNotFoundException) {
             $rows = [];
         }
 
@@ -336,7 +337,7 @@ final class BatchWorkflowService
                 'DELETE FROM asset_derived_file WHERE asset_uuid = :assetUuid',
                 ['assetUuid' => $asset->getUuid()]
             );
-        } catch (\Throwable) {
+        } catch (TableNotFoundException) {
             // Keep purge behavior resilient for minimal test schemas.
         }
 
