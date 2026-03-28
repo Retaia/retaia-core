@@ -2,6 +2,7 @@
 
 namespace App\Controller\Api;
 
+use App\Api\Service\AgentJobProjectionRepositoryInterface;
 use App\Api\Service\AgentRuntimeRepositoryInterface;
 use App\Application\Auth\ResolveAdminActorHandler;
 use App\Application\Auth\ResolveAdminActorResult;
@@ -40,6 +41,7 @@ final class OpsController
         private OperationLockRepository $locks,
         private JobRepository $jobs,
         private AgentRuntimeRepositoryInterface $agentRuntimeRepository,
+        private AgentJobProjectionRepositoryInterface $agentJobProjectionRepository,
         private AssetRepositoryInterface $assets,
         private Connection $connection,
         private WatchPathResolver $watchPathResolver,
@@ -269,6 +271,10 @@ final class OpsController
     private function projectAgents(): array
     {
         $entries = $this->agentRuntimeRepository->findAll();
+        $jobSnapshots = $this->agentJobProjectionRepository->snapshotsForAgents(array_values(array_filter(array_map(
+            static fn (array $entry): string => trim((string) ($entry['agent_id'] ?? '')),
+            $entries
+        ), static fn (string $agentId): bool => $agentId !== '')));
         $clientUsage = [];
         foreach ($entries as $entry) {
             $clientId = (string) ($entry['client_id'] ?? '');
@@ -287,7 +293,12 @@ final class OpsController
             }
 
             $lastSeenAt = $this->atomOrNow($entry['last_seen_at'] ?? null, $now);
-            $hasActiveJob = $this->jobs->hasActiveJobForAgent($agentId);
+            $jobSnapshot = $jobSnapshots[$agentId] ?? [
+                'current_job' => null,
+                'last_successful_job' => null,
+                'last_failed_job' => null,
+            ];
+            $hasActiveJob = is_array($jobSnapshot['current_job'] ?? null);
             $isStale = ($now->getTimestamp() - $lastSeenAt->getTimestamp()) > self::AGENT_STALE_AFTER_SECONDS;
             $status = $isStale
                 ? 'stale'
@@ -315,7 +326,9 @@ final class OpsController
                     'effective_feature_flags_contract_version' => $entry['debug']['effective_feature_flags_contract_version'] ?? null,
                     'server_time_skew_seconds' => $entry['debug']['server_time_skew_seconds'] ?? null,
                 ],
-                'current_job' => null,
+                'current_job' => $jobSnapshot['current_job'] ?? null,
+                'last_successful_job' => $jobSnapshot['last_successful_job'] ?? null,
+                'last_failed_job' => $jobSnapshot['last_failed_job'] ?? null,
             ];
         }
 

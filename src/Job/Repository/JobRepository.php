@@ -102,9 +102,14 @@ final class JobRepository
             'status' => JobStatus::PENDING->value,
             'correlation_id' => null,
             'claimed_by' => null,
+            'claimed_at' => null,
             'lock_token' => null,
             'fencing_token' => null,
             'locked_until' => null,
+            'completed_by' => null,
+            'completed_at' => null,
+            'failed_by' => null,
+            'failed_at' => null,
             'result_payload' => null,
             'created_at' => $now,
             'updated_at' => $now,
@@ -131,9 +136,14 @@ final class JobRepository
                 'status' => JobStatus::PENDING->value,
                 'correlation_id' => $correlationId,
                 'claimed_by' => null,
+                'claimed_at' => null,
                 'lock_token' => null,
                 'fencing_token' => null,
                 'locked_until' => null,
+                'completed_by' => null,
+                'completed_at' => null,
+                'failed_by' => null,
+                'failed_at' => null,
                 'result_payload' => null,
                 'created_at' => $now,
                 'updated_at' => $now,
@@ -153,7 +163,7 @@ final class JobRepository
 
         $affected = $this->connection->executeStatement(
             'UPDATE processing_job
-             SET status = :claimed, claimed_by = :agentId, lock_token = :lockToken, fencing_token = 1, locked_until = :lockedUntil, updated_at = :now
+             SET status = :claimed, claimed_by = :agentId, claimed_at = :now, lock_token = :lockToken, fencing_token = 1, locked_until = :lockedUntil, completed_by = NULL, completed_at = NULL, failed_by = NULL, failed_at = NULL, updated_at = :now
              WHERE id = :id
                AND (status = :pending OR (status = :claimed AND locked_until < :now))
                AND EXISTS (
@@ -229,7 +239,7 @@ final class JobRepository
 
         $affected = $this->connection->executeStatement(
             'UPDATE processing_job
-             SET status = :completed, result_payload = :result, claimed_by = NULL, lock_token = NULL, fencing_token = NULL, locked_until = NULL, updated_at = :now
+             SET status = :completed, result_payload = :result, claimed_by = NULL, lock_token = NULL, fencing_token = NULL, locked_until = NULL, completed_by = :actorId, completed_at = :now, failed_by = NULL, failed_at = NULL, updated_at = :now
              WHERE id = :id
                AND status = :claimed
                AND claimed_by = :actorId
@@ -267,7 +277,7 @@ final class JobRepository
 
         $affected = $this->connection->executeStatement(
             'UPDATE processing_job
-             SET status = :nextStatus, result_payload = :result, claimed_by = :nextClaimedBy, lock_token = NULL, fencing_token = NULL, locked_until = NULL, updated_at = :now
+             SET status = :nextStatus, result_payload = :result, claimed_by = :nextClaimedBy, claimed_at = :nextClaimedAt, lock_token = NULL, fencing_token = NULL, locked_until = NULL, completed_by = NULL, completed_at = NULL, failed_by = :nextFailedBy, failed_at = :nextFailedAt, updated_at = :now
              WHERE id = :id
                AND status = :claimed
                AND claimed_by = :actorId
@@ -279,6 +289,9 @@ final class JobRepository
                 'actorId' => $actorId,
                 'nextStatus' => $nextStatus,
                 'nextClaimedBy' => $retryable ? null : $actorId,
+                'nextClaimedAt' => null,
+                'nextFailedBy' => $retryable ? null : $actorId,
+                'nextFailedAt' => $retryable ? null : $now,
                 'claimed' => JobStatus::CLAIMED->value,
                 'result' => json_encode($result, JSON_THROW_ON_ERROR),
                 'lockToken' => $lockToken,

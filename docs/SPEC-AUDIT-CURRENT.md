@@ -23,9 +23,7 @@ Important context:
 
 No concrete OpenAPI path/schema drift remains identified in this snapshot.
 
-That does not mean the runtime is free of shortcuts. A deeper implementation review still shows several production-grade quick fixes and minimal implementations that should be treated as active engineering debt, especially around MCP signature semantics and operational projections.
-
-The codebase also still contains several structural shortcuts that are below the quality bar expected for long-lived core runtime code, especially operational projections coupled directly to transport/controller concerns.
+That does not mean the runtime is free of shortcuts. A deeper implementation review still shows a small number of production-grade quick fixes and structural shortcuts that should be treated as active engineering debt, now mostly around MCP signature semantics and a few remaining service boundaries.
 
 ## Findings
 
@@ -42,16 +40,6 @@ The codebase also still contains several structural shortcuts that are below the
 - Why this is a quick fix:
   - the code itself labels it as a “Lightweight signature validation until a dedicated OpenPGP library is introduced”
 
-### P2. `/agents/register` still projects `client_id` from the authenticated user actor
-
-- Runtime location: [`src/Application/Agent/RegisterAgentEndpointHandler.php:50`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Application/Agent/RegisterAgentEndpointHandler.php:50)
-- Critical lines: [`src/Application/Agent/RegisterAgentEndpointHandler.php:52`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Application/Agent/RegisterAgentEndpointHandler.php:52), [`src/Application/Agent/RegisterAgentEndpointHandler.php:55`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Application/Agent/RegisterAgentEndpointHandler.php:55), [`src/Application/Agent/RegisterAgentEndpointHandler.php:70`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Application/Agent/RegisterAgentEndpointHandler.php:70)
-- Impact:
-  - the `client_id` exposed later by `/ops/agents` is really the registering user/admin actor id, not a true technical client identity
-  - operational views and identity-conflict detection are therefore semantically approximate
-- Why this is a quick fix:
-  - it reuses an available authenticated identifier to fill a spec field, but does not model the actual client/agent identity layer cleanly
-
 ### P3. Several runtime services still combine domain orchestration with infrastructure details in the same class
 
 - Representative locations:
@@ -64,17 +52,6 @@ The codebase also still contains several structural shortcuts that are below the
   - the codebase keeps growing around “god services” instead of stable domain/infrastructure seams
 - Why this is below the target quality bar:
   - the core pattern should be: application service/use case orchestrates, repositories/gateways persist, lower-level adapters handle transport or filesystem concerns
-
-### P3. `/ops/agents` is still a partial operational projection
-
-- Runtime location: [`src/Controller/Api/OpsController.php:289`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Controller/Api/OpsController.php:289)
-- Critical lines: [`src/Controller/Api/OpsController.php:296`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Controller/Api/OpsController.php:296), [`src/Controller/Api/OpsController.php:318`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Controller/Api/OpsController.php:318)
-- Impact:
-  - `current_job` is still forced to `null`
-  - `last_successful_job` and `last_failed_job` are not projected at all
-  - the endpoint is contract-compliant, but still weaker than the operational model described by the spec
-- Why this is a quick fix:
-  - the shape is present, but the backing execution history model is not yet complete enough to populate it faithfully
 
 ## Coverage gaps in current tests
 
@@ -95,13 +72,13 @@ No remaining secondary gap is tracked in this snapshot.
 
 ## Recommended remediation order
 
-### Batch 1: finish the operational model behind `/ops/agents`
+### Batch 1: replace the remaining acknowledged cryptographic shortcut for MCP signing
 
-- introduce a proper technical `client_id` model for registered agents
-- add enough job execution history to populate `current_job`, `last_successful_job`, and `last_failed_job` without inventing timestamps
+- remove the lightweight HMAC-like MCP verification path
+- introduce a real OpenPGP verification flow or a dedicated verifier abstraction with equivalent guarantees
 
 ## Bottom line
 
 The repo is currently aligned with the current OpenAPI v1 runtime contract to the extent verified by the implemented runtime and current local validation suite.
 
-However, this snapshot still contains real quick fixes in production code, now concentrated around MCP signature semantics and the incomplete operational model behind `/ops/agents`. The remaining work is now less about path/schema drift and more about replacing those shortcuts with durable runtime models.
+However, this snapshot still contains real quick fixes in production code, now concentrated around MCP signature semantics and a few structural service boundaries. The remaining work is now less about path/schema drift and more about replacing those shortcuts with durable runtime models.
