@@ -4,6 +4,7 @@ namespace App\Job\Repository;
 
 use App\Job\Job;
 use App\Job\JobStatus;
+use App\Storage\BusinessStorageRegistryInterface;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\ParameterType;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
@@ -12,7 +13,7 @@ final class JobRepository
 {
     public function __construct(
         private Connection $connection,
-        private string $defaultStorageId = 'nas-main',
+        private BusinessStorageRegistryInterface $storageRegistry,
     ) {
     }
 
@@ -481,9 +482,9 @@ final class JobRepository
         }
 
         $paths = is_array($fields['paths'] ?? null) ? $fields['paths'] : [];
-        $storageId = trim((string) ($paths['storage_id'] ?? $fields['storage_id'] ?? $this->defaultStorageId));
+        $storageId = trim((string) ($paths['storage_id'] ?? $fields['storage_id'] ?? $this->storageRegistry->defaultStorageId()));
         if ($storageId === '') {
-            $storageId = $this->defaultStorageId;
+            $storageId = $this->storageRegistry->defaultStorageId();
         }
 
         $fallbackOriginal = $this->sanitizeRelativePath('INBOX/'.$assetFilename);

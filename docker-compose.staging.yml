@@ -10,7 +10,11 @@ services:
       APP_ENV: prod
       APP_DEBUG: "0"
       DATABASE_URL: postgresql://app:app@database-staging:5432/app_staging?serverVersion=16&charset=utf8
-      APP_INGEST_WATCH_PATH: /var/local/RETAIA/INBOX
+      APP_STORAGE_IDS: nas-main
+      APP_STORAGE_DEFAULT_ID: nas-main
+      APP_STORAGE_NAS_MAIN_DRIVER: local
+      APP_STORAGE_NAS_MAIN_ROOT_PATH: /var/local/RETAIA
+      APP_STORAGE_NAS_MAIN_WATCH_DIRECTORY: INBOX
     depends_on:
       database-staging:
         condition: service_healthy

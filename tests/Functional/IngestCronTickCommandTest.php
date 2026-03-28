@@ -2,6 +2,7 @@
 
 namespace App\Tests\Functional;
 
+use App\Tests\Support\BusinessStorageEnvTrait;
 use Doctrine\DBAL\Connection;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
@@ -11,6 +12,7 @@ use Symfony\Component\Console\Tester\CommandTester;
 final class IngestCronTickCommandTest extends KernelTestCase
 {
     use RecreateDatabaseTrait;
+    use BusinessStorageEnvTrait;
 
     public function testCronTickRunsPipelineCycle(): void
     {
@@ -20,9 +22,7 @@ final class IngestCronTickCommandTest extends KernelTestCase
         mkdir($root.'/REJECTS', 0777, true);
         file_put_contents($root.'/INBOX/tick.mov', 'payload');
 
-        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
         static::ensureKernelShutdown();
 
         static::bootKernel();
@@ -41,8 +41,8 @@ final class IngestCronTickCommandTest extends KernelTestCase
         self::assertSame(3, $jobCount);
 
         $status = (string) $connection->fetchOne(
-            'SELECT status FROM ingest_scan_file WHERE path = :path',
-            ['path' => 'INBOX/tick.mov']
+            'SELECT status FROM ingest_scan_file WHERE storage_id = :storageId AND path = :path',
+            ['storageId' => 'nas-main', 'path' => 'INBOX/tick.mov']
         );
         self::assertSame('queued', $status);
         self::assertStringContainsString('Ingest cron tick completed.', $command->getDisplay());
@@ -52,13 +52,15 @@ final class IngestCronTickCommandTest extends KernelTestCase
     {
         $connection->executeStatement(
             'CREATE TABLE IF NOT EXISTS ingest_scan_file (
-                path VARCHAR(1024) PRIMARY KEY NOT NULL,
+                storage_id VARCHAR(64) NOT NULL,
+                path VARCHAR(1024) NOT NULL,
                 size_bytes INTEGER NOT NULL,
                 mtime DATETIME NOT NULL,
                 stable_count INTEGER NOT NULL,
                 status VARCHAR(32) NOT NULL,
                 first_seen_at DATETIME NOT NULL,
-                last_seen_at DATETIME NOT NULL
+                last_seen_at DATETIME NOT NULL,
+                PRIMARY KEY (storage_id, path)
             )'
         );
         $connection->executeStatement(

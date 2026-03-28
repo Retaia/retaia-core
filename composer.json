@@ -11,6 +11,8 @@
         "doctrine/doctrine-migrations-bundle": "^4.0",
         "doctrine/orm": "^3.6",
         "lcobucci/jwt": "^5.5",
+        "league/flysystem": "^3.29",
+        "league/flysystem-local": "^3.29",
         "sentry/sentry-symfony": "^5.8",
         "spomky-labs/otphp": "^11",
         "symfony/console": "7.4.*",

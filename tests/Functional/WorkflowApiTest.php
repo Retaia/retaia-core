@@ -5,6 +5,7 @@ namespace App\Tests\Functional;
 use App\Asset\AssetState;
 use App\Entity\Asset;
 use App\Tests\Support\ApiAuthClientTrait;
+use App\Tests\Support\BusinessStorageEnvTrait;
 use App\Tests\Support\FunctionalSchemaTrait;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
@@ -17,6 +18,7 @@ final class WorkflowApiTest extends WebTestCase
 {
     use RecreateDatabaseTrait;
     use ApiAuthClientTrait;
+    use BusinessStorageEnvTrait;
     use FunctionalSchemaTrait;
 
     public function testGetAssetReturnsSpecDetailStructure(): void
@@ -147,6 +149,7 @@ final class WorkflowApiTest extends WebTestCase
         /** @var Connection $connection */
         $connection = static::getContainer()->get(Connection::class);
         $connection->insert('ingest_scan_file', [
+            'storage_id' => 'nas-main',
             'path' => 'INBOX/q1.mov',
             'size_bytes' => 100,
             'mtime' => '2026-02-10 12:00:00',
@@ -156,6 +159,7 @@ final class WorkflowApiTest extends WebTestCase
             'last_seen_at' => '2026-02-10 12:01:00',
         ]);
         $connection->insert('ingest_scan_file', [
+            'storage_id' => 'nas-main',
             'path' => 'INBOX/m1.mov',
             'size_bytes' => 100,
             'mtime' => '2026-02-10 12:00:00',
@@ -202,8 +206,7 @@ final class WorkflowApiTest extends WebTestCase
         mkdir($root.'/INBOX', 0777, true);
         mkdir($root.'/ARCHIVE', 0777, true);
         mkdir($root.'/REJECTS', 0777, true);
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
 
         $client = $this->createAuthenticatedClient('admin@retaia.local');
         $client->request('GET', '/api/v1/ops/readiness');
@@ -226,8 +229,7 @@ final class WorkflowApiTest extends WebTestCase
     {
         $root = sys_get_temp_dir().'/retaia-readiness-degraded-'.bin2hex(random_bytes(4));
         mkdir($root.'/INBOX', 0777, true);
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
 
         $client = $this->createAuthenticatedClient('admin@retaia.local');
         $client->request('GET', '/api/v1/ops/readiness');
@@ -652,8 +654,7 @@ final class WorkflowApiTest extends WebTestCase
         file_put_contents($root.'/REJECTS/purge-derived.mov', 'origin');
         file_put_contents($root.'/REJECTS/.derived/99999999-9999-4999-8999-999999999999/proxy.mp4', 'derived');
         file_put_contents($root.'/REJECTS/purge-derived.srt', 'subtitle');
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
 
         $client = $this->createAuthenticatedClient('admin@retaia.local');
         $uuid = '99999999-9999-4999-8999-999999999999';

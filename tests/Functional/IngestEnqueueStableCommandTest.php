@@ -2,7 +2,9 @@
 
 namespace App\Tests\Functional;
 
+use App\Asset\AssetState;
 use App\Entity\Asset;
+use App\Tests\Support\BusinessStorageEnvTrait;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
@@ -13,6 +15,7 @@ use Symfony\Component\Console\Tester\CommandTester;
 final class IngestEnqueueStableCommandTest extends KernelTestCase
 {
     use RecreateDatabaseTrait;
+    use BusinessStorageEnvTrait;
 
     public function testStableFilesAreQueuedIntoAssetsAndJobs(): void
     {
@@ -21,9 +24,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         mkdir($root.'/ARCHIVE', 0777, true);
         mkdir($root.'/REJECTS', 0777, true);
         file_put_contents($root.'/INBOX/new-rush.mov', 'ok');
-        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
         static::ensureKernelShutdown();
 
         static::bootKernel();
@@ -33,6 +34,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         $this->ensureTables($connection);
 
         $connection->insert('ingest_scan_file', [
+            'storage_id' => 'nas-main',
             'path' => 'INBOX/new-rush.mov',
             'size_bytes' => 1234,
             'mtime' => '2026-02-10 12:00:00',
@@ -56,7 +58,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         self::assertSame('1', $stateVersion);
         $correlationCount = (int) $connection->fetchOne('SELECT COUNT(DISTINCT correlation_id) FROM processing_job WHERE correlation_id IS NOT NULL');
         self::assertSame(1, $correlationCount);
-        $scanStatus = (string) $connection->fetchOne('SELECT status FROM ingest_scan_file WHERE path = :path', ['path' => 'INBOX/new-rush.mov']);
+        $scanStatus = (string) $connection->fetchOne('SELECT status FROM ingest_scan_file WHERE storage_id = :storageId AND path = :path', ['storageId' => 'nas-main', 'path' => 'INBOX/new-rush.mov']);
         self::assertSame('queued', $scanStatus);
 
         /** @var EntityManagerInterface $entityManager */
@@ -75,9 +77,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         mkdir($root.'/INBOX', 0777, true);
         mkdir($root.'/ARCHIVE', 0777, true);
         mkdir($root.'/REJECTS', 0777, true);
-        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
         static::ensureKernelShutdown();
 
         static::bootKernel();
@@ -87,6 +87,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         $this->ensureTables($connection);
 
         $connection->insert('ingest_scan_file', [
+            'storage_id' => 'nas-main',
             'path' => 'INBOX/missing-rush.mov',
             'size_bytes' => 50,
             'mtime' => '2026-02-10 12:00:00',
@@ -104,7 +105,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
 
         $jobCount = (int) $connection->fetchOne('SELECT COUNT(*) FROM processing_job');
         self::assertSame(0, $jobCount);
-        $scanStatus = (string) $connection->fetchOne('SELECT status FROM ingest_scan_file WHERE path = :path', ['path' => 'INBOX/missing-rush.mov']);
+        $scanStatus = (string) $connection->fetchOne('SELECT status FROM ingest_scan_file WHERE storage_id = :storageId AND path = :path', ['storageId' => 'nas-main', 'path' => 'INBOX/missing-rush.mov']);
         self::assertSame('missing', $scanStatus);
     }
 
@@ -115,9 +116,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         mkdir($root.'/ARCHIVE', 0777, true);
         mkdir($root.'/REJECTS', 0777, true);
         file_put_contents($root.'/INBOX/shot.jpg', 'ok');
-        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
         static::ensureKernelShutdown();
 
         static::bootKernel();
@@ -127,6 +126,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         $this->ensureTables($connection);
 
         $connection->insert('ingest_scan_file', [
+            'storage_id' => 'nas-main',
             'path' => 'INBOX/shot.jpg',
             'size_bytes' => 1234,
             'mtime' => '2026-02-10 12:00:00',
@@ -158,9 +158,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         mkdir($root.'/REJECTS', 0777, true);
         file_put_contents($root.'/INBOX/shot.cr2', 'raw');
         file_put_contents($root.'/INBOX/shot.jpg', 'jpg');
-        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
         static::ensureKernelShutdown();
 
         static::bootKernel();
@@ -171,7 +169,8 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
 
         foreach (['INBOX/shot.cr2', 'INBOX/shot.jpg'] as $path) {
             $connection->insert('ingest_scan_file', [
-                'path' => $path,
+            'storage_id' => 'nas-main',
+            'path' => $path,
                 'size_bytes' => 100,
                 'mtime' => '2026-02-10 12:00:00',
                 'stable_count' => 2,
@@ -225,9 +224,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         mkdir($root.'/REJECTS', 0777, true);
         file_put_contents($root.'/INBOX/drone.mov', 'video');
         file_put_contents($root.'/INBOX/drone.lrf', 'proxy');
-        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
         static::ensureKernelShutdown();
 
         static::bootKernel();
@@ -238,7 +235,8 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
 
         foreach (['INBOX/drone.mov', 'INBOX/drone.lrf'] as $path) {
             $connection->insert('ingest_scan_file', [
-                'path' => $path,
+            'storage_id' => 'nas-main',
+            'path' => $path,
                 'size_bytes' => 100,
                 'mtime' => '2026-02-10 12:00:00',
                 'stable_count' => 2,
@@ -292,9 +290,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         mkdir($root.'/REJECTS', 0777, true);
         file_put_contents($root.'/INBOX/project/clip.mov', 'video');
         file_put_contents($root.'/INBOX/project/proxy/clip.mp4', 'proxy');
-        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
         static::ensureKernelShutdown();
 
         static::bootKernel();
@@ -305,7 +301,8 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
 
         foreach (['INBOX/project/clip.mov', 'INBOX/project/proxy/clip.mp4'] as $path) {
             $connection->insert('ingest_scan_file', [
-                'path' => $path,
+            'storage_id' => 'nas-main',
+            'path' => $path,
                 'size_bytes' => 100,
                 'mtime' => '2026-02-10 12:00:00',
                 'stable_count' => 2,
@@ -358,9 +355,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         mkdir($root.'/REJECTS', 0777, true);
         file_put_contents($root.'/INBOX/shot.cr2', 'raw');
         file_put_contents($root.'/INBOX/shot.xmp', 'xmp');
-        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
         static::ensureKernelShutdown();
 
         static::bootKernel();
@@ -399,9 +394,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         mkdir($root.'/REJECTS', 0777, true);
         file_put_contents($root.'/INBOX/interview.mov', 'video');
         file_put_contents($root.'/INBOX/interview.srt', "1\n00:00:00,000 --> 00:00:01,000\nHello\n");
-        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
         static::ensureKernelShutdown();
 
         static::bootKernel();
@@ -412,7 +405,8 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
 
         foreach (['INBOX/interview.mov', 'INBOX/interview.srt'] as $path) {
             $connection->insert('ingest_scan_file', [
-                'path' => $path,
+            'storage_id' => 'nas-main',
+            'path' => $path,
                 'size_bytes' => 100,
                 'mtime' => '2026-02-10 12:00:00',
                 'stable_count' => 2,
@@ -455,9 +449,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         mkdir($root.'/REJECTS', 0777, true);
         file_put_contents($root.'/INBOX/take.mov', 'video');
         file_put_contents($root.'/INBOX/take.srt', "1\n00:00:00,000 --> 00:00:01,000\nHi\n");
-        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
         static::ensureKernelShutdown();
 
         static::bootKernel();
@@ -467,6 +459,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         $this->ensureTables($connection);
 
         $connection->insert('ingest_scan_file', [
+            'storage_id' => 'nas-main',
             'path' => 'INBOX/take.mov',
             'size_bytes' => 100,
             'mtime' => '2026-02-10 12:00:00',
@@ -501,9 +494,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         putenv('APP_INGEST_VIDEO_LEGACY_SIDECARS_ENABLED=1');
         $_ENV['APP_INGEST_VIDEO_LEGACY_SIDECARS_ENABLED'] = '1';
         $_SERVER['APP_INGEST_VIDEO_LEGACY_SIDECARS_ENABLED'] = '1';
-        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
         static::ensureKernelShutdown();
 
         static::bootKernel();
@@ -514,7 +505,8 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
 
         foreach (['INBOX/drone.mov', 'INBOX/drone.lrv', 'INBOX/drone.thm'] as $path) {
             $connection->insert('ingest_scan_file', [
-                'path' => $path,
+            'storage_id' => 'nas-main',
+            'path' => $path,
                 'size_bytes' => 100,
                 'mtime' => '2026-02-10 12:00:00',
                 'stable_count' => 2,
@@ -561,9 +553,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         putenv('APP_INGEST_VIDEO_LEGACY_SIDECARS_ENABLED=0');
         $_ENV['APP_INGEST_VIDEO_LEGACY_SIDECARS_ENABLED'] = '0';
         $_SERVER['APP_INGEST_VIDEO_LEGACY_SIDECARS_ENABLED'] = '0';
-        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
         static::ensureKernelShutdown();
 
         static::bootKernel();
@@ -574,7 +564,8 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
 
         foreach (['INBOX/drone.mov', 'INBOX/drone.lrv'] as $path) {
             $connection->insert('ingest_scan_file', [
-                'path' => $path,
+            'storage_id' => 'nas-main',
+            'path' => $path,
                 'size_bytes' => 100,
                 'mtime' => '2026-02-10 12:00:00',
                 'stable_count' => 2,
@@ -609,9 +600,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         file_put_contents($root.'/INBOX/shot.cr2', 'raw');
         file_put_contents($root.'/INBOX/shot.png', 'png');
         file_put_contents($root.'/INBOX/shot.xmp', 'xmp');
-        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
         static::ensureKernelShutdown();
 
         static::bootKernel();
@@ -640,9 +629,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         mkdir($root.'/REJECTS', 0777, true);
         file_put_contents($root.'/INBOX/clip.mov', 'video');
         file_put_contents($root.'/INBOX/clip.lrf', '');
-        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
         static::ensureKernelShutdown();
 
         static::bootKernel();
@@ -653,7 +640,8 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
 
         foreach (['INBOX/clip.mov', 'INBOX/clip.lrf'] as $path) {
             $connection->insert('ingest_scan_file', [
-                'path' => $path,
+            'storage_id' => 'nas-main',
+            'path' => $path,
                 'size_bytes' => 100,
                 'mtime' => '2026-02-10 12:00:00',
                 'stable_count' => 2,
@@ -692,9 +680,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         mkdir($root.'/ARCHIVE', 0777, true);
         mkdir($root.'/REJECTS', 0777, true);
         file_put_contents($root.'/INBOX/orphan.lrf', 'proxy');
-        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
         static::ensureKernelShutdown();
 
         static::bootKernel();
@@ -704,6 +690,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         $this->ensureTables($connection);
 
         $connection->insert('ingest_scan_file', [
+            'storage_id' => 'nas-main',
             'path' => 'INBOX/orphan.lrf',
             'size_bytes' => 100,
             'mtime' => '2026-02-10 12:00:00',
@@ -719,12 +706,190 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         $tester->execute(['--limit' => 10]);
 
         self::assertStringContainsString('Queued 0 stable file(s). Missing: 0. Unmatched sidecars: 1.', $tester->getDisplay());
-        self::assertSame('queued', (string) $connection->fetchOne('SELECT status FROM ingest_scan_file WHERE path = :path', ['path' => 'INBOX/orphan.lrf']));
+        self::assertSame('queued', (string) $connection->fetchOne('SELECT status FROM ingest_scan_file WHERE storage_id = :storageId AND path = :path', ['storageId' => 'nas-main', 'path' => 'INBOX/orphan.lrf']));
 
         /** @var EntityManagerInterface $entityManager */
         $entityManager = $container->get(EntityManagerInterface::class);
         $orphanAssetUuid = $this->assetUuidFromPath('INBOX/orphan.lrf');
         self::assertNull($entityManager->find(Asset::class, $orphanAssetUuid));
+    }
+
+    public function testProxyIsRejectedWhenExistingAssetPointsToAnotherStorage(): void
+    {
+        $mainRoot = sys_get_temp_dir().'/retaia-enqueue-cross-storage-proxy-main-'.bin2hex(random_bytes(4));
+        $altRoot = sys_get_temp_dir().'/retaia-enqueue-cross-storage-proxy-alt-'.bin2hex(random_bytes(4));
+        mkdir($mainRoot.'/INBOX', 0777, true);
+        mkdir($mainRoot.'/ARCHIVE', 0777, true);
+        mkdir($mainRoot.'/REJECTS', 0777, true);
+        mkdir($altRoot.'/INBOX', 0777, true);
+        mkdir($altRoot.'/ARCHIVE', 0777, true);
+        mkdir($altRoot.'/REJECTS', 0777, true);
+        file_put_contents($mainRoot.'/INBOX/clip.mov', 'video');
+        file_put_contents($mainRoot.'/INBOX/clip.lrf', 'proxy');
+        $this->configureBusinessStorages([
+            [
+                'id' => 'nas-main',
+                'root_path' => $mainRoot,
+                'watch_directory' => 'INBOX',
+            ],
+            [
+                'id' => 'nas-alt',
+                'root_path' => $altRoot,
+                'watch_directory' => 'INBOX',
+                'ingest_enabled' => false,
+            ],
+        ], 'nas-main');
+        static::ensureKernelShutdown();
+
+        static::bootKernel();
+        $container = static::getContainer();
+        /** @var Connection $connection */
+        $connection = $container->get(Connection::class);
+        $this->ensureTables($connection);
+
+        foreach (['INBOX/clip.mov', 'INBOX/clip.lrf'] as $path) {
+            $connection->insert('ingest_scan_file', [
+                'storage_id' => 'nas-main',
+                'path' => $path,
+                'size_bytes' => 100,
+                'mtime' => '2026-02-10 12:00:00',
+                'stable_count' => 2,
+                'status' => 'stable',
+                'first_seen_at' => '2026-02-10 12:00:00',
+                'last_seen_at' => '2026-02-10 12:01:00',
+            ]);
+        }
+
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = $container->get(EntityManagerInterface::class);
+        $assetUuid = $this->assetUuidFromPath('INBOX/clip.mov');
+        $asset = new Asset(
+            uuid: $assetUuid,
+            mediaType: 'VIDEO',
+            filename: 'clip.mov',
+            state: AssetState::DISCOVERED,
+            fields: [
+                'storage_id' => 'nas-alt',
+                'review_processing_version' => '1',
+                'processing_profile' => 'video_standard',
+                'paths' => [
+                    'storage_id' => 'nas-alt',
+                    'original_relative' => 'INBOX/clip.mov',
+                    'sidecars_relative' => [],
+                ],
+            ],
+        );
+        $entityManager->persist($asset);
+        $entityManager->flush();
+        $entityManager->clear();
+
+        $application = new Application(static::$kernel);
+        $command = $application->find('app:ingest:enqueue-stable');
+        $tester = new CommandTester($command);
+        $tester->execute(['--limit' => 20]);
+
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = $container->get(EntityManagerInterface::class);
+        $asset = $entityManager->find(Asset::class, $assetUuid);
+        self::assertInstanceOf(Asset::class, $asset);
+        self::assertSame('nas-alt', $asset->getFields()['paths']['storage_id'] ?? null);
+        self::assertNotContains('INBOX/clip.lrf', $asset->getFields()['paths']['sidecars_relative'] ?? []);
+
+        $proxyDerivedCount = (int) $connection->fetchOne(
+            'SELECT COUNT(*) FROM asset_derived_file WHERE asset_uuid = :assetUuid AND kind = :kind',
+            ['assetUuid' => $assetUuid, 'kind' => 'proxy_video']
+        );
+        self::assertSame(0, $proxyDerivedCount);
+        self::assertSame(
+            'storage_mismatch',
+            (string) $connection->fetchOne('SELECT reason FROM ingest_unmatched_sidecar WHERE path = :path', ['path' => 'INBOX/clip.lrf'])
+        );
+    }
+
+    public function testAuxiliarySidecarIsRejectedWhenExistingAssetPointsToAnotherStorage(): void
+    {
+        $mainRoot = sys_get_temp_dir().'/retaia-enqueue-cross-storage-sidecar-main-'.bin2hex(random_bytes(4));
+        $altRoot = sys_get_temp_dir().'/retaia-enqueue-cross-storage-sidecar-alt-'.bin2hex(random_bytes(4));
+        mkdir($mainRoot.'/INBOX', 0777, true);
+        mkdir($mainRoot.'/ARCHIVE', 0777, true);
+        mkdir($mainRoot.'/REJECTS', 0777, true);
+        mkdir($altRoot.'/INBOX', 0777, true);
+        mkdir($altRoot.'/ARCHIVE', 0777, true);
+        mkdir($altRoot.'/REJECTS', 0777, true);
+        file_put_contents($mainRoot.'/INBOX/interview.mov', 'video');
+        file_put_contents($mainRoot.'/INBOX/interview.srt', 'subtitles');
+        $this->configureBusinessStorages([
+            [
+                'id' => 'nas-main',
+                'root_path' => $mainRoot,
+                'watch_directory' => 'INBOX',
+            ],
+            [
+                'id' => 'nas-alt',
+                'root_path' => $altRoot,
+                'watch_directory' => 'INBOX',
+                'ingest_enabled' => false,
+            ],
+        ], 'nas-main');
+        static::ensureKernelShutdown();
+
+        static::bootKernel();
+        $container = static::getContainer();
+        /** @var Connection $connection */
+        $connection = $container->get(Connection::class);
+        $this->ensureTables($connection);
+
+        foreach (['INBOX/interview.mov', 'INBOX/interview.srt'] as $path) {
+            $connection->insert('ingest_scan_file', [
+                'storage_id' => 'nas-main',
+                'path' => $path,
+                'size_bytes' => 100,
+                'mtime' => '2026-02-10 12:00:00',
+                'stable_count' => 2,
+                'status' => 'stable',
+                'first_seen_at' => '2026-02-10 12:00:00',
+                'last_seen_at' => '2026-02-10 12:01:00',
+            ]);
+        }
+
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = $container->get(EntityManagerInterface::class);
+        $assetUuid = $this->assetUuidFromPath('INBOX/interview.mov');
+        $asset = new Asset(
+            uuid: $assetUuid,
+            mediaType: 'VIDEO',
+            filename: 'interview.mov',
+            state: AssetState::DISCOVERED,
+            fields: [
+                'storage_id' => 'nas-alt',
+                'review_processing_version' => '1',
+                'processing_profile' => 'video_standard',
+                'paths' => [
+                    'storage_id' => 'nas-alt',
+                    'original_relative' => 'INBOX/interview.mov',
+                    'sidecars_relative' => [],
+                ],
+            ],
+        );
+        $entityManager->persist($asset);
+        $entityManager->flush();
+        $entityManager->clear();
+
+        $application = new Application(static::$kernel);
+        $command = $application->find('app:ingest:enqueue-stable');
+        $tester = new CommandTester($command);
+        $tester->execute(['--limit' => 20]);
+
+        /** @var EntityManagerInterface $entityManager */
+        $entityManager = $container->get(EntityManagerInterface::class);
+        $asset = $entityManager->find(Asset::class, $assetUuid);
+        self::assertInstanceOf(Asset::class, $asset);
+        self::assertSame('nas-alt', $asset->getFields()['paths']['storage_id'] ?? null);
+        self::assertNotContains('INBOX/interview.srt', $asset->getFields()['paths']['sidecars_relative'] ?? []);
+        self::assertSame(
+            'storage_mismatch',
+            (string) $connection->fetchOne('SELECT reason FROM ingest_unmatched_sidecar WHERE path = :path', ['path' => 'INBOX/interview.srt'])
+        );
     }
 
     private function ensureTables(Connection $connection): void
@@ -754,13 +919,15 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         $connection->executeStatement('CREATE UNIQUE INDEX IF NOT EXISTS uniq_processing_job_asset_type_version ON processing_job (asset_uuid, job_type, state_version)');
         $connection->executeStatement(
             'CREATE TABLE IF NOT EXISTS ingest_scan_file (
-                path VARCHAR(1024) PRIMARY KEY NOT NULL,
+                storage_id VARCHAR(64) NOT NULL,
+                path VARCHAR(1024) NOT NULL,
                 size_bytes INTEGER NOT NULL,
                 mtime DATETIME NOT NULL,
                 stable_count INTEGER NOT NULL,
                 status VARCHAR(32) NOT NULL,
                 first_seen_at DATETIME NOT NULL,
-                last_seen_at DATETIME NOT NULL
+                last_seen_at DATETIME NOT NULL,
+                PRIMARY KEY (storage_id, path)
             )'
         );
         $connection->executeStatement(
@@ -775,11 +942,18 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
                 created_at DATETIME NOT NULL
             )'
         );
+        $connection->executeStatement(
+            'CREATE TABLE IF NOT EXISTS ingest_unmatched_sidecar (
+                path VARCHAR(255) PRIMARY KEY NOT NULL,
+                reason VARCHAR(64) NOT NULL,
+                detected_at DATETIME NOT NULL
+            )'
+        );
     }
 
-    private function assetUuidFromPath(string $path): string
+    private function assetUuidFromPath(string $path, string $storageId = 'nas-main'): string
     {
-        $hex = md5($path);
+        $hex = md5($storageId.'|'.$path);
 
         return sprintf(
             '%s-%s-%s-%s-%s',
@@ -798,7 +972,8 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
     {
         foreach ($paths as $path) {
             $connection->insert('ingest_scan_file', [
-                'path' => $path,
+            'storage_id' => 'nas-main',
+            'path' => $path,
                 'size_bytes' => 100,
                 'mtime' => '2026-02-10 12:00:00',
                 'stable_count' => 2,

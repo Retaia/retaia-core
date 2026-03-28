@@ -9,7 +9,9 @@ use App\Entity\Asset;
 use App\Ingest\Repository\IngestDiagnosticsRepository;
 use App\Ingest\Service\ExistingProxyAttachmentService;
 use App\Ingest\Service\ExistingProxyFilesystemInterface;
-use App\Ingest\Service\WatchPathResolver;
+use App\Storage\BusinessStorageDefinition;
+use App\Storage\BusinessStorageInterface;
+use App\Storage\BusinessStorageRegistry;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\TestCase;
@@ -18,20 +20,19 @@ final class ExistingProxyAttachmentServiceTest extends TestCase
 {
     public function testCanUseReturnsTrueWhenProxyFileExists(): void
     {
-        $root = $this->projectRoot();
         $filesystem = $this->createMock(ExistingProxyFilesystemInterface::class);
-        $filesystem->expects(self::once())->method('isFile')->with($root, 'INBOX/proxy.mp4')->willReturn(true);
-        $filesystem->expects(self::once())->method('fileSize')->with($root, 'INBOX/proxy.mp4')->willReturn(10);
+        $filesystem->expects(self::once())->method('isFile')->with(self::isInstanceOf(BusinessStorageInterface::class), 'INBOX/proxy.mp4')->willReturn(true);
+        $filesystem->expects(self::once())->method('fileSize')->with(self::isInstanceOf(BusinessStorageInterface::class), 'INBOX/proxy.mp4')->willReturn(10);
 
         $service = new ExistingProxyAttachmentService(
-            $this->watchPathResolver(),
+            $this->storageRegistry(),
             $filesystem,
             $this->diagnosticsRepository(),
             $this->createMock(AssetRepositoryInterface::class),
             $this->createMock(DerivedFileRepositoryInterface::class),
         );
 
-        self::assertTrue($service->canUse([
+        self::assertTrue($service->canUse('nas-main', [
             'path' => 'INBOX/proxy.mp4',
             'type' => 'proxy_folder',
             'kind' => 'proxy_video',
@@ -41,7 +42,6 @@ final class ExistingProxyAttachmentServiceTest extends TestCase
 
     public function testAttachToAssetMaterializesProxyAndUpdatesFields(): void
     {
-        $root = $this->projectRoot();
         $asset = new Asset(
             uuid: 'asset-1',
             mediaType: 'PHOTO',
@@ -71,35 +71,35 @@ final class ExistingProxyAttachmentServiceTest extends TestCase
         $filesystem = $this->createMock(ExistingProxyFilesystemInterface::class);
         $filesystem->expects(self::once())
             ->method('materializeToDerived')
-            ->with($root, 'asset-1', 'proxy_photo', 'INBOX/proxy.jpg')
+            ->with(self::isInstanceOf(BusinessStorageInterface::class), 'asset-1', 'proxy_photo', 'INBOX/proxy.jpg')
             ->willReturn('.derived/asset-1/proxy.jpg');
         $filesystem->expects(self::exactly(2))
             ->method('isFile')
-            ->with($root, '.derived/asset-1/proxy.jpg')
+            ->with(self::isInstanceOf(BusinessStorageInterface::class), '.derived/asset-1/proxy.jpg')
             ->willReturn(true);
         $filesystem->expects(self::once())
             ->method('fileSize')
-            ->with($root, '.derived/asset-1/proxy.jpg')
+            ->with(self::isInstanceOf(BusinessStorageInterface::class), '.derived/asset-1/proxy.jpg')
             ->willReturn(10);
         $filesystem->expects(self::once())
             ->method('hashSha256')
-            ->with($root, '.derived/asset-1/proxy.jpg')
+            ->with(self::isInstanceOf(BusinessStorageInterface::class), '.derived/asset-1/proxy.jpg')
             ->willReturn('hash');
 
         $service = new ExistingProxyAttachmentService(
-            $this->watchPathResolver(),
+            $this->storageRegistry(),
             $filesystem,
             $this->diagnosticsRepository(),
             $assets,
             $derivedFiles,
         );
 
-        $service->attachToAsset($asset, 'INBOX/original.cr2', [
+        $service->attachToAsset($asset, 'nas-main', 'INBOX/original.cr2', [
             'path' => 'INBOX/proxy.jpg',
             'type' => 'raw_jpg',
             'kind' => 'proxy_photo',
             'original' => 'INBOX/original.cr2',
-        ], 'nas-main');
+        ]);
 
         self::assertTrue((bool) ($asset->getFields()['proxy_done'] ?? false));
         self::assertContains('.derived/asset-1/proxy.jpg', $asset->getFields()['paths']['sidecars_relative'] ?? []);
@@ -108,7 +108,6 @@ final class ExistingProxyAttachmentServiceTest extends TestCase
 
     public function testCanUseFallsBackToExistingDerivedFile(): void
     {
-        $root = $this->projectRoot();
         $derivedFiles = $this->createMock(DerivedFileRepositoryInterface::class);
         $derivedFiles->expects(self::once())->method('findLatestByAssetAndKind')->with('asset-1', 'proxy_video')
             ->willReturn(new DerivedFile('d-1', 'asset-1', 'proxy_video', 'video/mp4', 10, 'hash', '.derived/asset-1/proxy.mp4', new \DateTimeImmutable()));
@@ -116,43 +115,30 @@ final class ExistingProxyAttachmentServiceTest extends TestCase
         $filesystem = $this->createMock(ExistingProxyFilesystemInterface::class);
         $filesystem->expects(self::exactly(2))
             ->method('isFile')
-            ->willReturnCallback(static function (string $actualRoot, string $relativePath) use ($root): bool {
-                TestCase::assertSame($root, $actualRoot);
-
+            ->willReturnCallback(static function (BusinessStorageInterface $storage, string $relativePath): bool {
                 return match ($relativePath) {
                     'INBOX/missing.mp4' => false,
                     '.derived/asset-1/proxy.mp4' => true,
                     default => throw new \LogicException(sprintf('Unexpected path %s', $relativePath)),
                 };
             });
-        $filesystem->expects(self::once())->method('fileSize')->with($root, '.derived/asset-1/proxy.mp4')->willReturn(10);
+        $filesystem->expects(self::once())->method('fileSize')->with(self::isInstanceOf(BusinessStorageInterface::class), '.derived/asset-1/proxy.mp4')->willReturn(10);
 
         $service = new ExistingProxyAttachmentService(
-            $this->watchPathResolver(),
+            $this->storageRegistry(),
             $filesystem,
             $this->diagnosticsRepository(),
             $this->createMock(AssetRepositoryInterface::class),
             $derivedFiles,
         );
 
-        self::assertTrue($service->canUse([
+        self::assertTrue($service->canUse('nas-main', [
             'path' => 'INBOX/missing.mp4',
             'type' => 'proxy_folder',
             'kind' => 'proxy_video',
             'original' => 'INBOX/original.mov',
         ], 'asset-1'));
     }
-
-    private function watchPathResolver(): WatchPathResolver
-    {
-        return new WatchPathResolver($this->projectRoot(), 'src');
-    }
-
-    private function projectRoot(): string
-    {
-        return dirname(__DIR__, 4);
-    }
-
     private function diagnosticsRepository(): IngestDiagnosticsRepository
     {
         return new IngestDiagnosticsRepository($this->connection());
@@ -167,5 +153,12 @@ final class ExistingProxyAttachmentServiceTest extends TestCase
         $connection->executeStatement('CREATE TABLE ingest_unmatched_sidecar (path VARCHAR(255) PRIMARY KEY NOT NULL, reason VARCHAR(64) NOT NULL, detected_at DATETIME NOT NULL)');
 
         return $connection;
+    }
+
+    private function storageRegistry(): BusinessStorageRegistry
+    {
+        return new BusinessStorageRegistry('nas-main', [
+            new BusinessStorageDefinition('nas-main', $this->createMock(BusinessStorageInterface::class), true),
+        ]);
     }
 }

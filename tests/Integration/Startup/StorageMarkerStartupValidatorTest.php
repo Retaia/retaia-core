@@ -2,7 +2,10 @@
 
 namespace App\Tests\Integration\Startup;
 
-use App\Ingest\Service\WatchPathResolver;
+use App\Storage\BusinessStorageConfig;
+use App\Storage\BusinessStorageDefinition;
+use App\Storage\BusinessStorageRegistry;
+use App\Storage\LocalBusinessStorageFactory;
 use App\Startup\StorageMarkerStartupException;
 use App\Startup\StorageMarkerStartupValidator;
 use PHPUnit\Framework\TestCase;
@@ -78,8 +81,13 @@ final class StorageMarkerStartupValidatorTest extends TestCase
     private function validator(string $watchPath): StorageMarkerStartupValidator
     {
         return new StorageMarkerStartupValidator(
-            new WatchPathResolver('/', $watchPath),
-            'nas-main'
+            new BusinessStorageRegistry('nas-main', [
+                new BusinessStorageDefinition(
+                    'nas-main',
+                    (new LocalBusinessStorageFactory(BusinessStorageConfig::fromConfiguredWatchPath('/', $watchPath)))->create(),
+                    true,
+                ),
+            ])
         );
     }
 
@@ -93,4 +101,3 @@ final class StorageMarkerStartupValidatorTest extends TestCase
         return $root;
     }
 }
-

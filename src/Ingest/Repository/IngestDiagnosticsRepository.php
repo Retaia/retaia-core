@@ -13,6 +13,7 @@ final class IngestDiagnosticsRepository
         'missing_parent',
         'ambiguous_parent',
         'disabled_by_policy',
+        'storage_mismatch',
     ];
 
     public function __construct(

@@ -6,7 +6,7 @@ use App\Asset\AssetState;
 use App\Asset\Repository\AssetRepositoryInterface;
 use App\Entity\Asset;
 use App\Ingest\Repository\PathAuditRepository;
-use App\Ingest\Service\WatchPathResolver;
+use App\Storage\BusinessStorageRegistryInterface;
 use Doctrine\DBAL\Connection;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -19,7 +19,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 final class IngestApplyOutboxCommand extends Command
 {
     public function __construct(
-        private WatchPathResolver $watchPathResolver,
+        private BusinessStorageRegistryInterface $storageRegistry,
         private AssetRepositoryInterface $assets,
         private PathAuditRepository $audit,
         private Connection $connection,
@@ -72,31 +72,23 @@ final class IngestApplyOutboxCommand extends Command
             return 0;
         }
 
-        $root = $this->watchPathResolver->resolveRoot();
         $fromRelative = ltrim($sourcePath, '/');
-        $fromAbsolute = $root.DIRECTORY_SEPARATOR.$fromRelative;
         $targetFolder = $asset->getState() === AssetState::ARCHIVED ? 'ARCHIVE' : 'REJECTS';
-        $targetRelative = $targetFolder.DIRECTORY_SEPARATOR.basename($fromRelative);
-        $targetAbsolute = $root.DIRECTORY_SEPARATOR.$targetRelative;
+        $targetRelative = $targetFolder.'/'.basename($fromRelative);
+        $storage = $this->storageForAsset($asset);
 
-        if (!is_dir(dirname($targetAbsolute)) && !mkdir(dirname($targetAbsolute), 0777, true) && !is_dir(dirname($targetAbsolute))) {
-            throw new \RuntimeException(sprintf('Unable to create target directory for %s', $targetRelative));
-        }
-
-        if (is_file($fromAbsolute)) {
-            [$finalRelative, $finalAbsolute] = $this->resolveAvailableTarget($root, $targetFolder, $targetRelative, $asset->getUuid());
-            if (!@rename($fromAbsolute, $finalAbsolute)) {
-                throw new \RuntimeException(sprintf('Unable to move %s to %s', $fromRelative, $finalRelative));
-            }
-            $remap = $this->moveDerivedFilesForAsset($asset->getUuid(), $targetFolder, $root);
+        if ($storage->fileExists($fromRelative)) {
+            [$finalRelative] = $this->resolveAvailableTarget($storage, $targetFolder, $targetRelative, $asset->getUuid());
+            $storage->move($fromRelative, $finalRelative);
+            $remap = $this->moveDerivedFilesForAsset($storage, $asset->getUuid(), $targetFolder);
             $this->applyDerivedPathRemap($asset, $remap);
             $this->persistPathUpdate($asset, $fromRelative, $finalRelative);
 
             return 1;
         }
 
-        if (is_file($targetAbsolute)) {
-            $remap = $this->moveDerivedFilesForAsset($asset->getUuid(), $targetFolder, $root);
+        if ($storage->fileExists($targetRelative)) {
+            $remap = $this->moveDerivedFilesForAsset($storage, $asset->getUuid(), $targetFolder);
             $this->applyDerivedPathRemap($asset, $remap);
             $this->persistPathUpdate($asset, $fromRelative, $targetRelative);
 
@@ -144,7 +136,7 @@ final class IngestApplyOutboxCommand extends Command
     /**
      * @return array<string, string> oldPath => newPath
      */
-    private function moveDerivedFilesForAsset(string $assetUuid, string $targetFolder, string $root): array
+    private function moveDerivedFilesForAsset(\App\Storage\BusinessStorageInterface $storage, string $assetUuid, string $targetFolder): array
     {
         try {
             $rows = $this->connection->fetchAllAssociative(
@@ -165,18 +157,9 @@ final class IngestApplyOutboxCommand extends Command
             }
 
             $targetStoragePath = $targetFolder.'/'.$storagePath;
-            $sourceAbsolute = $root.DIRECTORY_SEPARATOR.$storagePath;
-            $targetAbsolute = $root.DIRECTORY_SEPARATOR.$targetStoragePath;
-
-            if (!is_dir(dirname($targetAbsolute)) && !mkdir(dirname($targetAbsolute), 0777, true) && !is_dir(dirname($targetAbsolute))) {
-                throw new \RuntimeException(sprintf('Unable to create derived target directory for %s', $targetStoragePath));
-            }
-
-            if (is_file($sourceAbsolute)) {
-                if (!@rename($sourceAbsolute, $targetAbsolute)) {
-                    throw new \RuntimeException(sprintf('Unable to move derived file %s to %s', $storagePath, $targetStoragePath));
-                }
-            } elseif (!is_file($targetAbsolute)) {
+            if ($storage->fileExists($storagePath)) {
+                $storage->move($storagePath, $targetStoragePath);
+            } elseif (!$storage->fileExists($targetStoragePath)) {
                 continue;
             }
 
@@ -236,21 +219,20 @@ final class IngestApplyOutboxCommand extends Command
             return false;
         }
 
-        return !str_starts_with($path, '/') && !str_contains($path, '..'.DIRECTORY_SEPARATOR) && !str_contains($path, '../');
+        return !str_starts_with($path, '/') && !str_contains($path, '..\\') && !str_contains($path, '../');
     }
 
     /**
      * @return array{0:string,1:string}
      */
-    private function resolveAvailableTarget(string $root, string $targetFolder, string $defaultRelative, string $assetUuid): array
+    private function resolveAvailableTarget(\App\Storage\BusinessStorageInterface $storage, string $targetFolder, string $defaultRelative, string $assetUuid): array
     {
-        $baseAbsolute = $root.DIRECTORY_SEPARATOR.$defaultRelative;
-        if (!is_file($baseAbsolute)) {
-            return [$defaultRelative, $baseAbsolute];
+        if (!$storage->fileExists($defaultRelative)) {
+            return [$defaultRelative, $defaultRelative];
         }
 
-        $ext = pathinfo($baseAbsolute, PATHINFO_EXTENSION);
-        $name = pathinfo($baseAbsolute, PATHINFO_FILENAME);
+        $ext = pathinfo($defaultRelative, PATHINFO_EXTENSION);
+        $name = pathinfo($defaultRelative, PATHINFO_FILENAME);
         $suffix = substr(str_replace('-', '', $assetUuid), 0, 6);
         $attempt = 0;
 
@@ -259,13 +241,21 @@ final class IngestApplyOutboxCommand extends Command
                 ? ($ext === '' ? sprintf('%s__%s', $name, $suffix) : sprintf('%s__%s.%s', $name, $suffix, $ext))
                 : ($ext === '' ? sprintf('%s__%s_%d', $name, $suffix, $attempt) : sprintf('%s__%s_%d.%s', $name, $suffix, $attempt, $ext));
 
-            $relative = $targetFolder.DIRECTORY_SEPARATOR.$candidateName;
-            $absolute = $root.DIRECTORY_SEPARATOR.$relative;
-            if (!is_file($absolute)) {
-                return [$relative, $absolute];
+            $relative = $targetFolder.'/'.$candidateName;
+            if (!$storage->fileExists($relative)) {
+                return [$relative, $relative];
             }
 
             ++$attempt;
         }
+    }
+
+    private function storageForAsset(Asset $asset): \App\Storage\BusinessStorageInterface
+    {
+        $fields = $asset->getFields();
+        $paths = is_array($fields['paths'] ?? null) ? $fields['paths'] : [];
+        $storageId = trim((string) ($paths['storage_id'] ?? $fields['storage_id'] ?? $this->storageRegistry->defaultStorageId()));
+
+        return $this->storageRegistry->get($storageId === '' ? $this->storageRegistry->defaultStorageId() : $storageId)->storage;
     }
 }

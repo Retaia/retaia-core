@@ -2,8 +2,7 @@
 
 namespace App\Startup;
 
-use App\Ingest\Service\WatchPathResolver;
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use App\Storage\BusinessStorageRegistryInterface;
 
 final class StorageMarkerStartupValidator
 {
@@ -13,9 +12,7 @@ final class StorageMarkerStartupValidator
     private bool $validated = false;
 
     public function __construct(
-        private WatchPathResolver $watchPathResolver,
-        #[Autowire('%app.storage.id%')]
-        private string $expectedStorageId,
+        private BusinessStorageRegistryInterface $storageRegistry,
     ) {
     }
 
@@ -25,36 +22,24 @@ final class StorageMarkerStartupValidator
             return;
         }
 
-        $root = $this->resolveRoot();
-        $markerPath = $root.DIRECTORY_SEPARATOR.self::MARKER_FILENAME;
+        foreach ($this->storageRegistry->all() as $definition) {
+            $markerPath = self::MARKER_FILENAME;
 
-        if (!is_file($markerPath)) {
-            $this->createMarkerAtomically($markerPath);
+            if (!$definition->storage->fileExists($markerPath)) {
+                $this->createMarkerAtomically($definition->storage, $definition->id, $markerPath);
+            }
+
+            $marker = $this->readMarker($definition->storage, $markerPath);
+            $this->assertMarker($definition->id, $marker);
         }
-
-        $marker = $this->readMarker($markerPath);
-        $this->assertMarker($marker);
         $this->validated = true;
     }
 
-    private function resolveRoot(): string
-    {
-        try {
-            return $this->watchPathResolver->resolveRoot();
-        } catch (\Throwable $exception) {
-            throw new StorageMarkerStartupException(
-                'CORE_STORAGE_MARKER_CREATE_FAILED',
-                sprintf('Unable to resolve ingest root for marker validation: %s', $exception->getMessage()),
-                $exception
-            );
-        }
-    }
-
-    private function createMarkerAtomically(string $markerPath): void
+    private function createMarkerAtomically(\App\Storage\BusinessStorageInterface $storage, string $storageId, string $markerPath): void
     {
         $payload = [
             'version' => self::MARKER_VERSION,
-            'storage_id' => $this->expectedStorageId,
+            'storage_id' => $storageId,
             'paths' => [
                 'inbox' => 'INBOX',
                 'archive' => 'ARCHIVE',
@@ -67,18 +52,9 @@ final class StorageMarkerStartupValidator
             throw new StorageMarkerStartupException('CORE_STORAGE_MARKER_CREATE_FAILED', 'Unable to encode marker payload as JSON.');
         }
 
-        $tempPath = $markerPath.'.tmp';
         try {
-            if (@file_put_contents($tempPath, $encoded.PHP_EOL, LOCK_EX) === false) {
-                throw new \RuntimeException(sprintf('Unable to write temporary marker: %s', $tempPath));
-            }
-
-            if (!@rename($tempPath, $markerPath)) {
-                throw new \RuntimeException(sprintf('Unable to atomically replace marker: %s', $markerPath));
-            }
+            $storage->writeAtomically($markerPath, $encoded.PHP_EOL);
         } catch (\Throwable $exception) {
-            @unlink($tempPath);
-
             throw new StorageMarkerStartupException(
                 'CORE_STORAGE_MARKER_CREATE_FAILED',
                 sprintf('Marker create/update failure: %s', $exception->getMessage()),
@@ -90,13 +66,15 @@ final class StorageMarkerStartupValidator
     /**
      * @return array<string, mixed>
      */
-    private function readMarker(string $markerPath): array
+    private function readMarker(\App\Storage\BusinessStorageInterface $storage, string $markerPath): array
     {
-        $content = @file_get_contents($markerPath);
-        if (!is_string($content)) {
+        try {
+            $content = $storage->read($markerPath);
+        } catch (\Throwable $exception) {
             throw new StorageMarkerStartupException(
                 'CORE_STORAGE_MARKER_JSON_INVALID',
-                sprintf('Unable to read marker file: %s', $markerPath)
+                sprintf('Unable to read marker file: %s', $markerPath),
+                $exception
             );
         }
 
@@ -121,7 +99,7 @@ final class StorageMarkerStartupValidator
     /**
      * @param array<string, mixed> $marker
      */
-    private function assertMarker(array $marker): void
+    private function assertMarker(string $expectedStorageId, array $marker): void
     {
         $version = $marker['version'] ?? null;
         if (!is_int($version) || $version < 1) {
@@ -138,10 +116,10 @@ final class StorageMarkerStartupValidator
         if (!is_string($storageId) || trim($storageId) === '') {
             throw new StorageMarkerStartupException('CORE_STORAGE_MARKER_JSON_INVALID', 'Marker storage_id must be a non-empty string.');
         }
-        if ($storageId !== $this->expectedStorageId) {
+        if ($storageId !== $expectedStorageId) {
             throw new StorageMarkerStartupException(
                 'CORE_STORAGE_MARKER_STORAGE_ID_MISMATCH',
-                sprintf('Marker storage_id "%s" does not match APP_STORAGE_ID "%s".', $storageId, $this->expectedStorageId)
+                sprintf('Marker storage_id "%s" does not match expected storage id "%s".', $storageId, $expectedStorageId)
             );
         }
 
@@ -178,4 +156,3 @@ final class StorageMarkerStartupValidator
         return (bool) preg_match('/^[A-Za-z]:[\\\\\\/]/', $path);
     }
 }
-

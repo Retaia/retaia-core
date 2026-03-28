@@ -3,7 +3,12 @@
 namespace App\Tests\Integration\Ingest;
 
 use App\Ingest\Service\FilesystemFilePoller;
-use App\Ingest\Service\WatchPathResolver;
+use App\Storage\BusinessStorageDefinition;
+use App\Storage\BusinessStorageConfig;
+use App\Storage\BusinessStorageFile;
+use App\Storage\BusinessStorageRegistry;
+use App\Storage\BusinessStorageRegistryInterface;
+use App\Storage\LocalBusinessStorageFactory;
 use PHPUnit\Framework\TestCase;
 
 final class FilesystemFilePollerTest extends TestCase
@@ -17,12 +22,12 @@ final class FilesystemFilePollerTest extends TestCase
         file_put_contents($root.'/a.txt', 'A');
         file_put_contents($root.'/nested/c.txt', 'CCC');
 
-        $resolver = new WatchPathResolver($root, '.');
-        $poller = new FilesystemFilePoller($resolver);
+        $poller = new FilesystemFilePoller($this->storageRegistry($root));
 
         $items = $poller->poll(2);
 
         self::assertCount(2, $items);
+        self::assertSame('nas-main', $items[0]['storage_id']);
         self::assertSame('a.txt', $items[0]['path']);
         self::assertSame('b.txt', $items[1]['path']);
         self::assertSame(1, $items[0]['size']);
@@ -42,8 +47,7 @@ final class FilesystemFilePollerTest extends TestCase
         file_put_contents($outside, 'OUTSIDE');
         @symlink($outside, $root.'/outside.txt');
 
-        $resolver = new WatchPathResolver($root, '.');
-        $poller = new FilesystemFilePoller($resolver);
+        $poller = new FilesystemFilePoller($this->storageRegistry($root));
         $items = $poller->poll(10);
 
         self::assertCount(1, $items);
@@ -57,15 +61,14 @@ final class FilesystemFilePollerTest extends TestCase
         file_put_contents($root.'/good.txt', 'GOOD');
         file_put_contents($root.'/broken.txt', 'BROKEN');
 
-        $resolver = new WatchPathResolver($root, '.');
-        $poller = new class($resolver) extends FilesystemFilePoller {
-            protected function buildRow(\SplFileInfo $file, string $root): ?array
+        $poller = new class($this->storageRegistry($root)) extends FilesystemFilePoller {
+            protected function buildRow(string $storageId, string $watchDirectory, BusinessStorageFile $file): ?array
             {
-                if (str_contains($file->getFilename(), 'broken.txt')) {
+                if (str_contains($file->path, 'broken.txt')) {
                     throw new \RuntimeException('simulated metadata failure');
                 }
 
-                return parent::buildRow($file, $root);
+                return parent::buildRow($storageId, $watchDirectory, $file);
             }
         };
 
@@ -83,8 +86,7 @@ final class FilesystemFilePollerTest extends TestCase
         file_put_contents($root.'/locked.txt', 'LOCKED');
         @chmod($root.'/locked.txt', 0000);
 
-        $resolver = new WatchPathResolver($root, '.');
-        $poller = new FilesystemFilePoller($resolver);
+        $poller = new FilesystemFilePoller($this->storageRegistry($root));
         $items = $poller->poll(10);
 
         @chmod($root.'/locked.txt', 0644);
@@ -104,8 +106,7 @@ final class FilesystemFilePollerTest extends TestCase
         file_put_contents($root.'/blocked/hidden.txt', 'HIDDEN');
         @chmod($root.'/blocked', 0000);
 
-        $resolver = new WatchPathResolver($root, '.');
-        $poller = new FilesystemFilePoller($resolver);
+        $poller = new FilesystemFilePoller($this->storageRegistry($root));
         $items = $poller->poll(10);
 
         @chmod($root.'/blocked', 0755);
@@ -113,5 +114,22 @@ final class FilesystemFilePollerTest extends TestCase
         self::assertNotSame([], $items);
         $paths = array_map(static fn (array $item): string => (string) $item['path'], $items);
         self::assertContains('ok/readable.txt', $paths);
+    }
+
+    private function storageConfig(string $root): BusinessStorageConfig
+    {
+        return new BusinessStorageConfig(dirname($root), basename($root));
+    }
+
+    private function storage(string $root): \App\Storage\BusinessStorageInterface
+    {
+        return (new LocalBusinessStorageFactory($this->storageConfig($root)))->create();
+    }
+
+    private function storageRegistry(string $root): BusinessStorageRegistryInterface
+    {
+        return new BusinessStorageRegistry('nas-main', [
+            new BusinessStorageDefinition('nas-main', $this->storage($root), true),
+        ]);
     }
 }

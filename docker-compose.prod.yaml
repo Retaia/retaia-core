@@ -7,11 +7,14 @@ services:
       APP_ENV: prod
       APP_DEBUG: "0"
       DATABASE_URL: ${DATABASE_URL:-postgresql://app:app@db:5432/app_prod?serverVersion=16&charset=utf8}
-      APP_INGEST_WATCH_PATH: /var/local/RETAIA/INBOX
+      APP_STORAGE_IDS: ${APP_STORAGE_IDS:-nas-main}
+      APP_STORAGE_DEFAULT_ID: ${APP_STORAGE_DEFAULT_ID:-nas-main}
+      APP_STORAGE_NAS_MAIN_DRIVER: ${APP_STORAGE_NAS_MAIN_DRIVER:-local}
+      APP_STORAGE_NAS_MAIN_ROOT_PATH: ${APP_STORAGE_NAS_MAIN_ROOT_PATH:-/var/local/RETAIA}
+      APP_STORAGE_NAS_MAIN_WATCH_DIRECTORY: ${APP_STORAGE_NAS_MAIN_WATCH_DIRECTORY:-INBOX}
       DEFAULT_URI: ${DEFAULT_URI:-http://localhost:${RETAIA_PROD_HTTP_PORT:-8080}}
       APP_SECRET: ${APP_SECRET:-change-me}
       SYMFONY_TRUSTED_PROXIES: ${SYMFONY_TRUSTED_PROXIES:-127.0.0.1/32}
-      APP_STORAGE_ID: ${APP_STORAGE_ID:-nas-main}
     depends_on:
       db:
         condition: service_healthy
@@ -27,9 +30,12 @@ services:
       APP_ENV: prod
       APP_DEBUG: "0"
       DATABASE_URL: ${DATABASE_URL:-postgresql://app:app@db:5432/app_prod?serverVersion=16&charset=utf8}
-      APP_INGEST_WATCH_PATH: /var/local/RETAIA/INBOX
+      APP_STORAGE_IDS: ${APP_STORAGE_IDS:-nas-main}
+      APP_STORAGE_DEFAULT_ID: ${APP_STORAGE_DEFAULT_ID:-nas-main}
+      APP_STORAGE_NAS_MAIN_DRIVER: ${APP_STORAGE_NAS_MAIN_DRIVER:-local}
+      APP_STORAGE_NAS_MAIN_ROOT_PATH: ${APP_STORAGE_NAS_MAIN_ROOT_PATH:-/var/local/RETAIA}
+      APP_STORAGE_NAS_MAIN_WATCH_DIRECTORY: ${APP_STORAGE_NAS_MAIN_WATCH_DIRECTORY:-INBOX}
       DEFAULT_URI: ${DEFAULT_URI:-http://localhost:${RETAIA_PROD_HTTP_PORT:-8080}}
-      APP_STORAGE_ID: ${APP_STORAGE_ID:-nas-main}
     depends_on:
       db:
         condition: service_healthy

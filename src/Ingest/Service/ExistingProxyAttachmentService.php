@@ -6,11 +6,12 @@ use App\Asset\Repository\AssetRepositoryInterface;
 use App\Derived\DerivedFileRepositoryInterface;
 use App\Entity\Asset;
 use App\Ingest\Repository\IngestDiagnosticsRepository;
+use App\Storage\BusinessStorageRegistryInterface;
 
 final class ExistingProxyAttachmentService
 {
     public function __construct(
-        private WatchPathResolver $watchPathResolver,
+        private BusinessStorageRegistryInterface $storageRegistry,
         private ExistingProxyFilesystemInterface $filesystem,
         private IngestDiagnosticsRepository $ingestDiagnostics,
         private AssetRepositoryInterface $assets,
@@ -21,7 +22,7 @@ final class ExistingProxyAttachmentService
     /**
      * @param array{path:string,type:string,kind:string,original:string} $proxy
      */
-    public function canUse(array $proxy, string $assetUuid): bool
+    public function canUse(string $storageId, array $proxy, string $assetUuid): bool
     {
         $kind = (string) ($proxy['kind'] ?? '');
         $path = (string) ($proxy['path'] ?? '');
@@ -29,9 +30,10 @@ final class ExistingProxyAttachmentService
             return false;
         }
 
-        $root = rtrim($this->watchPathResolver->resolveRoot(), DIRECTORY_SEPARATOR);
-        if ($this->filesystem->isFile($root, $path)) {
-            return $this->filesystem->fileSize($root, $path) > 0;
+        $storage = $this->storageRegistry->get($storageId)->storage;
+
+        if ($this->filesystem->isFile($storage, $path)) {
+            return $this->filesystem->fileSize($storage, $path) > 0;
         }
 
         $existing = $this->derivedFiles->findLatestByAssetAndKind($assetUuid, $kind);
@@ -39,17 +41,17 @@ final class ExistingProxyAttachmentService
             return false;
         }
 
-        if (!$this->filesystem->isFile($root, $existing->storagePath)) {
+        if (!$this->filesystem->isFile($storage, $existing->storagePath)) {
             return false;
         }
 
-        return $this->filesystem->fileSize($root, $existing->storagePath) > 0;
+        return $this->filesystem->fileSize($storage, $existing->storagePath) > 0;
     }
 
     /**
      * @param array{path:string,type:string,kind:string,original:string} $proxy
      */
-    public function attachToAsset(Asset $asset, string $originalPath, array $proxy, string $defaultStorageId): void
+    public function attachToAsset(Asset $asset, string $storageId, string $originalPath, array $proxy): void
     {
         $fields = $asset->getFields();
 
@@ -60,7 +62,7 @@ final class ExistingProxyAttachmentService
         }
         $this->ingestDiagnostics->clearUnmatchedSidecar($proxyPath);
 
-        $materializedStoragePath = $this->persistDerivedFile($asset->getUuid(), $proxyKind, $proxyPath);
+        $materializedStoragePath = $this->persistDerivedFile($storageId, $asset->getUuid(), $proxyKind, $proxyPath);
 
         $paths = is_array($fields['paths'] ?? null) ? $fields['paths'] : [];
         $sidecars = is_array($paths['sidecars_relative'] ?? null) ? $paths['sidecars_relative'] : [];
@@ -68,7 +70,7 @@ final class ExistingProxyAttachmentService
         if (!in_array($materializedStoragePath, $sidecars, true)) {
             $sidecars[] = $materializedStoragePath;
         }
-        $paths['storage_id'] = (string) ($paths['storage_id'] ?? $defaultStorageId);
+        $paths['storage_id'] = (string) ($paths['storage_id'] ?? $storageId);
         $paths['original_relative'] = (string) ($paths['original_relative'] ?? $originalPath);
         $paths['sidecars_relative'] = array_values(array_unique(array_map('strval', $sidecars)));
 
@@ -101,12 +103,12 @@ final class ExistingProxyAttachmentService
         $this->assets->save($asset);
     }
 
-    private function persistDerivedFile(string $assetUuid, string $kind, string $proxyPath): string
+    private function persistDerivedFile(string $storageId, string $assetUuid, string $kind, string $proxyPath): string
     {
-        $root = rtrim($this->watchPathResolver->resolveRoot(), DIRECTORY_SEPARATOR);
-        $storagePath = $this->filesystem->materializeToDerived($root, $assetUuid, $kind, $proxyPath);
-        $size = $this->filesystem->isFile($root, $storagePath) ? $this->filesystem->fileSize($root, $storagePath) : 0;
-        $sha256 = $this->filesystem->isFile($root, $storagePath) ? $this->filesystem->hashSha256($root, $storagePath) : null;
+        $storage = $this->storageRegistry->get($storageId)->storage;
+        $storagePath = $this->filesystem->materializeToDerived($storage, $assetUuid, $kind, $proxyPath);
+        $size = $this->filesystem->isFile($storage, $storagePath) ? $this->filesystem->fileSize($storage, $storagePath) : 0;
+        $sha256 = $this->filesystem->isFile($storage, $storagePath) ? $this->filesystem->hashSha256($storage, $storagePath) : null;
 
         $this->derivedFiles->upsertMaterialized(
             $assetUuid,

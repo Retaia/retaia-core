@@ -268,7 +268,21 @@ final class DerivedUploadApiTest extends WebTestCase
             return;
         }
 
-        $asset = new Asset('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'VIDEO', 'proxy-source.mov', AssetState::PROCESSED);
+        $asset = new Asset(
+            'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+            'VIDEO',
+            'proxy-source.mov',
+            AssetState::PROCESSED,
+            [],
+            null,
+            [
+                'paths' => [
+                    'storage_id' => 'nas-main',
+                    'original_relative' => 'INBOX/proxy-source.mov',
+                    'sidecars_relative' => [],
+                ],
+            ]
+        );
         $entityManager->persist($asset);
         $entityManager->flush();
     }
