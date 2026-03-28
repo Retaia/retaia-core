@@ -655,8 +655,17 @@ final class JobApiTest extends WebTestCase
 
     private function bootClient(): KernelBrowser
     {
+        self::ensureKernelShutdown();
         $client = static::createClient();
         $client->disableReboot();
+        /** @var Connection $connection */
+        $connection = self::getContainer()->get(Connection::class);
+        $this->ensureUserAuthSessionTable($connection);
+        $connection->executeStatement('DELETE FROM user_auth_session');
+        $cache = self::getContainer()->get('cache.app');
+        if (method_exists($cache, 'clear')) {
+            $cache->clear();
+        }
 
         return $client;
     }

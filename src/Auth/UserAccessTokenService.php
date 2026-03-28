@@ -3,23 +3,21 @@
 namespace App\Auth;
 
 use App\Entity\User;
+use Doctrine\DBAL\Connection;
 use Lcobucci\JWT\Configuration;
 use Lcobucci\JWT\Signer\Hmac\Sha256;
 use Lcobucci\JWT\Signer\Key\InMemory;
 use Lcobucci\JWT\UnencryptedToken;
 use Lcobucci\JWT\Validation\Constraint\IssuedBy;
 use Lcobucci\JWT\Validation\Constraint\SignedWith;
-use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 final class UserAccessTokenService
 {
-    private const TOKEN_STORE_KEY = 'auth_user_active_tokens';
-
     private Configuration $jwt;
 
     public function __construct(
-        private CacheItemPoolInterface $cache,
+        private Connection $connection,
         #[Autowire('%kernel.secret%')]
         string $secret,
         #[Autowire('%app.user_token_ttl_seconds%')]
@@ -52,37 +50,29 @@ final class UserAccessTokenService
             return null;
         }
 
-        foreach ($this->activeTokens() as $session) {
-            if (!is_array($session)) {
-                continue;
-            }
-
-            $storedRefreshToken = (string) ($session['refresh_token'] ?? '');
-            if ($storedRefreshToken === '' || !hash_equals($storedRefreshToken, $normalizedRefreshToken)) {
-                continue;
-            }
-
-            $activeClientId = (string) ($session['client_id'] ?? '');
-            $activeClientKind = (string) ($session['client_kind'] ?? '');
-
-            if ($clientId !== null && $clientId !== '' && !hash_equals($activeClientId, $clientId)) {
-                return null;
-            }
-
-            if ($clientKind !== null && $clientKind !== '' && !hash_equals($activeClientKind, $clientKind)) {
-                return null;
-            }
-
-            $userId = (string) ($session['user_id'] ?? '');
-            $email = (string) ($session['email'] ?? '');
-            if ($userId === '' || $email === '' || $activeClientId === '' || $activeClientKind === '') {
-                return null;
-            }
-
-            return $this->issueForPrincipal($userId, $email, $activeClientId, $activeClientKind, $session);
+        $session = $this->sessionByRefreshToken($normalizedRefreshToken);
+        if (!is_array($session)) {
+            return null;
         }
 
-        return null;
+        $activeClientId = (string) ($session['client_id'] ?? '');
+        $activeClientKind = (string) ($session['client_kind'] ?? '');
+
+        if ($clientId !== null && $clientId !== '' && !hash_equals($activeClientId, $clientId)) {
+            return null;
+        }
+
+        if ($clientKind !== null && $clientKind !== '' && !hash_equals($activeClientKind, $clientKind)) {
+            return null;
+        }
+
+        $userId = (string) ($session['user_id'] ?? '');
+        $email = (string) ($session['email'] ?? '');
+        if ($userId === '' || $email === '' || $activeClientId === '' || $activeClientKind === '') {
+            return null;
+        }
+
+        return $this->issueForPrincipal($userId, $email, $activeClientId, $activeClientKind, $session);
     }
 
     /**
@@ -118,8 +108,7 @@ final class UserAccessTokenService
             return null;
         }
 
-        $activeTokens = $this->activeTokens();
-        $active = $activeTokens[$sessionId] ?? null;
+        $active = $this->sessionBySessionId($sessionId);
         if (!is_array($active)) {
             return null;
         }
@@ -129,8 +118,7 @@ final class UserAccessTokenService
         }
 
         $active['last_used_at'] = time();
-        $activeTokens[$sessionId] = $active;
-        $this->saveActiveTokens($activeTokens);
+        $this->persistSession($active);
 
         return [
             'user_id' => $userId,
@@ -153,8 +141,7 @@ final class UserAccessTokenService
             return false;
         }
 
-        $activeTokens = $this->activeTokens();
-        $active = $activeTokens[$sessionId] ?? null;
+        $active = $this->sessionBySessionId($sessionId);
         if (!is_array($active)) {
             return false;
         }
@@ -163,8 +150,7 @@ final class UserAccessTokenService
             return false;
         }
 
-        unset($activeTokens[$sessionId]);
-        $this->saveActiveTokens($activeTokens);
+        $this->deleteSession($sessionId);
 
         return true;
     }
@@ -175,7 +161,7 @@ final class UserAccessTokenService
     public function sessionsForUser(string $userId, string $currentSessionId): array
     {
         $items = [];
-        foreach ($this->activeTokens() as $session) {
+        foreach ($this->sessionsByUserId($userId) as $session) {
             if (!is_array($session) || !hash_equals((string) ($session['user_id'] ?? ''), $userId)) {
                 continue;
             }
@@ -215,8 +201,7 @@ final class UserAccessTokenService
 
     public function revokeSession(string $userId, string $sessionId, string $currentSessionId): string
     {
-        $activeTokens = $this->activeTokens();
-        $active = $activeTokens[$sessionId] ?? null;
+        $active = $this->sessionBySessionId($sessionId);
         if (!is_array($active) || !hash_equals((string) ($active['user_id'] ?? ''), $userId)) {
             return 'NOT_FOUND';
         }
@@ -225,31 +210,29 @@ final class UserAccessTokenService
             return 'CURRENT_SESSION';
         }
 
-        unset($activeTokens[$sessionId]);
-        $this->saveActiveTokens($activeTokens);
+        $this->deleteSession($sessionId);
 
         return 'REVOKED';
     }
 
     public function revokeOtherSessions(string $userId, string $currentSessionId): int
     {
-        $activeTokens = $this->activeTokens();
         $revoked = 0;
 
-        foreach ($activeTokens as $sessionId => $session) {
+        foreach ($this->sessionsByUserId($userId) as $session) {
+            $sessionId = (string) ($session['session_id'] ?? '');
             if (
                 !is_array($session)
+                || $sessionId === ''
                 || !hash_equals((string) ($session['user_id'] ?? ''), $userId)
                 || hash_equals((string) $sessionId, $currentSessionId)
             ) {
                 continue;
             }
 
-            unset($activeTokens[$sessionId]);
+            $this->deleteSession($sessionId);
             ++$revoked;
         }
-
-        $this->saveActiveTokens($activeTokens);
 
         return $revoked;
     }
@@ -284,8 +267,7 @@ final class UserAccessTokenService
             ->getToken($this->jwt->signer(), $this->jwt->signingKey())
             ->toString();
 
-        $activeTokens = $this->activeTokens();
-        $activeTokens[$sessionId] = [
+        $this->persistSession([
             'session_id' => $sessionId,
             'access_token' => $token,
             'refresh_token' => $refreshToken,
@@ -297,8 +279,7 @@ final class UserAccessTokenService
             'client_kind' => $clientKind,
             'created_at' => $createdAt,
             'last_used_at' => $issuedAt,
-        ];
-        $this->saveActiveTokens($activeTokens);
+        ]);
 
         return [
             'access_token' => $token,
@@ -313,60 +294,151 @@ final class UserAccessTokenService
     /**
      * @return array<string, array<string, mixed>>
      */
-    private function activeTokens(): array
+    private function sessionByRefreshToken(string $refreshToken): ?array
     {
-        $item = $this->cache->getItem(self::TOKEN_STORE_KEY);
-        $value = $item->get();
-        if (!is_array($value)) {
-            return [];
+        $row = $this->connection->fetchAssociative(
+            'SELECT session_id, access_token, refresh_token, access_expires_at, refresh_expires_at, user_id, email, client_id, client_kind, created_at, last_used_at
+             FROM user_auth_session
+             WHERE refresh_token = :refreshToken
+             LIMIT 1',
+            ['refreshToken' => $refreshToken]
+        );
+
+        if (!is_array($row)) {
+            return null;
         }
 
-        $tokens = [];
-        $changed = false;
-        $now = time();
-
-        foreach ($value as $key => $session) {
-            if (!is_array($session)) {
-                $changed = true;
-                continue;
-            }
-
-            $normalized = $this->normalizeStoredSession((string) $key, $session);
-            if ($normalized === null) {
-                $changed = true;
-                continue;
-            }
-
-            if ((int) ($normalized['refresh_expires_at'] ?? 0) <= $now) {
-                $changed = true;
-                continue;
-            }
-
-            $tokens[(string) $normalized['session_id']] = $normalized;
+        $normalized = $this->normalizeStoredSession($row);
+        if ($normalized === null) {
+            $this->deleteSession((string) ($row['session_id'] ?? ''));
+            return null;
         }
 
-        if ($changed) {
-            $this->saveActiveTokens($tokens);
+        if ((int) ($normalized['refresh_expires_at'] ?? 0) <= time()) {
+            $this->deleteSession((string) ($normalized['session_id'] ?? ''));
+            return null;
         }
 
-        return $tokens;
+        return $normalized;
     }
 
     /**
-     * @param array<string, array<string, mixed>> $tokens
+     * @return array<string, mixed>|null
      */
-    private function saveActiveTokens(array $tokens): void
+    private function sessionBySessionId(string $sessionId): ?array
     {
-        $item = $this->cache->getItem(self::TOKEN_STORE_KEY);
-        $item->set($tokens);
-        $this->cache->save($item);
+        $row = $this->connection->fetchAssociative(
+            'SELECT session_id, access_token, refresh_token, access_expires_at, refresh_expires_at, user_id, email, client_id, client_kind, created_at, last_used_at
+             FROM user_auth_session
+             WHERE session_id = :sessionId
+             LIMIT 1',
+            ['sessionId' => $sessionId]
+        );
+
+        if (!is_array($row)) {
+            return null;
+        }
+
+        $normalized = $this->normalizeStoredSession($row);
+        if ($normalized === null) {
+            $this->deleteSession($sessionId);
+            return null;
+        }
+
+        if ((int) ($normalized['refresh_expires_at'] ?? 0) <= time()) {
+            $this->deleteSession($sessionId);
+            return null;
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function sessionsByUserId(string $userId): array
+    {
+        $rows = $this->connection->fetchAllAssociative(
+            'SELECT session_id, access_token, refresh_token, access_expires_at, refresh_expires_at, user_id, email, client_id, client_kind, created_at, last_used_at
+             FROM user_auth_session
+             WHERE user_id = :userId',
+            ['userId' => $userId]
+        );
+
+        $sessions = [];
+        foreach ($rows as $row) {
+            $normalized = $this->normalizeStoredSession($row);
+            if ($normalized === null) {
+                $this->deleteSession((string) ($row['session_id'] ?? ''));
+                continue;
+            }
+
+            if ((int) ($normalized['refresh_expires_at'] ?? 0) <= time()) {
+                $this->deleteSession((string) ($normalized['session_id'] ?? ''));
+                continue;
+            }
+
+            $sessions[] = $normalized;
+        }
+
+        return $sessions;
+    }
+
+    /**
+     * @param array<string, mixed> $session
+     */
+    private function persistSession(array $session): void
+    {
+        $normalized = $this->normalizeStoredSession($session);
+        if ($normalized === null) {
+            return;
+        }
+
+        $data = [
+            'session_id' => (string) $normalized['session_id'],
+            'access_token' => (string) $normalized['access_token'],
+            'refresh_token' => (string) $normalized['refresh_token'],
+            'access_expires_at' => (int) $normalized['access_expires_at'],
+            'refresh_expires_at' => (int) $normalized['refresh_expires_at'],
+            'user_id' => (string) $normalized['user_id'],
+            'email' => (string) $normalized['email'],
+            'client_id' => (string) $normalized['client_id'],
+            'client_kind' => (string) $normalized['client_kind'],
+            'created_at' => (int) $normalized['created_at'],
+            'last_used_at' => (int) $normalized['last_used_at'],
+        ];
+
+        if ($this->sessionExists((string) $normalized['session_id'])) {
+            $this->connection->update('user_auth_session', $data, ['session_id' => (string) $normalized['session_id']]);
+            return;
+        }
+
+        $this->connection->insert('user_auth_session', $data);
+    }
+
+    private function deleteSession(string $sessionId): void
+    {
+        $sessionId = trim($sessionId);
+        if ($sessionId === '') {
+            return;
+        }
+
+        $this->connection->delete('user_auth_session', ['session_id' => $sessionId]);
+    }
+
+    private function sessionExists(string $sessionId): bool
+    {
+        return (int) $this->connection->fetchOne(
+            'SELECT COUNT(*) FROM user_auth_session WHERE session_id = :sessionId',
+            ['sessionId' => $sessionId]
+        ) > 0;
     }
 
     /**
      * @param array<string, mixed> $session
      * @return array<string, mixed>|null
      */
-    private function normalizeStoredSession(string $index, array $session): ?array
+    private function normalizeStoredSession(array $session): ?array
     {
         $userId = trim((string) ($session['user_id'] ?? ''));
         $email = trim((string) ($session['email'] ?? ''));
@@ -379,11 +451,8 @@ final class UserAccessTokenService
         }
 
         $sessionId = trim((string) ($session['session_id'] ?? ''));
-        if ($sessionId === '') {
-            $sessionId = $index;
-        }
         if ($sessionId === '' || str_contains($sessionId, '|')) {
-            $sessionId = bin2hex(random_bytes(16));
+            return null;
         }
 
         $createdAt = (int) ($session['created_at'] ?? ($session['issued_at'] ?? time()));

@@ -1,6 +1,6 @@
 # OpenAPI Runtime Audit (`specs@b6eb044`)
 
-Date: 2026-03-27
+Date: 2026-03-28
 Spec baseline: `specs/api/openapi/v1.yaml` from `retaia-docs@b6eb0447cf3c9d3bf3d4b9d2969ceda4cd38202a`
 Runtime baseline: `retaia-core@master + auth-me alignment batch`
 
@@ -23,26 +23,9 @@ Important context:
 
 No concrete OpenAPI path/schema drift remains identified in this snapshot.
 
-That does not mean the runtime is free of shortcuts. A deeper implementation review still shows several production-grade quick fixes and minimal implementations that should be treated as active engineering debt, especially around auth state persistence, agent signing and operational projections.
+That does not mean the runtime is free of shortcuts. A deeper implementation review still shows several production-grade quick fixes and minimal implementations that should be treated as active engineering debt, especially around remaining auth/security persistence, agent signing and operational projections.
 
 ## Findings
-
-### P1. User interactive sessions and refresh-token state are still only stored in `cache.app`
-
-- Runtime location: [`src/Auth/UserAccessTokenService.php:15`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/UserAccessTokenService.php:15)
-- Critical lines:
-  - [`src/Auth/UserAccessTokenService.php:21`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/UserAccessTokenService.php:21)
-  - [`src/Auth/UserAccessTokenService.php:55`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/UserAccessTokenService.php:55)
-  - [`src/Auth/UserAccessTokenService.php:121`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/UserAccessTokenService.php:121)
-  - [`src/Auth/UserAccessTokenService.php:287`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/UserAccessTokenService.php:287)
-  - [`src/Auth/UserAccessTokenService.php:316`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/UserAccessTokenService.php:316)
-  - [`src/Auth/UserAccessTokenService.php:358`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/UserAccessTokenService.php:358)
-- Impact:
-  - active login sessions disappear on cache flush or restart
-  - `/auth/refresh`, `/auth/me/sessions*`, logout and revocation semantics depend on volatile cache state rather than durable persistence
-  - a multi-node deployment can invalidate or fragment user session state unless `cache.app` is strictly shared
-- Why this is a quick fix:
-  - the JWT layer looks complete, but the authoritative session registry behind it is still not persisted as real auth/session storage
 
 ### P1. 2FA state and recovery codes are still only stored in `cache.app`
 
@@ -172,7 +155,6 @@ No remaining secondary gap is tracked in this snapshot.
 
 ### Batch 1: auth state persistence hardening
 
-- move `UserAccessTokenService` state to persistent session/token storage
 - move `TwoFactorService` state and recovery codes to persistent user security storage
 - replace `AuthClientStateStore` cache-backed registry/flows/tokens/challenges with persistent auth-client tables
 

@@ -7,6 +7,7 @@ namespace App\Tests\Functional;
 use App\Auth\AuthClientProvisioningService;
 use App\Tests\Functional\Support\AuthDeviceFlowCacheTrait;
 use App\Tests\Support\FixtureUsers;
+use App\Tests\Support\FunctionalSchemaTrait;
 use Doctrine\DBAL\Connection;
 use GuzzleHttp\Client;
 use GuzzleHttp\HandlerStack;
@@ -26,6 +27,24 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
 {
     use RecreateDatabaseTrait;
     use AuthDeviceFlowCacheTrait;
+    use FunctionalSchemaTrait;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        self::ensureKernelShutdown();
+        static::bootKernel();
+
+        /** @var CacheItemPoolInterface $cache */
+        $cache = static::getContainer()->get('cache.app');
+        $cache->clear();
+
+        /** @var Connection $connection */
+        $connection = static::getContainer()->get(Connection::class);
+        $this->ensureUserAuthSessionTable($connection);
+        $connection->executeStatement('DELETE FROM user_auth_session');
+    }
 
     public function testSpecLoginMeLogoutBearerProcess(): void
     {
@@ -1290,8 +1309,12 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
 
     private function createGuzzleClient(?string $remoteAddress = null, ?string $acceptLanguage = null): Client
     {
+        self::ensureKernelShutdown();
         static::bootKernel();
         $resolvedRemoteAddress = $remoteAddress ?? sprintf('10.50.%d.%d', random_int(1, 200), random_int(1, 200));
+        /** @var Connection $connection */
+        $connection = static::getContainer()->get(Connection::class);
+        $this->ensureUserAuthSessionTable($connection);
         /** @var CacheItemPoolInterface $cache */
         $cache = static::getContainer()->get('cache.app');
         $cache->clear();

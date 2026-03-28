@@ -5,6 +5,7 @@ namespace App\Tests\Functional;
 use App\Tests\Functional\Support\AuthDeviceFlowCacheTrait;
 use App\Tests\Support\AgentSigningTestHelper;
 use App\Tests\Support\FixtureUsers;
+use App\Tests\Support\FunctionalSchemaTrait;
 use Doctrine\DBAL\Connection;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
 use OTPHP\TOTP;
@@ -16,6 +17,7 @@ final class ApiAuthFlowTest extends WebTestCase
 {
     use RecreateDatabaseTrait;
     use AuthDeviceFlowCacheTrait;
+    use FunctionalSchemaTrait;
 
     public function testLoginAndMeFlowWithSession(): void
     {
@@ -1938,10 +1940,13 @@ final class ApiAuthFlowTest extends WebTestCase
             $server['HTTP_ACCEPT_LANGUAGE'] = $acceptLanguage;
         }
 
+        self::ensureKernelShutdown();
         $client = static::createClient([], $server);
         $client->disableReboot();
-        static::getContainer()->get(Connection::class)->executeStatement("CREATE TABLE IF NOT EXISTS agent_runtime (agent_id VARCHAR(36) PRIMARY KEY NOT NULL, client_id VARCHAR(64) NOT NULL, agent_name VARCHAR(255) NOT NULL, agent_version VARCHAR(64) NOT NULL, os_name VARCHAR(32) DEFAULT NULL, os_version VARCHAR(64) DEFAULT NULL, arch VARCHAR(32) DEFAULT NULL, effective_capabilities CLOB NOT NULL, capability_warnings CLOB NOT NULL, last_register_at DATETIME NOT NULL, last_seen_at DATETIME NOT NULL, last_heartbeat_at DATETIME DEFAULT NULL, max_parallel_jobs INTEGER NOT NULL, feature_flags_contract_version VARCHAR(32) DEFAULT NULL, effective_feature_flags_contract_version VARCHAR(32) DEFAULT NULL, server_time_skew_seconds INTEGER DEFAULT NULL)");
-        static::getContainer()->get(Connection::class)->executeStatement('CREATE INDEX IF NOT EXISTS idx_agent_runtime_last_seen_at ON agent_runtime (last_seen_at)');
+        $connection = static::getContainer()->get(Connection::class);
+        $this->ensureUserAuthSessionTable($connection);
+        $connection->executeStatement('DELETE FROM user_auth_session');
+        $this->ensureAgentRuntimeTable($connection);
         /** @var CacheItemPoolInterface $cache */
         $cache = static::getContainer()->get('cache.app');
         $cache->clear();

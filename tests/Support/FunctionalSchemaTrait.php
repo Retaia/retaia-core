@@ -6,6 +6,14 @@ use Doctrine\DBAL\Connection;
 
 trait FunctionalSchemaTrait
 {
+    protected function ensureUserAuthSessionTable(Connection $connection): void
+    {
+        $connection->executeStatement('CREATE TABLE IF NOT EXISTS user_auth_session (session_id VARCHAR(32) PRIMARY KEY NOT NULL, access_token CLOB NOT NULL, refresh_token VARCHAR(255) NOT NULL, access_expires_at INTEGER NOT NULL, refresh_expires_at INTEGER NOT NULL, user_id VARCHAR(32) NOT NULL, email VARCHAR(180) NOT NULL, client_id VARCHAR(64) NOT NULL, client_kind VARCHAR(32) NOT NULL, created_at INTEGER NOT NULL, last_used_at INTEGER NOT NULL)');
+        $connection->executeStatement('CREATE UNIQUE INDEX IF NOT EXISTS uniq_user_auth_session_refresh_token ON user_auth_session (refresh_token)');
+        $connection->executeStatement('CREATE INDEX IF NOT EXISTS idx_user_auth_session_user_id ON user_auth_session (user_id)');
+        $connection->executeStatement('CREATE INDEX IF NOT EXISTS idx_user_auth_session_refresh_expires_at ON user_auth_session (refresh_expires_at)');
+    }
+
     protected function ensureOperationLockTable(Connection $connection): void
     {
         $connection->executeStatement('CREATE TABLE IF NOT EXISTS asset_operation_lock (id VARCHAR(32) PRIMARY KEY NOT NULL, asset_uuid VARCHAR(36) NOT NULL, lock_type VARCHAR(32) NOT NULL, actor_id VARCHAR(64) NOT NULL, acquired_at DATETIME NOT NULL, released_at DATETIME DEFAULT NULL)');

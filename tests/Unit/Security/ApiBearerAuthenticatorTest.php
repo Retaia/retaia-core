@@ -9,6 +9,8 @@ use App\Domain\AuthClient\ClientKind;
 use App\Entity\User;
 use App\Security\ApiBearerAuthenticator;
 use App\Security\ApiClientPrincipal;
+use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\HttpFoundation\Request;
@@ -34,7 +36,7 @@ final class ApiBearerAuthenticatorTest extends TestCase
     public function testAuthenticateBuildsPassportForUserToken(): void
     {
         $cache = new ArrayAdapter();
-        $userTokens = new UserAccessTokenService($cache, 'test-secret', 3600);
+        $userTokens = new UserAccessTokenService($this->connection(), 'test-secret', 3600);
         $stateStore = new AuthClientStateStore($cache);
         $authenticator = $this->authenticator($userTokens, new ClientAccessTokenResolver($stateStore));
         $user = new User('user-1', 'user@example.test', 'hash');
@@ -61,7 +63,7 @@ final class ApiBearerAuthenticatorTest extends TestCase
         ]);
 
         $authenticator = $this->authenticator(
-            new UserAccessTokenService($cache, 'test-secret', 3600),
+            new UserAccessTokenService($this->connection(), 'test-secret', 3600),
             new ClientAccessTokenResolver($stateStore)
         );
 
@@ -119,10 +121,20 @@ final class ApiBearerAuthenticatorTest extends TestCase
         $cache = new ArrayAdapter();
 
         return new ApiBearerAuthenticator(
-            $userTokens ?? new UserAccessTokenService($cache, 'test-secret', 3600),
+            $userTokens ?? new UserAccessTokenService($this->connection(), 'test-secret', 3600),
             $clientResolver ?? new ClientAccessTokenResolver(new AuthClientStateStore($cache)),
             $translator ?? $this->createStub(TranslatorInterface::class),
         );
+    }
+
+    private function connection(): Connection
+    {
+        $connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]);
+        $connection->executeStatement('CREATE TABLE user_auth_session (session_id VARCHAR(32) PRIMARY KEY NOT NULL, access_token CLOB NOT NULL, refresh_token VARCHAR(255) NOT NULL, access_expires_at INTEGER NOT NULL, refresh_expires_at INTEGER NOT NULL, user_id VARCHAR(32) NOT NULL, email VARCHAR(180) NOT NULL, client_id VARCHAR(64) NOT NULL, client_kind VARCHAR(32) NOT NULL, created_at INTEGER NOT NULL, last_used_at INTEGER NOT NULL)');
+        $connection->executeStatement('CREATE UNIQUE INDEX uniq_user_auth_session_refresh_token ON user_auth_session (refresh_token)');
+        $connection->executeStatement('CREATE INDEX idx_user_auth_session_user_id ON user_auth_session (user_id)');
+
+        return $connection;
     }
 
     private function request(string $path, ?string $authorization = null): Request
