@@ -11,6 +11,8 @@ interface DerivedFileRepositoryInterface
 
     public function findLatestByAssetAndKind(string $assetUuid, string $kind): ?DerivedFile;
 
+    public function upsertMaterialized(string $assetUuid, string $kind, string $contentType, int $sizeBytes, ?string $sha256, string $storagePath): void;
+
     /** @return list<string> */
     public function listStoragePathsByAsset(string $assetUuid): array;
 

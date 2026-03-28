@@ -31,6 +31,21 @@ final class DerivedFileRepositoryTest extends TestCase
         self::assertNull($repository->findLatestByAssetAndKind('asset-1', 'proxy'));
     }
 
+    public function testUpsertMaterializedUpdatesExistingRecord(): void
+    {
+        $repository = new DerivedFileRepository($this->connection());
+        $created = $repository->create('asset-2', 'proxy_video', 'video/mp4', 100, 'hash-a');
+
+        $repository->upsertMaterialized('asset-2', 'proxy_video', 'video/mp4', 200, 'hash-b', '.derived/asset-2/proxy.mp4');
+
+        $found = $repository->findLatestByAssetAndKind('asset-2', 'proxy_video');
+        self::assertNotNull($found);
+        self::assertSame($created->id, $found->id);
+        self::assertSame('.derived/asset-2/proxy.mp4', $found->storagePath);
+        self::assertSame(200, $found->sizeBytes);
+        self::assertSame('hash-b', $found->sha256);
+    }
+
     private function connection(): Connection
     {
         $connection = DriverManager::getConnection([

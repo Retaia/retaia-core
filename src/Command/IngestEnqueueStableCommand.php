@@ -7,6 +7,7 @@ use App\Asset\Repository\AssetRepositoryInterface;
 use App\Entity\Asset;
 use App\Ingest\Port\ScanStateStoreInterface;
 use App\Ingest\Repository\IngestDiagnosticsRepository;
+use App\Ingest\Service\ExistingProxyAttachmentService;
 use App\Ingest\Service\SidecarFileDetector;
 use App\Ingest\Service\WatchPathResolver;
 use App\Job\Repository\JobRepository;
@@ -27,6 +28,7 @@ final class IngestEnqueueStableCommand extends Command
         private WatchPathResolver $watchPathResolver,
         private SidecarFileDetector $sidecarFileDetector,
         private IngestDiagnosticsRepository $ingestDiagnostics,
+        private ExistingProxyAttachmentService $existingProxyAttachment,
         private AssetRepositoryInterface $assets,
         private JobRepository $jobs,
         private Connection $connection,
@@ -109,9 +111,9 @@ final class IngestEnqueueStableCommand extends Command
         $this->attachExistingAuxiliarySidecarsToAsset($sourcePath);
 
         $existingProxy = $this->sidecarFileDetector->detectExistingProxyForOriginal($sourcePath);
-        $usableExistingProxy = $existingProxy !== null && $this->canUseExistingProxy($existingProxy, $sourcePath);
+        $usableExistingProxy = $existingProxy !== null && $this->existingProxyAttachment->canUse($existingProxy, $asset->getUuid());
         if ($usableExistingProxy && $existingProxy !== null) {
-            $this->attachExistingProxyToAsset($sourcePath, $existingProxy);
+            $this->existingProxyAttachment->attachToAsset($asset, $sourcePath, $existingProxy, $this->defaultStorageId);
         }
 
         $queued += $this->enqueueRequiredJobs($asset, $usableExistingProxy);
@@ -129,9 +131,12 @@ final class IngestEnqueueStableCommand extends Command
         $proxy = $this->sidecarFileDetector->detectProxyFile($sourcePath);
         if ($proxy !== null) {
             $originalPath = (string) ($proxy['original'] ?? '');
-            if ($originalPath !== '' && $this->isSafeRelativePath($originalPath) && $this->canUseExistingProxy($proxy, $originalPath)) {
-                $this->attachExistingProxyToAsset($originalPath, $proxy);
-                $queued += $this->enqueueRequiredJobs($this->findOrCreateAsset($originalPath), true);
+            if ($originalPath !== '' && $this->isSafeRelativePath($originalPath)) {
+                $asset = $this->findOrCreateAsset($originalPath);
+                if ($this->existingProxyAttachment->canUse($proxy, $asset->getUuid())) {
+                    $this->existingProxyAttachment->attachToAsset($asset, $originalPath, $proxy, $this->defaultStorageId);
+                    $queued += $this->enqueueRequiredJobs($asset, true);
+                }
             }
             $this->scanStateStore->markQueued($sourcePath, new \DateTimeImmutable());
 
@@ -236,62 +241,6 @@ final class IngestEnqueueStableCommand extends Command
         return $asset;
     }
 
-    /**
-     * @param array{path:string,type:string,kind:string,original:string} $proxy
-     */
-    private function attachExistingProxyToAsset(string $originalPath, array $proxy): void
-    {
-        $asset = $this->findOrCreateAsset($originalPath);
-        $fields = $asset->getFields();
-
-        $proxyPath = (string) ($proxy['path'] ?? '');
-        $proxyKind = (string) ($proxy['kind'] ?? '');
-        if ($proxyPath === '' || $proxyKind === '') {
-            return;
-        }
-        $this->ingestDiagnostics->clearUnmatchedSidecar($proxyPath);
-
-        $materializedStoragePath = $this->persistDerivedFile($asset, $proxyKind, $proxyPath);
-
-        $paths = is_array($fields['paths'] ?? null) ? $fields['paths'] : [];
-        $sidecars = is_array($paths['sidecars_relative'] ?? null) ? $paths['sidecars_relative'] : [];
-        $sidecars = array_values(array_filter(array_map('strval', $sidecars), static fn (string $item): bool => $item !== $proxyPath && $item !== ''));
-        if (!in_array($materializedStoragePath, $sidecars, true)) {
-            $sidecars[] = $materializedStoragePath;
-        }
-        $paths['storage_id'] = (string) ($paths['storage_id'] ?? $this->defaultStorageId);
-        $paths['original_relative'] = (string) ($paths['original_relative'] ?? $originalPath);
-        $paths['sidecars_relative'] = array_values(array_unique(array_map('strval', $sidecars)));
-
-        $derived = is_array($fields['derived'] ?? null) ? $fields['derived'] : [];
-        $manifest = is_array($derived['derived_manifest'] ?? null) ? $derived['derived_manifest'] : [];
-
-        $alreadyInManifest = false;
-        foreach ($manifest as $item) {
-            if (is_array($item)
-                && (string) ($item['kind'] ?? '') === $proxyKind
-                && (string) ($item['ref'] ?? '') === $materializedStoragePath
-            ) {
-                $alreadyInManifest = true;
-                break;
-            }
-        }
-        if (!$alreadyInManifest) {
-            $manifest[] = [
-                'kind' => $proxyKind,
-                'ref' => $materializedStoragePath,
-            ];
-        }
-
-        $derived['derived_manifest'] = $manifest;
-        $derived[sprintf('%s_url', $proxyKind)] = sprintf('/api/v1/assets/%s/derived/%s', $asset->getUuid(), $proxyKind);
-        $fields['paths'] = $paths;
-        $fields['derived'] = $derived;
-        $fields['proxy_done'] = true;
-        $asset->setFields($fields);
-        $this->assets->save($asset);
-    }
-
     private function attachAuxiliarySidecarToAsset(string $originalPath, string $sidecarPath): void
     {
         $asset = $this->findOrCreateAsset($originalPath);
@@ -394,139 +343,4 @@ final class IngestEnqueueStableCommand extends Command
         return sprintf('ing-%s', substr(hash('sha256', $assetUuid.'|'.bin2hex(random_bytes(8))), 0, 24));
     }
 
-    private function persistDerivedFile(Asset $asset, string $kind, string $proxyPath): string
-    {
-        $existing = $this->connection->fetchAssociative(
-            'SELECT id, storage_path FROM asset_derived_file WHERE asset_uuid = :assetUuid AND kind = :kind ORDER BY created_at DESC LIMIT 1',
-            ['assetUuid' => $asset->getUuid(), 'kind' => $kind]
-        );
-
-        $root = rtrim($this->watchPathResolver->resolveRoot(), DIRECTORY_SEPARATOR);
-        $storagePath = $this->materializeExistingProxyToDerived($root, $asset->getUuid(), $kind, $proxyPath);
-        $absolutePath = $root.DIRECTORY_SEPARATOR.$storagePath;
-        $size = is_file($absolutePath) ? filesize($absolutePath) : 0;
-        $sha256 = is_file($absolutePath) ? hash_file('sha256', $absolutePath) : null;
-
-        if (is_array($existing)) {
-            $existingStoragePath = (string) ($existing['storage_path'] ?? '');
-            if ($existingStoragePath !== $storagePath) {
-                $this->connection->update('asset_derived_file', [
-                    'storage_path' => $storagePath,
-                    'content_type' => $this->contentTypeForDerivedKind($kind, $storagePath),
-                    'size_bytes' => is_int($size) ? $size : 0,
-                    'sha256' => is_string($sha256) ? $sha256 : null,
-                ], [
-                    'id' => (string) $existing['id'],
-                ]);
-            }
-
-            return $storagePath;
-        }
-
-        $this->connection->insert('asset_derived_file', [
-            'id' => bin2hex(random_bytes(8)),
-            'asset_uuid' => $asset->getUuid(),
-            'kind' => $kind,
-            'content_type' => $this->contentTypeForDerivedKind($kind, $storagePath),
-            'size_bytes' => is_int($size) ? $size : 0,
-            'sha256' => is_string($sha256) ? $sha256 : null,
-            'storage_path' => $storagePath,
-            'created_at' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
-        ]);
-
-        return $storagePath;
-    }
-
-    private function contentTypeForDerivedKind(string $kind, string $path): string
-    {
-        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-
-        return match ($kind) {
-            'proxy_photo' => in_array($ext, ['webp'], true) ? 'image/webp' : 'image/jpeg',
-            'proxy_audio' => in_array($ext, ['mp3'], true) ? 'audio/mpeg' : 'audio/mp4',
-            default => 'video/mp4',
-        };
-    }
-
-    private function materializeExistingProxyToDerived(string $root, string $assetUuid, string $kind, string $proxyPath): string
-    {
-        $baseName = pathinfo($proxyPath, PATHINFO_FILENAME);
-        $extension = strtolower(pathinfo($proxyPath, PATHINFO_EXTENSION));
-        if ($extension === 'lrf') {
-            $extension = 'mp4';
-        }
-
-        $safeName = preg_replace('/[^A-Za-z0-9._-]+/', '_', $baseName) ?: $kind;
-        $targetFileName = $safeName.'.'.$extension;
-        $targetStoragePath = sprintf('.derived/%s/%s', $assetUuid, $targetFileName);
-        $targetAbsolutePath = $root.DIRECTORY_SEPARATOR.$targetStoragePath;
-
-        if (!is_dir(dirname($targetAbsolutePath)) && !mkdir(dirname($targetAbsolutePath), 0777, true) && !is_dir(dirname($targetAbsolutePath))) {
-            throw new \RuntimeException(sprintf('Unable to create derived directory for %s', $targetStoragePath));
-        }
-
-        if (is_file($targetAbsolutePath)) {
-            return $targetStoragePath;
-        }
-
-        $sourceAbsolutePath = $root.DIRECTORY_SEPARATOR.$proxyPath;
-        if (!is_file($sourceAbsolutePath)) {
-            throw new \RuntimeException(sprintf('Proxy source file not found: %s', $proxyPath));
-        }
-
-        if (@rename($sourceAbsolutePath, $targetAbsolutePath)) {
-            return $targetStoragePath;
-        }
-
-        if (!@copy($sourceAbsolutePath, $targetAbsolutePath)) {
-            throw new \RuntimeException(sprintf('Unable to move proxy %s into %s', $proxyPath, $targetStoragePath));
-        }
-        @unlink($sourceAbsolutePath);
-
-        return $targetStoragePath;
-    }
-
-    /**
-     * @param array{path:string,type:string,kind:string,original:string} $proxy
-     */
-    private function canUseExistingProxy(array $proxy, string $originalPath): bool
-    {
-        $kind = (string) ($proxy['kind'] ?? '');
-        $path = (string) ($proxy['path'] ?? '');
-        if ($kind === '' || $path === '') {
-            return false;
-        }
-
-        $root = rtrim($this->watchPathResolver->resolveRoot(), DIRECTORY_SEPARATOR);
-        $absolutePath = $root.DIRECTORY_SEPARATOR.$path;
-        if (is_file($absolutePath)) {
-            $size = filesize($absolutePath);
-            if (is_int($size) && $size > 0) {
-                return true;
-            }
-        }
-
-        $assetUuid = $this->assetUuidFromPath($originalPath);
-        $existing = $this->connection->fetchAssociative(
-            'SELECT storage_path FROM asset_derived_file WHERE asset_uuid = :assetUuid AND kind = :kind ORDER BY created_at DESC LIMIT 1',
-            ['assetUuid' => $assetUuid, 'kind' => $kind]
-        );
-        if (!is_array($existing)) {
-            return false;
-        }
-
-        $storagePath = (string) ($existing['storage_path'] ?? '');
-        if ($storagePath === '') {
-            return false;
-        }
-
-        $derivedAbsolutePath = $root.DIRECTORY_SEPARATOR.$storagePath;
-        if (!is_file($derivedAbsolutePath)) {
-            return false;
-        }
-
-        $derivedSize = filesize($derivedAbsolutePath);
-
-        return is_int($derivedSize) && $derivedSize > 0;
-    }
 }

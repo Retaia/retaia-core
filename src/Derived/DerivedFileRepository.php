@@ -58,6 +58,34 @@ final class DerivedFileRepository implements DerivedFileRepositoryInterface
         return is_array($row) ? $this->hydrate($row) : null;
     }
 
+    public function upsertMaterialized(string $assetUuid, string $kind, string $contentType, int $sizeBytes, ?string $sha256, string $storagePath): void
+    {
+        $existing = $this->findLatestByAssetAndKind($assetUuid, $kind);
+        if ($existing !== null) {
+            $this->connection->update('asset_derived_file', [
+                'storage_path' => $storagePath,
+                'content_type' => $contentType,
+                'size_bytes' => $sizeBytes,
+                'sha256' => $sha256,
+            ], [
+                'id' => $existing->id,
+            ]);
+
+            return;
+        }
+
+        $this->connection->insert('asset_derived_file', [
+            'id' => bin2hex(random_bytes(8)),
+            'asset_uuid' => $assetUuid,
+            'kind' => $kind,
+            'content_type' => $contentType,
+            'size_bytes' => $sizeBytes,
+            'sha256' => $sha256,
+            'storage_path' => $storagePath,
+            'created_at' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
+        ]);
+    }
+
     public function listStoragePathsByAsset(string $assetUuid): array
     {
         $rows = $this->connection->fetchAllAssociative(
