@@ -67,34 +67,11 @@ final class ExistingProxyAttachmentService
         $paths = is_array($fields['paths'] ?? null) ? $fields['paths'] : [];
         $sidecars = is_array($paths['sidecars_relative'] ?? null) ? $paths['sidecars_relative'] : [];
         $sidecars = array_values(array_filter(array_map('strval', $sidecars), static fn (string $item): bool => $item !== $proxyPath && $item !== ''));
-        if (!in_array($materializedStoragePath, $sidecars, true)) {
-            $sidecars[] = $materializedStoragePath;
-        }
         $paths['storage_id'] = $storageId;
         $paths['original_relative'] = $originalPath;
         $paths['sidecars_relative'] = array_values(array_unique(array_map('strval', $sidecars)));
 
         $derived = is_array($fields['derived'] ?? null) ? $fields['derived'] : [];
-        $manifest = is_array($derived['derived_manifest'] ?? null) ? $derived['derived_manifest'] : [];
-
-        $alreadyInManifest = false;
-        foreach ($manifest as $item) {
-            if (is_array($item)
-                && (string) ($item['kind'] ?? '') === $proxyKind
-                && (string) ($item['ref'] ?? '') === $materializedStoragePath
-            ) {
-                $alreadyInManifest = true;
-                break;
-            }
-        }
-        if (!$alreadyInManifest) {
-            $manifest[] = [
-                'kind' => $proxyKind,
-                'ref' => $materializedStoragePath,
-            ];
-        }
-
-        $derived['derived_manifest'] = $manifest;
         $derived[sprintf('%s_url', $proxyKind)] = sprintf('/api/v1/assets/%s/derived/%s', $asset->getUuid(), $proxyKind);
         $fields['paths'] = $paths;
         $fields['derived'] = $derived;

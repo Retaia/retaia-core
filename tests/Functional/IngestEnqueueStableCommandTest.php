@@ -213,7 +213,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         self::assertStringStartsWith('.derived/'.$rawAssetUuid.'/', $storagePath);
         self::assertFileExists($root.'/'.$storagePath);
         self::assertFileDoesNotExist($root.'/INBOX/shot.jpg');
-        self::assertContains($storagePath, $rawAsset->getFields()['paths']['sidecars_relative'] ?? []);
+        self::assertNotContains($storagePath, $rawAsset->getFields()['paths']['sidecars_relative'] ?? []);
     }
 
     public function testLrfSidecarIsAttachedToOriginalAndNotQueuedAsStandaloneAsset(): void
@@ -279,7 +279,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         self::assertStringEndsWith('.mp4', $storagePath);
         self::assertFileExists($root.'/'.$storagePath);
         self::assertFileDoesNotExist($root.'/INBOX/drone.lrf');
-        self::assertContains($storagePath, $videoAsset->getFields()['paths']['sidecars_relative'] ?? []);
+        self::assertNotContains($storagePath, $videoAsset->getFields()['paths']['sidecars_relative'] ?? []);
     }
 
     public function testProxyFolderFileIsAttachedToProjectOriginal(): void
@@ -344,7 +344,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         self::assertStringStartsWith('.derived/'.$mainAssetUuid.'/', $storagePath);
         self::assertFileExists($root.'/'.$storagePath);
         self::assertFileDoesNotExist($root.'/INBOX/project/proxy/clip.mp4');
-        self::assertContains($storagePath, $mainAsset->getFields()['paths']['sidecars_relative'] ?? []);
+        self::assertNotContains($storagePath, $mainAsset->getFields()['paths']['sidecars_relative'] ?? []);
     }
 
     public function testXmpSidecarIsAttachedToOriginalAndNotQueuedAsStandaloneAsset(): void

@@ -292,12 +292,7 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
                 'paths' => [
                     'storage_id' => 'nas-main',
                     'original_relative' => 'INBOX/clip.mov',
-                    'sidecars_relative' => ['.derived/ffffffff-ffff-ffff-ffff-ffffffffffff/proxy.mp4'],
-                ],
-                'derived' => [
-                    'derived_manifest' => [
-                        ['kind' => 'proxy_video', 'ref' => '.derived/ffffffff-ffff-ffff-ffff-ffffffffffff/proxy.mp4'],
-                    ],
+                    'sidecars_relative' => [],
                 ],
             ]
         );
@@ -334,11 +329,7 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
         $assetReloaded = $entityManager->find(Asset::class, 'ffffffff-ffff-ffff-ffff-ffffffffffff');
         self::assertInstanceOf(Asset::class, $assetReloaded);
         $fields = $assetReloaded->getFields();
-        self::assertContains('ARCHIVE/.derived/ffffffff-ffff-ffff-ffff-ffffffffffff/proxy.mp4', $fields['paths']['sidecars_relative'] ?? []);
-        self::assertSame(
-            'ARCHIVE/.derived/ffffffff-ffff-ffff-ffff-ffffffffffff/proxy.mp4',
-            $fields['derived']['derived_manifest'][0]['ref'] ?? null
-        );
+        self::assertSame([], $fields['paths']['sidecars_relative'] ?? []);
     }
 
     public function testApplyOutboxMovesDerivedForBothKeepAndRejectTargets(): void
@@ -378,12 +369,7 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
                 'paths' => [
                     'storage_id' => 'nas-main',
                     'original_relative' => 'INBOX/keep.mov',
-                    'sidecars_relative' => ['.derived/'.$keepUuid.'/proxy.mp4'],
-                ],
-                'derived' => [
-                    'derived_manifest' => [
-                        ['kind' => 'proxy_video', 'ref' => '.derived/'.$keepUuid.'/proxy.mp4'],
-                    ],
+                    'sidecars_relative' => [],
                 ],
             ]
         );
@@ -398,12 +384,7 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
                 'paths' => [
                     'storage_id' => 'nas-main',
                     'original_relative' => 'INBOX/reject.mov',
-                    'sidecars_relative' => ['.derived/'.$rejectUuid.'/proxy.mp4'],
-                ],
-                'derived' => [
-                    'derived_manifest' => [
-                        ['kind' => 'proxy_video', 'ref' => '.derived/'.$rejectUuid.'/proxy.mp4'],
-                    ],
+                    'sidecars_relative' => [],
                 ],
             ]
         );
@@ -452,8 +433,8 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
         $rejectReloaded = $entityManager->find(Asset::class, $rejectUuid);
         self::assertInstanceOf(Asset::class, $keepReloaded);
         self::assertInstanceOf(Asset::class, $rejectReloaded);
-        self::assertContains('ARCHIVE/.derived/'.$keepUuid.'/proxy.mp4', $keepReloaded->getFields()['paths']['sidecars_relative'] ?? []);
-        self::assertContains('REJECTS/.derived/'.$rejectUuid.'/proxy.mp4', $rejectReloaded->getFields()['paths']['sidecars_relative'] ?? []);
+        self::assertSame([], $keepReloaded->getFields()['paths']['sidecars_relative'] ?? []);
+        self::assertSame([], $rejectReloaded->getFields()['paths']['sidecars_relative'] ?? []);
     }
 
     public function testAssetFailureDoesNotBlockOtherAssets(): void

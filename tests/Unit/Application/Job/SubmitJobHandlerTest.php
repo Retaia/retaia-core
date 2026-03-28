@@ -2,14 +2,15 @@
 
 namespace App\Tests\Unit\Application\Job;
 
-use App\Asset\Repository\AssetRepositoryInterface;
 use App\Asset\AssetState;
+use App\Asset\Repository\AssetRepositoryInterface;
 use App\Asset\Service\AssetStateMachine;
 use App\Application\Job\CheckSuggestTagsSubmitScopeHandler;
 use App\Application\Job\Port\JobGateway;
 use App\Application\Job\ResolveJobLockConflictCodeHandler;
 use App\Application\Job\SubmitJobHandler;
 use App\Application\Job\SubmitJobResult;
+use App\Derived\DerivedFileRepositoryInterface;
 use App\Entity\Asset;
 use App\Job\Job;
 use App\Job\JobStatus;
@@ -21,6 +22,7 @@ final class SubmitJobHandlerTest extends TestCase
     {
         $gateway = $this->createMock(JobGateway::class);
         $assets = $this->createMock(AssetRepositoryInterface::class);
+        $derivedFiles = $this->createMock(DerivedFileRepositoryInterface::class);
         $stateMachine = new AssetStateMachine();
         $gateway->expects(self::once())->method('find')->with('job-1')->willReturn(
             new Job('job-1', 'asset-1', 'suggest_tags', JobStatus::CLAIMED, 'agent-1', 't', null, [])
@@ -30,6 +32,7 @@ final class SubmitJobHandlerTest extends TestCase
         $handler = new SubmitJobHandler(
             $gateway,
             $assets,
+            $derivedFiles,
             $stateMachine,
             new CheckSuggestTagsSubmitScopeHandler(true),
             new ResolveJobLockConflictCodeHandler($gateway)
@@ -44,6 +47,7 @@ final class SubmitJobHandlerTest extends TestCase
     {
         $gateway = $this->createMock(JobGateway::class);
         $assets = $this->createMock(AssetRepositoryInterface::class);
+        $derivedFiles = $this->createMock(DerivedFileRepositoryInterface::class);
         $assets->method('findByUuid')->willReturn(null);
         $stateMachine = new AssetStateMachine();
         $gateway->expects(self::exactly(4))->method('find')->with('job-1')->willReturnOnConsecutiveCalls(
@@ -57,6 +61,7 @@ final class SubmitJobHandlerTest extends TestCase
         $handler = new SubmitJobHandler(
             $gateway,
             $assets,
+            $derivedFiles,
             $stateMachine,
             new CheckSuggestTagsSubmitScopeHandler(true),
             new ResolveJobLockConflictCodeHandler($gateway)
@@ -72,6 +77,7 @@ final class SubmitJobHandlerTest extends TestCase
 
         $gateway = $this->createMock(JobGateway::class);
         $assets = $this->createMock(AssetRepositoryInterface::class);
+        $derivedFiles = $this->createMock(DerivedFileRepositoryInterface::class);
         $assets->method('findByUuid')->willReturn(null);
         $stateMachine = new AssetStateMachine();
         $gateway->expects(self::once())->method('find')->with('job-1')->willReturn(
@@ -82,6 +88,7 @@ final class SubmitJobHandlerTest extends TestCase
         $handler = new SubmitJobHandler(
             $gateway,
             $assets,
+            $derivedFiles,
             $stateMachine,
             new CheckSuggestTagsSubmitScopeHandler(true),
             new ResolveJobLockConflictCodeHandler($gateway)
@@ -127,6 +134,7 @@ final class SubmitJobHandlerTest extends TestCase
     {
         $gateway = $this->createMock(JobGateway::class);
         $assets = $this->createMock(AssetRepositoryInterface::class);
+        $derivedFiles = $this->createMock(DerivedFileRepositoryInterface::class);
         $stateMachine = new AssetStateMachine();
         $gateway->expects(self::once())->method('find')->with('job-1')->willReturn(
             new Job('job-1', 'asset-1', 'generate_preview', JobStatus::CLAIMED, 'agent-1', 'token', null, [])
@@ -136,6 +144,7 @@ final class SubmitJobHandlerTest extends TestCase
         $handler = new SubmitJobHandler(
             $gateway,
             $assets,
+            $derivedFiles,
             $stateMachine,
             new CheckSuggestTagsSubmitScopeHandler(true),
             new ResolveJobLockConflictCodeHandler($gateway)
@@ -154,6 +163,7 @@ final class SubmitJobHandlerTest extends TestCase
 
         $gateway = $this->createMock(JobGateway::class);
         $assets = $this->createMock(AssetRepositoryInterface::class);
+        $derivedFiles = $this->createMock(DerivedFileRepositoryInterface::class);
         $stateMachine = new AssetStateMachine();
 
         $gateway->expects(self::once())->method('find')->with('job-1')->willReturn(
@@ -174,6 +184,7 @@ final class SubmitJobHandlerTest extends TestCase
         $handler = new SubmitJobHandler(
             $gateway,
             $assets,
+            $derivedFiles,
             $stateMachine,
             new CheckSuggestTagsSubmitScopeHandler(true),
             new ResolveJobLockConflictCodeHandler($gateway)
@@ -198,6 +209,7 @@ final class SubmitJobHandlerTest extends TestCase
 
         $gateway = $this->createMock(JobGateway::class);
         $assets = $this->createMock(AssetRepositoryInterface::class);
+        $derivedFiles = $this->createMock(DerivedFileRepositoryInterface::class);
         $stateMachine = new AssetStateMachine();
 
         $gateway->expects(self::once())->method('find')->with('job-1')->willReturn(
@@ -207,17 +219,26 @@ final class SubmitJobHandlerTest extends TestCase
             new Job('job-1', 'asset-1', 'generate_thumbnails', JobStatus::COMPLETED, 'agent-1', null, null, [])
         );
         $assets->expects(self::once())->method('findByUuid')->with('asset-1')->willReturn($asset);
+        $derivedFiles->expects(self::once())->method('upsertMaterialized')->with(
+            'asset-1',
+            'thumb',
+            'image/jpeg',
+            0,
+            null,
+            'thumb:1',
+        );
         $assets->expects(self::once())->method('save')->with(self::callback(function (Asset $saved): bool {
             $fields = $saved->getFields();
 
             return $saved->getState() === AssetState::DECISION_PENDING
                 && (bool) ($fields['thumbs_done'] ?? false)
-                && is_array($fields['derived']['derived_manifest'] ?? null);
+                && !isset($fields['derived']['derived_manifest']);
         }));
 
         $handler = new SubmitJobHandler(
             $gateway,
             $assets,
+            $derivedFiles,
             $stateMachine,
             new CheckSuggestTagsSubmitScopeHandler(true),
             new ResolveJobLockConflictCodeHandler($gateway)
@@ -242,6 +263,7 @@ final class SubmitJobHandlerTest extends TestCase
     ): void {
         $gateway = $this->createMock(JobGateway::class);
         $assets = $this->createMock(AssetRepositoryInterface::class);
+        $derivedFiles = $this->createMock(DerivedFileRepositoryInterface::class);
         $stateMachine = new AssetStateMachine();
         $gateway->expects(self::once())->method('find')->with('job-1')->willReturn($claimedJob);
         $gateway->expects(self::never())->method('submit');
@@ -249,6 +271,7 @@ final class SubmitJobHandlerTest extends TestCase
         $handler = new SubmitJobHandler(
             $gateway,
             $assets,
+            $derivedFiles,
             $stateMachine,
             new CheckSuggestTagsSubmitScopeHandler(true),
             new ResolveJobLockConflictCodeHandler($gateway)

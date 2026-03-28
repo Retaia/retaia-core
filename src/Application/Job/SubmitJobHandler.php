@@ -7,6 +7,7 @@ use App\Asset\Repository\AssetRepositoryInterface;
 use App\Asset\Service\AssetStateMachine;
 use App\Asset\Service\StateConflictException;
 use App\Application\Job\Port\JobGateway;
+use App\Derived\DerivedFileRepositoryInterface;
 use App\Job\Job;
 
 final class SubmitJobHandler
@@ -14,6 +15,7 @@ final class SubmitJobHandler
     public function __construct(
         private JobGateway $gateway,
         private AssetRepositoryInterface $assets,
+        private DerivedFileRepositoryInterface $derivedFiles,
         private AssetStateMachine $stateMachine,
         private CheckSuggestTagsSubmitScopeHandler $checkSuggestTagsSubmitScopeHandler,
         private ResolveJobLockConflictCodeHandler $resolveLockConflictCodeHandler,
@@ -79,7 +81,7 @@ final class SubmitJobHandler
             $fields['transcript'] = array_replace_recursive(is_array($fields['transcript'] ?? null) ? $fields['transcript'] : [], $transcriptPatch);
         } else {
             $derivedPatch = is_array($result['derived_patch'] ?? null) ? $result['derived_patch'] : [];
-            $fields['derived'] = array_replace_recursive(is_array($fields['derived'] ?? null) ? $fields['derived'] : [], $derivedPatch);
+            $this->persistDerivedPatch($job->assetUuid, $derivedPatch);
             $fields = $this->applyDerivedFlags($fields, $derivedPatch);
         }
 
@@ -130,6 +132,63 @@ final class SubmitJobHandler
         }
 
         return $fields;
+    }
+
+    /**
+     * @param array<string, mixed> $derivedPatch
+     */
+    private function persistDerivedPatch(string $assetUuid, array $derivedPatch): void
+    {
+        $manifest = is_array($derivedPatch['derived_manifest'] ?? null) ? $derivedPatch['derived_manifest'] : [];
+        foreach ($manifest as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $kind = trim((string) ($item['kind'] ?? ''));
+            $ref = trim((string) ($item['ref'] ?? ''));
+            if ($kind === '' || $ref === '') {
+                continue;
+            }
+
+            $this->derivedFiles->upsertMaterialized(
+                $assetUuid,
+                $kind,
+                $this->contentTypeForDerivedKind($kind, $ref),
+                is_int($item['size_bytes'] ?? null) ? $item['size_bytes'] : 0,
+                is_string($item['sha256'] ?? null) ? $item['sha256'] : null,
+                ltrim($ref, '/'),
+            );
+        }
+    }
+
+    private function contentTypeForDerivedKind(string $kind, string $ref): string
+    {
+        $ext = strtolower(pathinfo($ref, PATHINFO_EXTENSION));
+
+        return match ($kind) {
+            'proxy_photo', 'thumb' => match ($ext) {
+                'png' => 'image/png',
+                'webp' => 'image/webp',
+                'gif' => 'image/gif',
+                default => 'image/jpeg',
+            },
+            'proxy_audio' => match ($ext) {
+                'mp3' => 'audio/mpeg',
+                'wav' => 'audio/wav',
+                default => 'audio/mp4',
+            },
+            'waveform' => match ($ext) {
+                'json' => 'application/json',
+                'png' => 'image/png',
+                default => 'application/octet-stream',
+            },
+            default => match ($ext) {
+                'webm' => 'video/webm',
+                'mov' => 'video/quicktime',
+                default => 'video/mp4',
+            },
+        };
     }
 
     /**

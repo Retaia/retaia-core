@@ -16,6 +16,7 @@ use App\Application\Job\ListClaimableJobsHandler;
 use App\Application\Job\Port\JobGateway;
 use App\Application\Job\ResolveJobLockConflictCodeHandler;
 use App\Application\Job\SubmitJobHandler;
+use App\Derived\DerivedFileRepositoryInterface;
 use App\Application\Job\CheckSuggestTagsSubmitScopeHandler;
 use App\Job\Job;
 use App\Job\JobStatus;
@@ -156,6 +157,7 @@ final class JobEndpointsHandlerTest extends TestCase
             new SubmitJobHandler(
                 $gateway,
                 $this->createMock(AssetRepositoryInterface::class),
+                $this->createMock(DerivedFileRepositoryInterface::class),
                 new AssetStateMachine(),
                 new CheckSuggestTagsSubmitScopeHandler(true),
                 new ResolveJobLockConflictCodeHandler($gateway)
