@@ -2,6 +2,7 @@
 
 namespace App\Tests\Functional;
 
+use App\Tests\Support\BusinessStorageEnvTrait;
 use Doctrine\DBAL\Connection;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
@@ -11,6 +12,7 @@ use Symfony\Component\Console\Tester\CommandTester;
 final class IngestPipelineE2ETest extends KernelTestCase
 {
     use RecreateDatabaseTrait;
+    use BusinessStorageEnvTrait;
 
     public function testTwoPollsThenEnqueueIsStableAndIdempotent(): void
     {
@@ -20,9 +22,7 @@ final class IngestPipelineE2ETest extends KernelTestCase
         mkdir($root.'/REJECTS', 0777, true);
         file_put_contents($root.'/INBOX/e2e.mov', 'payload');
 
-        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
         static::ensureKernelShutdown();
 
         static::bootKernel();
@@ -37,7 +37,8 @@ final class IngestPipelineE2ETest extends KernelTestCase
 
         $poll->execute(['--limit' => 10]);
         $poll->execute(['--limit' => 10]);
-        $scan = $connection->fetchAssociative('SELECT stable_count, status FROM ingest_scan_file WHERE path = :path', [
+        $scan = $connection->fetchAssociative('SELECT stable_count, status FROM ingest_scan_file WHERE storage_id = :storageId AND path = :path', [
+            'storageId' => 'nas-main',
             'path' => 'INBOX/e2e.mov',
         ]);
         self::assertIsArray($scan);
@@ -49,7 +50,7 @@ final class IngestPipelineE2ETest extends KernelTestCase
 
         $jobCount = (int) $connection->fetchOne('SELECT COUNT(*) FROM processing_job');
         self::assertSame(3, $jobCount);
-        $status = (string) $connection->fetchOne('SELECT status FROM ingest_scan_file WHERE path = :path', ['path' => 'INBOX/e2e.mov']);
+        $status = (string) $connection->fetchOne('SELECT status FROM ingest_scan_file WHERE storage_id = :storageId AND path = :path', ['storageId' => 'nas-main', 'path' => 'INBOX/e2e.mov']);
         self::assertSame('queued', $status);
     }
 
@@ -61,9 +62,7 @@ final class IngestPipelineE2ETest extends KernelTestCase
         mkdir($root.'/REJECTS', 0777, true);
         file_put_contents($root.'/INBOX/source.mov', 'payload');
 
-        putenv('APP_INGEST_WATCH_PATH='.$root.'/INBOX');
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
         static::ensureKernelShutdown();
 
         static::bootKernel();
@@ -80,8 +79,8 @@ final class IngestPipelineE2ETest extends KernelTestCase
         rename($root.'/INBOX/source.mov', $root.'/INBOX/renamed.mov');
         $poll->execute(['--limit' => 10]);
 
-        $sourceStatus = (string) $connection->fetchOne('SELECT status FROM ingest_scan_file WHERE path = :path', ['path' => 'INBOX/source.mov']);
-        $renamedStatus = (string) $connection->fetchOne('SELECT status FROM ingest_scan_file WHERE path = :path', ['path' => 'INBOX/renamed.mov']);
+        $sourceStatus = (string) $connection->fetchOne('SELECT status FROM ingest_scan_file WHERE storage_id = :storageId AND path = :path', ['storageId' => 'nas-main', 'path' => 'INBOX/source.mov']);
+        $renamedStatus = (string) $connection->fetchOne('SELECT status FROM ingest_scan_file WHERE storage_id = :storageId AND path = :path', ['storageId' => 'nas-main', 'path' => 'INBOX/renamed.mov']);
         self::assertSame('discovered', $sourceStatus);
         self::assertSame('discovered', $renamedStatus);
 
@@ -94,13 +93,15 @@ final class IngestPipelineE2ETest extends KernelTestCase
     {
         $connection->executeStatement(
             'CREATE TABLE IF NOT EXISTS ingest_scan_file (
-                path VARCHAR(1024) PRIMARY KEY NOT NULL,
+                storage_id VARCHAR(64) NOT NULL,
+                path VARCHAR(1024) NOT NULL,
                 size_bytes INTEGER NOT NULL,
                 mtime DATETIME NOT NULL,
                 stable_count INTEGER NOT NULL,
                 status VARCHAR(32) NOT NULL,
                 first_seen_at DATETIME NOT NULL,
-                last_seen_at DATETIME NOT NULL
+                last_seen_at DATETIME NOT NULL,
+                PRIMARY KEY (storage_id, path)
             )'
         );
         $connection->executeStatement(

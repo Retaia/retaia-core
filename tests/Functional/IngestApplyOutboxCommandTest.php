@@ -4,6 +4,7 @@ namespace App\Tests\Functional;
 
 use App\Asset\AssetState;
 use App\Entity\Asset;
+use App\Tests\Support\BusinessStorageEnvTrait;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
@@ -14,6 +15,7 @@ use Symfony\Component\Console\Tester\CommandTester;
 final class IngestApplyOutboxCommandTest extends KernelTestCase
 {
     use RecreateDatabaseTrait;
+    use BusinessStorageEnvTrait;
 
     public function testArchivedFileIsMovedAndAudited(): void
     {
@@ -23,8 +25,7 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
         mkdir($root.'/REJECTS', 0777, true);
         file_put_contents($root.'/INBOX/rush.mov', 'data');
 
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
 
         static::bootKernel();
         $container = static::getContainer();
@@ -74,8 +75,7 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
         file_put_contents($root.'/INBOX/a/rush.mov', 'first');
         file_put_contents($root.'/INBOX/b/rush.mov', 'second');
 
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
 
         static::bootKernel();
         $container = static::getContainer();
@@ -128,8 +128,7 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
         mkdir($root.'/ARCHIVE', 0777, true);
         mkdir($root.'/REJECTS', 0777, true);
 
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
 
         static::bootKernel();
         $container = static::getContainer();
@@ -187,8 +186,7 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
         mkdir($root.'/REJECTS', 0777, true);
         file_put_contents($root.'/ARCHIVE/rush.mov', 'data');
 
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
 
         static::bootKernel();
         $container = static::getContainer();
@@ -246,8 +244,7 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
         file_put_contents($root.'/INBOX/clip.mov', 'data');
         file_put_contents($root.'/.derived/ffffffff-ffff-ffff-ffff-ffffffffffff/proxy.mp4', 'proxy');
 
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
 
         static::bootKernel();
         $container = static::getContainer();
@@ -329,8 +326,7 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
         file_put_contents($root.'/.derived/11111111-1111-4111-8111-111111111111/proxy.mp4', 'kproxy');
         file_put_contents($root.'/.derived/22222222-2222-4222-8222-222222222222/proxy.mp4', 'rproxy');
 
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
 
         static::bootKernel();
         $container = static::getContainer();
@@ -430,7 +426,7 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
         self::assertContains('REJECTS/.derived/'.$rejectUuid.'/proxy.mp4', $rejectReloaded->getFields()['paths']['sidecars_relative'] ?? []);
     }
 
-    public function testMoveFailureDoesNotBlockOtherAssets(): void
+    public function testAssetFailureDoesNotBlockOtherAssets(): void
     {
         $root = sys_get_temp_dir().'/retaia-move-failure-'.bin2hex(random_bytes(4));
         mkdir($root.'/INBOX', 0777, true);
@@ -438,10 +434,8 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
         mkdir($root.'/REJECTS', 0777, true);
         file_put_contents($root.'/INBOX/a.mov', 'archive-fail');
         file_put_contents($root.'/INBOX/b.mov', 'reject-ok');
-        chmod($root.'/ARCHIVE', 0555);
 
-        $_ENV['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
-        $_SERVER['APP_INGEST_WATCH_PATH'] = $root.'/INBOX';
+        $this->configureSingleLocalBusinessStorage($root);
 
         static::bootKernel();
         $container = static::getContainer();
@@ -458,7 +452,12 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
             AssetState::ARCHIVED,
             [],
             null,
-            ['source_path' => 'INBOX/a.mov']
+            [
+                'source_path' => 'INBOX/a.mov',
+                'paths' => [
+                    'storage_id' => 'unknown-storage',
+                ],
+            ]
         );
         $rejected = new Asset(
             'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
@@ -481,8 +480,6 @@ final class IngestApplyOutboxCommandTest extends KernelTestCase
         self::assertFileExists($root.'/INBOX/a.mov');
         self::assertFileExists($root.'/REJECTS/b.mov');
         self::assertStringContainsString('Encountered 1 move failure', $tester->getDisplay());
-
-        chmod($root.'/ARCHIVE', 0755);
     }
 
     private function ensureAuditTable(Connection $connection): void

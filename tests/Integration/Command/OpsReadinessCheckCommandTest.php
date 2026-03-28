@@ -3,7 +3,11 @@
 namespace App\Tests\Integration\Command;
 
 use App\Command\OpsReadinessCheckCommand;
-use App\Ingest\Service\WatchPathResolver;
+use App\Storage\BusinessStorageDefinition;
+use App\Storage\BusinessStorageConfig;
+use App\Storage\BusinessStorageRegistry;
+use App\Storage\BusinessStorageRegistryInterface;
+use App\Storage\LocalBusinessStorageFactory;
 use Doctrine\DBAL\Connection;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Command\Command;
@@ -19,8 +23,7 @@ final class OpsReadinessCheckCommandTest extends TestCase
         mkdir($root.'/REJECTS', 0777, true);
 
         $connection = $this->connectionReturningOne();
-        $resolver = new WatchPathResolver('/', $root.'/INBOX');
-        $command = new OpsReadinessCheckCommand($connection, $resolver, 'dev', '');
+        $command = new OpsReadinessCheckCommand($connection, $this->storageRegistry($root), 'dev', '');
         $tester = new CommandTester($command);
         $exitCode = $tester->execute([]);
 
@@ -35,8 +38,7 @@ final class OpsReadinessCheckCommandTest extends TestCase
         mkdir($root.'/ARCHIVE', 0777, true);
 
         $connection = $this->connectionReturningOne();
-        $resolver = new WatchPathResolver('/', $root.'/INBOX');
-        $command = new OpsReadinessCheckCommand($connection, $resolver, 'dev', '');
+        $command = new OpsReadinessCheckCommand($connection, $this->storageRegistry($root), 'dev', '');
         $tester = new CommandTester($command);
         $exitCode = $tester->execute([]);
 
@@ -52,8 +54,7 @@ final class OpsReadinessCheckCommandTest extends TestCase
         mkdir($root.'/REJECTS', 0777, true);
 
         $connection = $this->connectionReturningOne();
-        $resolver = new WatchPathResolver('/', $root.'/INBOX');
-        $command = new OpsReadinessCheckCommand($connection, $resolver, 'prod', 'https://token@example.com/1');
+        $command = new OpsReadinessCheckCommand($connection, $this->storageRegistry($root), 'prod', 'https://token@example.com/1');
         $tester = new CommandTester($command);
         $exitCode = $tester->execute([]);
 
@@ -67,5 +68,16 @@ final class OpsReadinessCheckCommandTest extends TestCase
         $connection->method('fetchOne')->with('SELECT 1')->willReturn('1');
 
         return $connection;
+    }
+
+    private function storageRegistry(string $root): BusinessStorageRegistryInterface
+    {
+        return new BusinessStorageRegistry('nas-main', [
+            new BusinessStorageDefinition(
+                'nas-main',
+                (new LocalBusinessStorageFactory(BusinessStorageConfig::fromConfiguredWatchPath('/', $root.'/INBOX')))->create(),
+                true,
+            ),
+        ]);
     }
 }

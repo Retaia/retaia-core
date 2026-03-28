@@ -8,9 +8,9 @@ use App\Asset\Service\AssetStateMachine;
 use App\Asset\Service\StateConflictException;
 use App\Entity\Asset;
 use App\Derived\DerivedFileRepositoryInterface;
-use App\Ingest\Service\WatchPathResolver;
 use App\Lock\OperationLockType;
 use App\Lock\Repository\OperationLockRepository;
+use App\Storage\BusinessStorageRegistryInterface;
 use Doctrine\DBAL\Connection;
 
 final class BatchWorkflowService
@@ -21,7 +21,7 @@ final class BatchWorkflowService
         private Connection $connection,
         private OperationLockRepository $locks,
         private DerivedFileRepositoryInterface $derivedFiles,
-        private ?WatchPathResolver $watchPathResolver = null,
+        private ?BusinessStorageRegistryInterface $storageRegistry = null,
     ) {
     }
 
@@ -284,8 +284,8 @@ final class BatchWorkflowService
 
     private function deleteAssetAndDerivedFiles(Asset $asset): bool
     {
-        $root = $this->resolveRootOrNull();
-        if ($root !== null) {
+        $storage = $this->storageForAsset($asset);
+        if ($storage !== null) {
             $fields = $asset->getFields();
             $paths = [
                 (string) ($fields['current_path'] ?? ''),
@@ -303,8 +303,9 @@ final class BatchWorkflowService
                     continue;
                 }
 
-                $absolute = $root.DIRECTORY_SEPARATOR.$normalized;
-                if (is_file($absolute) && !@unlink($absolute)) {
+                try {
+                    $storage->deleteFile($normalized);
+                } catch (\Throwable) {
                     return false;
                 }
             }
@@ -312,15 +313,16 @@ final class BatchWorkflowService
 
         $paths = $this->derivedFiles->listStoragePathsByAsset($asset->getUuid());
 
-        if ($root !== null) {
+        if ($storage !== null) {
             foreach ($paths as $path) {
                 $storagePath = $this->normalizeRelativePath($path);
                 if ($storagePath === null) {
                     continue;
                 }
 
-                $absolute = $root.DIRECTORY_SEPARATOR.$storagePath;
-                if (is_file($absolute) && !@unlink($absolute)) {
+                try {
+                    $storage->deleteFile($storagePath);
+                } catch (\Throwable) {
                     return false;
                 }
             }
@@ -328,29 +330,24 @@ final class BatchWorkflowService
 
         $this->derivedFiles->deleteByAsset($asset->getUuid());
 
-        if ($root !== null) {
-            $this->deleteDirectoryRecursiveIfExists($root.DIRECTORY_SEPARATOR.'.derived'.DIRECTORY_SEPARATOR.$asset->getUuid());
-            $this->deleteDirectoryRecursiveIfExists($root.DIRECTORY_SEPARATOR.'ARCHIVE'.DIRECTORY_SEPARATOR.'.derived'.DIRECTORY_SEPARATOR.$asset->getUuid());
-            $this->deleteDirectoryRecursiveIfExists($root.DIRECTORY_SEPARATOR.'REJECTS'.DIRECTORY_SEPARATOR.'.derived'.DIRECTORY_SEPARATOR.$asset->getUuid());
-            $this->deleteDirectoryRecursiveIfExists($root.DIRECTORY_SEPARATOR.'derived'.DIRECTORY_SEPARATOR.$asset->getUuid());
-            $this->deleteDirectoryRecursiveIfExists($root.DIRECTORY_SEPARATOR.'ARCHIVE'.DIRECTORY_SEPARATOR.'derived'.DIRECTORY_SEPARATOR.$asset->getUuid());
-            $this->deleteDirectoryRecursiveIfExists($root.DIRECTORY_SEPARATOR.'REJECTS'.DIRECTORY_SEPARATOR.'derived'.DIRECTORY_SEPARATOR.$asset->getUuid());
+        if ($storage !== null) {
+            foreach ([
+                '.derived/'.$asset->getUuid(),
+                'ARCHIVE/.derived/'.$asset->getUuid(),
+                'REJECTS/.derived/'.$asset->getUuid(),
+                'derived/'.$asset->getUuid(),
+                'ARCHIVE/derived/'.$asset->getUuid(),
+                'REJECTS/derived/'.$asset->getUuid(),
+            ] as $directory) {
+                try {
+                    $storage->deleteDirectory($directory);
+                } catch (\Throwable) {
+                    return false;
+                }
+            }
         }
 
         return true;
-    }
-
-    private function resolveRootOrNull(): ?string
-    {
-        if (!$this->watchPathResolver instanceof WatchPathResolver) {
-            return null;
-        }
-
-        try {
-            return $this->watchPathResolver->resolveRoot();
-        } catch (\Throwable) {
-            return null;
-        }
     }
 
     private function normalizeRelativePath(string $path): ?string
@@ -363,25 +360,16 @@ final class BatchWorkflowService
         return $normalized;
     }
 
-    private function deleteDirectoryRecursiveIfExists(string $directory): void
+    private function storageForAsset(Asset $asset): ?\App\Storage\BusinessStorageInterface
     {
-        if (!is_dir($directory)) {
-            return;
+        if (!$this->storageRegistry instanceof BusinessStorageRegistryInterface) {
+            return null;
         }
 
-        $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS),
-            \RecursiveIteratorIterator::CHILD_FIRST
-        );
+        $fields = $asset->getFields();
+        $paths = is_array($fields['paths'] ?? null) ? $fields['paths'] : [];
+        $storageId = trim((string) ($paths['storage_id'] ?? $fields['storage_id'] ?? $this->storageRegistry->defaultStorageId()));
 
-        foreach ($iterator as $item) {
-            if ($item->isDir()) {
-                @rmdir($item->getPathname());
-            } else {
-                @unlink($item->getPathname());
-            }
-        }
-
-        @rmdir($directory);
+        return $this->storageRegistry->get($storageId === '' ? $this->storageRegistry->defaultStorageId() : $storageId)->storage;
     }
 }

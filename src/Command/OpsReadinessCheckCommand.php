@@ -2,7 +2,7 @@
 
 namespace App\Command;
 
-use App\Ingest\Service\WatchPathResolver;
+use App\Storage\BusinessStorageRegistryInterface;
 use Doctrine\DBAL\Connection;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -16,7 +16,7 @@ final class OpsReadinessCheckCommand extends Command
 {
     public function __construct(
         private Connection $connection,
-        private WatchPathResolver $watchPathResolver,
+        private BusinessStorageRegistryInterface $storageRegistry,
         #[Autowire('%kernel.environment%')]
         private string $environment,
         #[Autowire('%env(default::SENTRY_DSN)%')]
@@ -35,16 +35,16 @@ final class OpsReadinessCheckCommand extends Command
         }
 
         try {
-            $root = $this->watchPathResolver->resolveRoot();
-            foreach (['INBOX', 'ARCHIVE', 'REJECTS'] as $folder) {
-                $path = $root.DIRECTORY_SEPARATOR.$folder;
-                if (!is_dir($path)) {
-                    $failures[] = sprintf('Missing ingest directory: %s', $path);
-                    continue;
-                }
+            foreach ($this->storageRegistry->all() as $definition) {
+                foreach ($definition->storage->managedDirectories() as $folder) {
+                    if (!$definition->storage->directoryExists($folder)) {
+                        $failures[] = sprintf('Missing ingest directory: %s:%s', $definition->id, $folder);
+                        continue;
+                    }
 
-                if (!is_writable($path)) {
-                    $failures[] = sprintf('Ingest directory is not writable: %s', $path);
+                    if (!$definition->storage->probeWritableDirectory($folder)) {
+                        $failures[] = sprintf('Ingest directory is not writable: %s:%s', $definition->id, $folder);
+                    }
                 }
             }
         } catch (\Throwable $e) {

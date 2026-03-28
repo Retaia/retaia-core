@@ -6,6 +6,7 @@ use App\Application\Asset\Port\AssetReadGateway as AssetReadGatewayPort;
 use App\Asset\AssetRevisionTag;
 use App\Asset\Repository\AssetRepositoryInterface;
 use App\Entity\Asset;
+use App\Storage\BusinessStorageRegistryInterface;
 
 final class AssetReadGateway implements AssetReadGatewayPort
 {
@@ -13,7 +14,7 @@ final class AssetReadGateway implements AssetReadGatewayPort
 
     public function __construct(
         private AssetRepositoryInterface $assets,
-        private string $defaultStorageId = 'nas-main',
+        private BusinessStorageRegistryInterface $storageRegistry,
     ) {
     }
 
@@ -254,9 +255,9 @@ final class AssetReadGateway implements AssetReadGatewayPort
     private function sourceFromFields(array $fields, string $filename): array
     {
         $paths = is_array($fields['paths'] ?? null) ? $fields['paths'] : [];
-        $storageId = trim((string) ($paths['storage_id'] ?? $fields['storage_id'] ?? $this->defaultStorageId));
+        $storageId = trim((string) ($paths['storage_id'] ?? $fields['storage_id'] ?? $this->storageRegistry->defaultStorageId()));
         if ($storageId === '') {
-            $storageId = $this->defaultStorageId;
+            $storageId = $this->storageRegistry->defaultStorageId();
         }
 
         $fallbackOriginal = $this->sanitizeRelativePath('INBOX/'.$filename);

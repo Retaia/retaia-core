@@ -10,7 +10,11 @@ services:
       APP_ENV: dev
       APP_DEBUG: "1"
       DATABASE_URL: postgresql://app:app@database:5432/app?serverVersion=16&charset=utf8
-      APP_INGEST_WATCH_PATH: /var/local/RETAIA/INBOX
+      APP_STORAGE_IDS: nas-main
+      APP_STORAGE_DEFAULT_ID: nas-main
+      APP_STORAGE_NAS_MAIN_DRIVER: local
+      APP_STORAGE_NAS_MAIN_ROOT_PATH: /var/local/RETAIA
+      APP_STORAGE_NAS_MAIN_WATCH_DIRECTORY: INBOX
       SYMFONY_TRUSTED_PROXIES: private_ranges
     depends_on:
       database:
@@ -31,7 +35,11 @@ services:
       APP_ENV: dev
       APP_DEBUG: "1"
       DATABASE_URL: postgresql://app:app@database:5432/app?serverVersion=16&charset=utf8
-      APP_INGEST_WATCH_PATH: /var/local/RETAIA/INBOX
+      APP_STORAGE_IDS: nas-main
+      APP_STORAGE_DEFAULT_ID: nas-main
+      APP_STORAGE_NAS_MAIN_DRIVER: local
+      APP_STORAGE_NAS_MAIN_ROOT_PATH: /var/local/RETAIA
+      APP_STORAGE_NAS_MAIN_WATCH_DIRECTORY: INBOX
       SYMFONY_TRUSTED_PROXIES: private_ranges
     depends_on:
       database:
@@ -78,7 +86,11 @@ services:
       - ./docker/RETAIA:/var/local/RETAIA
     environment:
       DATABASE_URL: postgresql://app:app@database:5432/app?serverVersion=16&charset=utf8
-      APP_INGEST_WATCH_PATH: /var/local/RETAIA/INBOX
+      APP_STORAGE_IDS: nas-main
+      APP_STORAGE_DEFAULT_ID: nas-main
+      APP_STORAGE_NAS_MAIN_DRIVER: local
+      APP_STORAGE_NAS_MAIN_ROOT_PATH: /var/local/RETAIA
+      APP_STORAGE_NAS_MAIN_WATCH_DIRECTORY: INBOX
       SYMFONY_TRUSTED_PROXIES: private_ranges
     depends_on:
       database:

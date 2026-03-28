@@ -55,7 +55,7 @@ trait FunctionalSchemaTrait
 
     protected function ensureIngestScanTable(Connection $connection): void
     {
-        $connection->executeStatement('CREATE TABLE IF NOT EXISTS ingest_scan_file (path VARCHAR(1024) PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, mtime DATETIME NOT NULL, stable_count INTEGER NOT NULL, status VARCHAR(32) NOT NULL, first_seen_at DATETIME NOT NULL, last_seen_at DATETIME NOT NULL)');
+        $connection->executeStatement('CREATE TABLE IF NOT EXISTS ingest_scan_file (storage_id VARCHAR(64) NOT NULL, path VARCHAR(1024) NOT NULL, size_bytes INTEGER NOT NULL, mtime DATETIME NOT NULL, stable_count INTEGER NOT NULL, status VARCHAR(32) NOT NULL, first_seen_at DATETIME NOT NULL, last_seen_at DATETIME NOT NULL, PRIMARY KEY (storage_id, path))');
     }
 
     protected function ensureUnmatchedSidecarTable(Connection $connection): void

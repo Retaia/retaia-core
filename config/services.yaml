@@ -17,8 +17,6 @@ parameters:
     app.client_token_ttl_seconds: 3600
     app.user_token_ttl_seconds: 3600
     app.user_refresh_token_ttl_seconds: 2592000
-    app.ingest.watch_path: '%env(string:APP_INGEST_WATCH_PATH)%'
-    app.storage.id: '%env(string:APP_STORAGE_ID)%'
     app.ingest.sidecars.video_legacy_enabled: '%env(bool:APP_INGEST_VIDEO_LEGACY_SIDECARS_ENABLED)%'
     app.features.ai.suggest_tags: '%env(bool:APP_FEATURE_AI_SUGGEST_TAGS)%'
     app.features.ai.suggested_tags_filters: '%env(bool:APP_FEATURE_AI_SUGGESTED_TAGS_FILTERS)%'
@@ -55,6 +53,7 @@ services:
     App\Api\Service\AgentSignature\AgentPublicKeyRepositoryInterface: '@App\Api\Service\AgentSignature\AgentPublicKeyRepository'
     App\Api\Service\AgentSignature\AgentSignatureNonceRepositoryInterface: '@App\Api\Service\AgentSignature\AgentSignatureNonceRepository'
     App\Ingest\Service\ExistingProxyFilesystemInterface: '@App\Ingest\Service\ExistingProxyFilesystem'
+    App\Storage\BusinessStorageRegistryInterface: '@App\Storage\BusinessStorageRegistry'
     App\Application\Agent\RegisterAgentUseCase: '@App\Application\Agent\RegisterAgentHandler'
     App\Application\Auth\ResolveAuthenticatedUserUseCase: '@App\Application\Auth\ResolveAuthenticatedUserHandler'
     App\Application\Auth\Port\AuthenticatedClientGateway: '@App\Infrastructure\Auth\AuthenticatedClientGateway'
@@ -77,6 +76,12 @@ services:
     App\Ingest\Port\FilePollerInterface: '@App\Ingest\Service\FilesystemFilePoller'
     App\Ingest\Port\ScanStateStoreInterface: '@App\Ingest\Repository\ScanStateStore'
 
+    App\Storage\BusinessStorageRegistry:
+        factory: ['@App\Storage\BusinessStorageRegistryFactory', 'create']
+
+    App\Startup\StorageMarkerStartupValidator:
+        public: true
+
     App\Application\Agent\RegisterAgentHandler:
         bind:
             bool $featureSuggestTagsEnabled: '%app.features.ai.suggest_tags%'
@@ -92,18 +97,6 @@ services:
     App\Application\Job\CheckSuggestTagsSubmitScopeHandler:
         bind:
             bool $featureSuggestTagsEnabled: '%app.features.ai.suggest_tags%'
-
-    App\Infrastructure\Asset\AssetReadGateway:
-        bind:
-            string $defaultStorageId: '%app.storage.id%'
-
-    App\Job\Repository\JobRepository:
-        bind:
-            string $defaultStorageId: '%app.storage.id%'
-
-    App\Command\IngestEnqueueStableCommand:
-        bind:
-            string $defaultStorageId: '%app.storage.id%'
 
     App\Ingest\Service\SidecarFileDetector:
         bind:
@@ -143,9 +136,6 @@ services:
         bind:
             string $keyringConfig: '%app.two_factor.keyring%'
             string $activeVersion: '%app.two_factor.active_key_version%'
-
-    App\Startup\StorageMarkerStartupValidator:
-        public: true
 
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

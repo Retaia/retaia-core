@@ -22,7 +22,6 @@ class SidecarFileDetector
     private const PROXY_FOLDER_NAMES = ['proxy', 'proxies', 'proxie'];
 
     public function __construct(
-        private WatchPathResolver $watchPathResolver,
         private bool $videoLegacySidecarsEnabled = false,
     ) {
     }
@@ -30,7 +29,7 @@ class SidecarFileDetector
     /**
      * @return array{path:string,type:string,kind:string,original:string}|null
      */
-    public function detectProxyFile(string $filePath): ?array
+    public function detectProxyFile(string $filePath, callable $fileExists): ?array
     {
         $normalized = $this->normalizePath($filePath);
         if (!$this->isInboxPath($normalized)) {
@@ -42,7 +41,7 @@ class SidecarFileDetector
 
         // DJI proxy sidecar.
         if ($extension === 'lrf') {
-            $original = $this->findSiblingByExtensions($normalized, self::VIDEO_EXTENSIONS);
+            $original = $this->findSiblingByExtensions($normalized, self::VIDEO_EXTENSIONS, $fileExists);
             if ($original === null) {
                 return null;
             }
@@ -57,7 +56,7 @@ class SidecarFileDetector
 
         // Camera JPEG sidecar used as existing photo proxy for RAW.
         if (in_array($extension, self::PHOTO_PROXY_EXTENSIONS, true)) {
-            $original = $this->findSiblingByExtensions($normalized, self::RAW_EXTENSIONS);
+            $original = $this->findSiblingByExtensions($normalized, self::RAW_EXTENSIONS, $fileExists);
             if ($original === null) {
                 return null;
             }
@@ -71,7 +70,7 @@ class SidecarFileDetector
         }
 
         // DaVinci-style proxy folder.
-        $folderProxyOriginal = $this->findProxyFolderParentOriginal($normalized, $basename);
+        $folderProxyOriginal = $this->findProxyFolderParentOriginal($normalized, $basename, $fileExists);
         if ($folderProxyOriginal !== null) {
             $kind = $this->proxyKindForExtension($extension);
             if ($kind !== null) {
@@ -90,7 +89,7 @@ class SidecarFileDetector
     /**
      * @return array{path:string,type:string,kind:string,original:string}|null
      */
-    public function detectExistingProxyForOriginal(string $filePath): ?array
+    public function detectExistingProxyForOriginal(string $filePath, callable $fileExists): ?array
     {
         $normalized = $this->normalizePath($filePath);
         if (!$this->isInboxPath($normalized)) {
@@ -100,8 +99,8 @@ class SidecarFileDetector
         $extension = $this->extension($normalized);
 
         if (in_array($extension, self::RAW_EXTENSIONS, true)) {
-            $proxy = $this->findSiblingByExtensions($normalized, self::PHOTO_PROXY_EXTENSIONS);
-            $proxy ??= $this->findProxyInSiblingProxyFolders($normalized, self::PHOTO_PROXY_EXTENSIONS);
+            $proxy = $this->findSiblingByExtensions($normalized, self::PHOTO_PROXY_EXTENSIONS, $fileExists);
+            $proxy ??= $this->findProxyInSiblingProxyFolders($normalized, self::PHOTO_PROXY_EXTENSIONS, $fileExists);
             if ($proxy !== null) {
                 return [
                     'path' => $proxy,
@@ -113,8 +112,8 @@ class SidecarFileDetector
         }
 
         if (in_array($extension, self::VIDEO_EXTENSIONS, true)) {
-            $proxy = $this->findSiblingByExtensions($normalized, ['lrf']);
-            $proxy ??= $this->findProxyInSiblingProxyFolders($normalized, array_merge(self::VIDEO_EXTENSIONS, ['lrf']));
+            $proxy = $this->findSiblingByExtensions($normalized, ['lrf'], $fileExists);
+            $proxy ??= $this->findProxyInSiblingProxyFolders($normalized, array_merge(self::VIDEO_EXTENSIONS, ['lrf']), $fileExists);
             if ($proxy !== null) {
                 return [
                     'path' => $proxy,
@@ -131,7 +130,7 @@ class SidecarFileDetector
     /**
      * @return array{path:string,type:string,original:string}|null
      */
-    public function detectAuxiliarySidecarFile(string $filePath): ?array
+    public function detectAuxiliarySidecarFile(string $filePath, callable $fileExists): ?array
     {
         $normalized = $this->normalizePath($filePath);
         if (!$this->isInboxPath($normalized)) {
@@ -142,12 +141,12 @@ class SidecarFileDetector
         if (!$this->isAuxiliarySidecarExtension($extension)) {
             return null;
         }
-        if ($this->auxiliaryUnmatchedReason($normalized) !== null) {
+        if ($this->auxiliaryUnmatchedReason($normalized, $fileExists) !== null) {
             return null;
         }
         $originalExtensions = $this->originalExtensionsForAuxiliary($extension);
 
-        $originalCandidates = $this->findSiblingCandidatesByExtensions($normalized, $originalExtensions);
+        $originalCandidates = $this->findSiblingCandidatesByExtensions($normalized, $originalExtensions, $fileExists);
         if (count($originalCandidates) !== 1) {
             return null;
         }
@@ -163,7 +162,7 @@ class SidecarFileDetector
     /**
      * @return array<int, string>
      */
-    public function detectExistingAuxiliarySidecarsForOriginal(string $filePath): array
+    public function detectExistingAuxiliarySidecarsForOriginal(string $filePath, callable $fileExists): array
     {
         $normalized = $this->normalizePath($filePath);
         if (!$this->isInboxPath($normalized)) {
@@ -192,10 +191,10 @@ class SidecarFileDetector
         $basename = pathinfo($normalized, PATHINFO_FILENAME);
         foreach ($sidecarExtensions as $sidecarExtension) {
             $candidate = ($dirname === '.' ? '' : $dirname.'/').$basename.'.'.$sidecarExtension;
-            if (!$this->fileExists($candidate)) {
+            if (!$fileExists($candidate)) {
                 continue;
             }
-            $detected = $this->detectAuxiliarySidecarFile($candidate);
+            $detected = $this->detectAuxiliarySidecarFile($candidate, $fileExists);
             if (is_array($detected) && (string) ($detected['original'] ?? '') === $normalized) {
                 $sidecars[] = $candidate;
             }
@@ -207,14 +206,14 @@ class SidecarFileDetector
     /**
      * @return array{path:string,type:string,kind:string,original:string}|null
      */
-    public function detectForPath(string $filePath): ?array
+    public function detectForPath(string $filePath, callable $fileExists): ?array
     {
-        $asProxy = $this->detectProxyFile($filePath);
+        $asProxy = $this->detectProxyFile($filePath, $fileExists);
         if ($asProxy !== null) {
             return $asProxy;
         }
 
-        return $this->detectExistingProxyForOriginal($filePath);
+        return $this->detectExistingProxyForOriginal($filePath, $fileExists);
     }
 
     public function isProxyCandidatePath(string $filePath): bool
@@ -250,19 +249,7 @@ class SidecarFileDetector
         return strtolower(pathinfo($path, PATHINFO_EXTENSION));
     }
 
-    private function fileExists(string $relativePath): bool
-    {
-        $root = rtrim($this->watchPathResolver->resolveRoot(), DIRECTORY_SEPARATOR);
-        if ($root === '') {
-            return false;
-        }
-
-        $absolute = $root.DIRECTORY_SEPARATOR.$relativePath;
-
-        return is_file($absolute);
-    }
-
-    private function findSiblingByExtensions(string $path, array $extensions): ?string
+    private function findSiblingByExtensions(string $path, array $extensions, callable $fileExists): ?string
     {
         $dirname = dirname($path);
         $basename = pathinfo($path, PATHINFO_FILENAME);
@@ -272,7 +259,7 @@ class SidecarFileDetector
             if ($candidate === $path) {
                 continue;
             }
-            if ($this->fileExists($candidate)) {
+            if ($fileExists($candidate)) {
                 return $candidate;
             }
         }
@@ -283,7 +270,7 @@ class SidecarFileDetector
     /**
      * @return array<int, string>
      */
-    private function findSiblingCandidatesByExtensions(string $path, array $extensions): array
+    private function findSiblingCandidatesByExtensions(string $path, array $extensions, callable $fileExists): array
     {
         $dirname = dirname($path);
         $basename = pathinfo($path, PATHINFO_FILENAME);
@@ -294,7 +281,7 @@ class SidecarFileDetector
             if ($candidate === $path) {
                 continue;
             }
-            if ($this->fileExists($candidate)) {
+            if ($fileExists($candidate)) {
                 $candidates[] = $candidate;
             }
         }
@@ -312,7 +299,7 @@ class SidecarFileDetector
         return $this->isAuxiliarySidecarExtension($this->extension($normalized));
     }
 
-    public function auxiliaryUnmatchedReason(string $filePath): ?string
+    public function auxiliaryUnmatchedReason(string $filePath, callable $fileExists): ?string
     {
         $normalized = $this->normalizePath($filePath);
         if (!$this->isInboxPath($normalized)) {
@@ -328,7 +315,7 @@ class SidecarFileDetector
         }
 
         $originalExtensions = $this->originalExtensionsForAuxiliary($extension);
-        $originalCandidates = $this->findSiblingCandidatesByExtensions($normalized, $originalExtensions);
+        $originalCandidates = $this->findSiblingCandidatesByExtensions($normalized, $originalExtensions, $fileExists);
         if (count($originalCandidates) === 0) {
             return 'missing_parent';
         }
@@ -366,7 +353,7 @@ class SidecarFileDetector
         };
     }
 
-    private function findProxyFolderParentOriginal(string $path, string $basename): ?string
+    private function findProxyFolderParentOriginal(string $path, string $basename, callable $fileExists): ?string
     {
         $parts = explode('/', $path);
         $proxyFolderIndex = $this->proxyFolderIndex($parts);
@@ -381,7 +368,7 @@ class SidecarFileDetector
 
         foreach ($extensions as $extension) {
             $candidate = $parentDir.'/'.$basename.'.'.$extension;
-            if ($this->fileExists($candidate)) {
+            if ($fileExists($candidate)) {
                 return $candidate;
             }
         }
@@ -423,7 +410,7 @@ class SidecarFileDetector
         return null;
     }
 
-    private function findProxyInSiblingProxyFolders(string $path, array $extensions): ?string
+    private function findProxyInSiblingProxyFolders(string $path, array $extensions, callable $fileExists): ?string
     {
         $dirname = dirname($path);
         $basename = pathinfo($path, PATHINFO_FILENAME);
@@ -432,7 +419,7 @@ class SidecarFileDetector
         foreach (self::PROXY_FOLDER_NAMES as $folderName) {
             foreach ($extensions as $extension) {
                 $candidate = ($baseDir === '' ? '' : $baseDir.'/').$folderName.'/'.$basename.'.'.$extension;
-                if ($this->fileExists($candidate)) {
+                if ($fileExists($candidate)) {
                     return $candidate;
                 }
             }

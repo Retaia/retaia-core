@@ -2,13 +2,15 @@
 
 namespace App\Ingest\Service;
 
+use App\Storage\BusinessStorageInterface;
+
 interface ExistingProxyFilesystemInterface
 {
-    public function isFile(string $root, string $relativePath): bool;
+    public function isFile(BusinessStorageInterface $storage, string $relativePath): bool;
 
-    public function fileSize(string $root, string $relativePath): int;
+    public function fileSize(BusinessStorageInterface $storage, string $relativePath): int;
 
-    public function hashSha256(string $root, string $relativePath): ?string;
+    public function hashSha256(BusinessStorageInterface $storage, string $relativePath): ?string;
 
-    public function materializeToDerived(string $root, string $assetUuid, string $kind, string $proxyPath): string;
+    public function materializeToDerived(BusinessStorageInterface $storage, string $assetUuid, string $kind, string $proxyPath): string;
 }

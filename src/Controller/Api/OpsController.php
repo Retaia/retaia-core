@@ -10,10 +10,10 @@ use App\Asset\Repository\AssetRepositoryInterface;
 use App\Entity\Asset;
 use App\Controller\RequestPayloadTrait;
 use App\Ingest\Repository\IngestDiagnosticsRepository;
-use App\Ingest\Service\WatchPathResolver;
 use App\Job\Repository\JobRepository;
 use App\Lock\OperationLockType;
 use App\Lock\Repository\OperationLockRepository;
+use App\Storage\BusinessStorageRegistryInterface;
 use Doctrine\DBAL\Connection;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -44,7 +44,7 @@ final class OpsController
         private AgentJobProjectionRepositoryInterface $agentJobProjectionRepository,
         private AssetRepositoryInterface $assets,
         private Connection $connection,
-        private WatchPathResolver $watchPathResolver,
+        private BusinessStorageRegistryInterface $storageRegistry,
         private TranslatorInterface $translator,
     ) {
     }
@@ -82,20 +82,20 @@ final class OpsController
             'message' => $databaseOk ? 'Database connectivity check passed.' : 'Database connectivity check failed.',
         ];
 
-        $folders = ['INBOX', 'ARCHIVE', 'REJECTS'];
         $missing = [];
         $notWritable = [];
         try {
-            $root = $this->watchPathResolver->resolveRoot();
-            foreach ($folders as $folder) {
-                $path = $root.DIRECTORY_SEPARATOR.$folder;
-                if (!is_dir($path)) {
-                    $missing[] = $path;
-                    continue;
-                }
+            foreach ($this->storageRegistry->all() as $definition) {
+                foreach ($definition->storage->managedDirectories() as $folder) {
+                    $qualified = sprintf('%s:%s', $definition->id, $folder);
+                    if (!$definition->storage->directoryExists($folder)) {
+                        $missing[] = $qualified;
+                        continue;
+                    }
 
-                if (!is_writable($path)) {
-                    $notWritable[] = $path;
+                    if (!$definition->storage->probeWritableDirectory($folder)) {
+                        $notWritable[] = $qualified;
+                    }
                 }
             }
         } catch (\Throwable $e) {

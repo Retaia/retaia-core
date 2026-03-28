@@ -2,28 +2,26 @@
 
 namespace App\Ingest\Service;
 
+use App\Storage\BusinessStorageInterface;
+
 final class ExistingProxyFilesystem implements ExistingProxyFilesystemInterface
 {
-    public function isFile(string $root, string $relativePath): bool
+    public function isFile(BusinessStorageInterface $storage, string $relativePath): bool
     {
-        return is_file($this->absolutePath($root, $relativePath));
+        return $storage->fileExists($relativePath);
     }
 
-    public function fileSize(string $root, string $relativePath): int
+    public function fileSize(BusinessStorageInterface $storage, string $relativePath): int
     {
-        $size = filesize($this->absolutePath($root, $relativePath));
-
-        return is_int($size) ? $size : 0;
+        return $storage->fileSize($relativePath);
     }
 
-    public function hashSha256(string $root, string $relativePath): ?string
+    public function hashSha256(BusinessStorageInterface $storage, string $relativePath): ?string
     {
-        $hash = hash_file('sha256', $this->absolutePath($root, $relativePath));
-
-        return is_string($hash) ? $hash : null;
+        return $storage->checksum($relativePath);
     }
 
-    public function materializeToDerived(string $root, string $assetUuid, string $kind, string $proxyPath): string
+    public function materializeToDerived(BusinessStorageInterface $storage, string $assetUuid, string $kind, string $proxyPath): string
     {
         $baseName = pathinfo($proxyPath, PATHINFO_FILENAME);
         $extension = strtolower(pathinfo($proxyPath, PATHINFO_EXTENSION));
@@ -34,36 +32,22 @@ final class ExistingProxyFilesystem implements ExistingProxyFilesystemInterface
         $safeName = preg_replace('/[^A-Za-z0-9._-]+/', '_', $baseName) ?: $kind;
         $targetFileName = $safeName.'.'.$extension;
         $targetStoragePath = sprintf('.derived/%s/%s', $assetUuid, $targetFileName);
-        $targetAbsolutePath = $this->absolutePath($root, $targetStoragePath);
-        $targetDirectory = dirname($targetAbsolutePath);
 
-        if (!is_dir($targetDirectory) && !mkdir($targetDirectory, 0777, true) && !is_dir($targetDirectory)) {
-            throw new \RuntimeException(sprintf('Unable to create derived directory for %s', $targetStoragePath));
-        }
-
-        if (is_file($targetAbsolutePath)) {
+        if ($storage->fileExists($targetStoragePath)) {
             return $targetStoragePath;
         }
 
-        $sourceAbsolutePath = $this->absolutePath($root, $proxyPath);
-        if (!is_file($sourceAbsolutePath)) {
+        if (!$storage->fileExists($proxyPath)) {
             throw new \RuntimeException(sprintf('Proxy source file not found: %s', $proxyPath));
         }
 
-        if (@rename($sourceAbsolutePath, $targetAbsolutePath)) {
-            return $targetStoragePath;
+        try {
+            $storage->move($proxyPath, $targetStoragePath);
+        } catch (\Throwable) {
+            $storage->copy($proxyPath, $targetStoragePath);
+            $storage->deleteFile($proxyPath);
         }
-
-        if (!@copy($sourceAbsolutePath, $targetAbsolutePath)) {
-            throw new \RuntimeException(sprintf('Unable to move proxy %s into %s', $proxyPath, $targetStoragePath));
-        }
-        @unlink($sourceAbsolutePath);
 
         return $targetStoragePath;
-    }
-
-    private function absolutePath(string $root, string $relativePath): string
-    {
-        return rtrim($root, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.ltrim($relativePath, DIRECTORY_SEPARATOR);
     }
 }

@@ -77,6 +77,28 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
 - développement : PostgreSQL (`DATABASE_URL` dans `.env`)
 - tests : mémoire (`DATABASE_URL=sqlite:///:memory:` dans `.env.test`)
 
+## Configuration storage
+
+Le storage metier est configure avec des variables explicites par storage, sans JSON:
+
+- `APP_STORAGE_IDS`
+- `APP_STORAGE_DEFAULT_ID`
+- `APP_STORAGE_<ID>_DRIVER`
+- `APP_STORAGE_<ID>_ROOT_PATH`
+- `APP_STORAGE_<ID>_WATCH_DIRECTORY`
+- optionnel : `APP_STORAGE_<ID>_INGEST_ENABLED`
+- optionnel : `APP_STORAGE_<ID>_MANAGED_DIRECTORIES`
+
+Exemple minimal:
+
+```dotenv
+APP_STORAGE_IDS=nas-main
+APP_STORAGE_DEFAULT_ID=nas-main
+APP_STORAGE_NAS_MAIN_DRIVER=local
+APP_STORAGE_NAS_MAIN_ROOT_PATH=./docker/RETAIA
+APP_STORAGE_NAS_MAIN_WATCH_DIRECTORY=INBOX
+```
+
 ## Points d’attention
 
 - La persistance utilisateur applicative est Doctrine + PostgreSQL.
