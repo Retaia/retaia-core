@@ -5,14 +5,13 @@ namespace App\Application\Agent;
 use App\Api\Service\AgentSignature\AgentPublicKeyRecord;
 use App\Api\Service\AgentSignature\AgentPublicKeyRepositoryInterface;
 use App\Api\Service\AgentRuntimeRepositoryInterface;
-use App\Application\Auth\ResolveAuthenticatedUserResult;
-use App\Application\Auth\ResolveAuthenticatedUserUseCase;
+use App\Application\Auth\Port\AuthenticatedClientGateway;
 
 final class RegisterAgentEndpointHandler
 {
     public function __construct(
         private RegisterAgentUseCase $registerAgentHandler,
-        private ResolveAuthenticatedUserUseCase $resolveAuthenticatedUserHandler,
+        private AuthenticatedClientGateway $authenticatedClientGateway,
         private AgentPublicKeyRepositoryInterface $agentPublicKeyRepository,
         private AgentRuntimeRepositoryInterface $agentRuntimeRepository,
     ) {
@@ -50,12 +49,13 @@ final class RegisterAgentEndpointHandler
             return new RegisterAgentEndpointResult(RegisterAgentEndpointResult::STATUS_VALIDATION_FAILED);
         }
 
-        $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
-        $actorId = $authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_AUTHENTICATED
-            ? (string) $authenticatedUser->id()
-            : 'unknown';
+        $client = $this->authenticatedClientGateway->currentClient();
+        $clientId = is_array($client) ? trim((string) ($client['client_id'] ?? '')) : '';
+        if ($clientId === '') {
+            $clientId = 'unknown';
+        }
 
-        $result = $this->registerAgentHandler->handle($actorId, $agentId, $agentName, $clientContractVersion);
+        $result = $this->registerAgentHandler->handle($clientId, $agentId, $agentName, $clientContractVersion);
         if ($result->status() === RegisterAgentResult::STATUS_UNSUPPORTED_CONTRACT_VERSION) {
             return new RegisterAgentEndpointResult(
                 RegisterAgentEndpointResult::STATUS_UNSUPPORTED_CONTRACT_VERSION,
@@ -73,7 +73,7 @@ final class RegisterAgentEndpointHandler
         $serverPolicy = is_array($resultPayload['server_policy'] ?? null) ? $resultPayload['server_policy'] : [];
         $this->agentRuntimeRepository->saveRegistration([
             'agent_id' => $agentId,
-            'client_id' => $actorId,
+            'client_id' => $clientId,
             'agent_name' => $agentName,
             'agent_version' => $agentVersion,
             'os_name' => $osName,

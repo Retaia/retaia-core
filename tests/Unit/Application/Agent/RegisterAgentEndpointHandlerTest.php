@@ -8,8 +8,7 @@ use App\Application\Agent\RegisterAgentEndpointHandler;
 use App\Application\Agent\RegisterAgentEndpointResult;
 use App\Application\Agent\RegisterAgentResult;
 use App\Application\Agent\RegisterAgentUseCase;
-use App\Application\Auth\ResolveAuthenticatedUserResult;
-use App\Application\Auth\ResolveAuthenticatedUserUseCase;
+use App\Application\Auth\Port\AuthenticatedClientGateway;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\TestCase;
@@ -23,11 +22,11 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
         $register = $this->createMock(RegisterAgentUseCase::class);
         $register->expects(self::never())->method('handle');
 
-        $resolver = $this->createMock(ResolveAuthenticatedUserUseCase::class);
-        $resolver->expects(self::never())->method('handle');
+        $clientGateway = $this->createMock(AuthenticatedClientGateway::class);
+        $clientGateway->expects(self::never())->method('currentClient');
         $keyStore = new AgentPublicKeyRepository($this->connection());
 
-        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore, $this->runtimeRepository()))->handle([
+        $result = (new RegisterAgentEndpointHandler($register, $clientGateway, $keyStore, $this->runtimeRepository()))->handle([
             'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'worker',
             'agent_version' => '',
@@ -47,11 +46,11 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
         $register = $this->createMock(RegisterAgentUseCase::class);
         $register->expects(self::never())->method('handle');
 
-        $resolver = $this->createMock(ResolveAuthenticatedUserUseCase::class);
-        $resolver->expects(self::never())->method('handle');
+        $clientGateway = $this->createMock(AuthenticatedClientGateway::class);
+        $clientGateway->expects(self::never())->method('currentClient');
         $keyStore = new AgentPublicKeyRepository($this->connection());
 
-        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore, $this->runtimeRepository()))->handle([
+        $result = (new RegisterAgentEndpointHandler($register, $clientGateway, $keyStore, $this->runtimeRepository()))->handle([
             'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'worker',
             'agent_version' => '1.0.0',
@@ -71,11 +70,11 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
         $register = $this->createMock(RegisterAgentUseCase::class);
         $register->expects(self::never())->method('handle');
 
-        $resolver = $this->createMock(ResolveAuthenticatedUserUseCase::class);
-        $resolver->expects(self::never())->method('handle');
+        $clientGateway = $this->createMock(AuthenticatedClientGateway::class);
+        $clientGateway->expects(self::never())->method('currentClient');
         $keyStore = new AgentPublicKeyRepository($this->connection());
 
-        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore, $this->runtimeRepository()))->handle([
+        $result = (new RegisterAgentEndpointHandler($register, $clientGateway, $keyStore, $this->runtimeRepository()))->handle([
             'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'worker',
             'agent_version' => '1.0.0',
@@ -95,11 +94,11 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
         $register = $this->createMock(RegisterAgentUseCase::class);
         $register->expects(self::never())->method('handle');
 
-        $resolver = $this->createMock(ResolveAuthenticatedUserUseCase::class);
-        $resolver->expects(self::never())->method('handle');
+        $clientGateway = $this->createMock(AuthenticatedClientGateway::class);
+        $clientGateway->expects(self::never())->method('currentClient');
         $keyStore = new AgentPublicKeyRepository($this->connection());
 
-        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore, $this->runtimeRepository()))->handle([
+        $result = (new RegisterAgentEndpointHandler($register, $clientGateway, $keyStore, $this->runtimeRepository()))->handle([
             'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'worker',
             'agent_version' => '1.0.0',
@@ -119,11 +118,11 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
         $register = $this->createMock(RegisterAgentUseCase::class);
         $register->expects(self::never())->method('handle');
 
-        $resolver = $this->createMock(ResolveAuthenticatedUserUseCase::class);
-        $resolver->expects(self::never())->method('handle');
+        $clientGateway = $this->createMock(AuthenticatedClientGateway::class);
+        $clientGateway->expects(self::never())->method('currentClient');
         $keyStore = new AgentPublicKeyRepository($this->connection());
 
-        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore, $this->runtimeRepository()))->handle([
+        $result = (new RegisterAgentEndpointHandler($register, $clientGateway, $keyStore, $this->runtimeRepository()))->handle([
             'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'worker',
             'agent_version' => '1.0.0',
@@ -139,21 +138,22 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
         self::assertSame(RegisterAgentEndpointResult::STATUS_VALIDATION_FAILED, $result->status());
     }
 
-    public function testHandleUsesAuthenticatedActorAndReturnsRegisteredPayload(): void
+    public function testHandleUsesAuthenticatedClientAndReturnsRegisteredPayload(): void
     {
         $register = $this->createMock(RegisterAgentUseCase::class);
-        $register->expects(self::once())->method('handle')->with('u1', '11111111-1111-4111-8111-111111111111', 'ffmpeg', '1.0.0')->willReturn(
+        $register->expects(self::once())->method('handle')->with('interactive-default', '11111111-1111-4111-8111-111111111111', 'ffmpeg', '1.0.0')->willReturn(
             new RegisterAgentResult(RegisterAgentResult::STATUS_REGISTERED, ['1.0.0'], ['agent_id' => '11111111-1111-4111-8111-111111111111'])
         );
 
-        $resolver = $this->createMock(ResolveAuthenticatedUserUseCase::class);
-        $resolver->expects(self::once())->method('handle')->willReturn(
-            new ResolveAuthenticatedUserResult(ResolveAuthenticatedUserResult::STATUS_AUTHENTICATED, 'u1', 'u1@retaia.local', ['ROLE_USER'])
-        );
+        $clientGateway = $this->createMock(AuthenticatedClientGateway::class);
+        $clientGateway->expects(self::once())->method('currentClient')->willReturn([
+            'client_id' => 'interactive-default',
+            'client_kind' => 'UI_WEB',
+        ]);
         $keyStore = new AgentPublicKeyRepository($this->connection());
 
         $runtimeRepository = $this->runtimeRepository();
-        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore, $runtimeRepository))->handle([
+        $result = (new RegisterAgentEndpointHandler($register, $clientGateway, $keyStore, $runtimeRepository))->handle([
             'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'ffmpeg',
             'agent_version' => '2.1.0',
@@ -175,6 +175,7 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
             $keyStore->findByAgentIdAndFingerprint('11111111-1111-4111-8111-111111111111', 'ABCD1234EF567890ABCD1234EF567890ABCD1234')?->publicKey
         );
         self::assertCount(1, $runtimeRepository->findAll());
+        self::assertSame('interactive-default', $runtimeRepository->findAll()[0]['client_id'] ?? null);
     }
 
     public function testHandleReturnsUnsupportedContractVersionWhenRegisterHandlerRejects(): void
@@ -184,13 +185,11 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
             new RegisterAgentResult(RegisterAgentResult::STATUS_UNSUPPORTED_CONTRACT_VERSION, ['1.0.0', '0.9.0'])
         );
 
-        $resolver = $this->createMock(ResolveAuthenticatedUserUseCase::class);
-        $resolver->expects(self::once())->method('handle')->willReturn(
-            new ResolveAuthenticatedUserResult(ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED)
-        );
+        $clientGateway = $this->createMock(AuthenticatedClientGateway::class);
+        $clientGateway->expects(self::once())->method('currentClient')->willReturn(null);
         $keyStore = new AgentPublicKeyRepository($this->connection());
 
-        $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore, $this->runtimeRepository()))->handle([
+        $result = (new RegisterAgentEndpointHandler($register, $clientGateway, $keyStore, $this->runtimeRepository()))->handle([
             'agent_id' => '11111111-1111-4111-8111-111111111111',
             'agent_name' => 'ffmpeg',
             'agent_version' => '2.1.0',

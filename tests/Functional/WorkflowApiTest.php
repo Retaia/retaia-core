@@ -491,12 +491,57 @@ final class WorkflowApiTest extends WebTestCase
             'status' => 'claimed',
             'correlation_id' => null,
             'claimed_by' => '11111111-1111-4111-8111-111111111111',
+            'claimed_at' => '2026-02-10 10:00:00',
             'lock_token' => 'lock-1',
             'fencing_token' => 2,
             'locked_until' => (new \DateTimeImmutable('+5 minutes'))->format('Y-m-d H:i:s'),
+            'completed_by' => null,
+            'completed_at' => null,
+            'failed_by' => null,
+            'failed_at' => null,
             'result_payload' => null,
             'created_at' => '2026-02-10 09:59:00',
             'updated_at' => '2026-02-10 10:00:00',
+        ]);
+        $connection->insert('processing_job', [
+            'id' => 'ops-agent-completed-1',
+            'asset_uuid' => '22222222-2222-4222-8222-222222222222',
+            'job_type' => 'generate_preview',
+            'state_version' => '1',
+            'status' => 'completed',
+            'correlation_id' => null,
+            'claimed_by' => null,
+            'claimed_at' => '2026-02-10 09:40:00',
+            'lock_token' => null,
+            'fencing_token' => null,
+            'locked_until' => null,
+            'completed_by' => '11111111-1111-4111-8111-111111111111',
+            'completed_at' => '2026-02-10 09:45:00',
+            'failed_by' => null,
+            'failed_at' => null,
+            'result_payload' => json_encode(['ok' => true], JSON_THROW_ON_ERROR),
+            'created_at' => '2026-02-10 09:30:00',
+            'updated_at' => '2026-02-10 09:45:00',
+        ]);
+        $connection->insert('processing_job', [
+            'id' => 'ops-agent-failed-1',
+            'asset_uuid' => '33333333-3333-4333-8333-333333333333',
+            'job_type' => 'transcribe_audio',
+            'state_version' => '1',
+            'status' => 'failed',
+            'correlation_id' => null,
+            'claimed_by' => '11111111-1111-4111-8111-111111111111',
+            'claimed_at' => '2026-02-10 09:50:00',
+            'lock_token' => null,
+            'fencing_token' => null,
+            'locked_until' => null,
+            'completed_by' => null,
+            'completed_at' => null,
+            'failed_by' => '11111111-1111-4111-8111-111111111111',
+            'failed_at' => '2026-02-10 09:55:00',
+            'result_payload' => json_encode(['error_code' => 'UPSTREAM_TIMEOUT', 'message' => 'timeout', 'retryable' => false], JSON_THROW_ON_ERROR),
+            'created_at' => '2026-02-10 09:49:00',
+            'updated_at' => '2026-02-10 09:55:00',
         ]);
 
         $this->authenticateClient($client, 'admin@retaia.local');
@@ -512,6 +557,7 @@ final class WorkflowApiTest extends WebTestCase
         $agent = $payload['items'][0] ?? null;
         self::assertIsArray($agent);
         self::assertSame('11111111-1111-4111-8111-111111111111', $agent['agent_id'] ?? null);
+        self::assertSame('interactive-default', $agent['client_id'] ?? null);
         self::assertSame('ffmpeg-worker', $agent['agent_name'] ?? null);
         self::assertSame('1.0.0', $agent['agent_version'] ?? null);
         self::assertSame('online_busy', $agent['status'] ?? null);
@@ -524,7 +570,20 @@ final class WorkflowApiTest extends WebTestCase
         self::assertIsString($agent['last_seen_at'] ?? null);
         self::assertIsString($agent['last_register_at'] ?? null);
         self::assertNull($agent['last_heartbeat_at'] ?? null);
-        self::assertNull($agent['current_job'] ?? null);
+        self::assertSame('ops-agent-busy-1', $agent['current_job']['job_id'] ?? null);
+        self::assertSame('extract_facts', $agent['current_job']['job_type'] ?? null);
+        self::assertSame('11111111-1111-4111-8111-111111111111', $agent['current_job']['asset_uuid'] ?? null);
+        self::assertIsString($agent['current_job']['claimed_at'] ?? null);
+        self::assertIsString($agent['current_job']['locked_until'] ?? null);
+        self::assertSame('ops-agent-completed-1', $agent['last_successful_job']['job_id'] ?? null);
+        self::assertSame('generate_preview', $agent['last_successful_job']['job_type'] ?? null);
+        self::assertSame('22222222-2222-4222-8222-222222222222', $agent['last_successful_job']['asset_uuid'] ?? null);
+        self::assertIsString($agent['last_successful_job']['completed_at'] ?? null);
+        self::assertSame('ops-agent-failed-1', $agent['last_failed_job']['job_id'] ?? null);
+        self::assertSame('transcribe_audio', $agent['last_failed_job']['job_type'] ?? null);
+        self::assertSame('33333333-3333-4333-8333-333333333333', $agent['last_failed_job']['asset_uuid'] ?? null);
+        self::assertIsString($agent['last_failed_job']['failed_at'] ?? null);
+        self::assertSame('UPSTREAM_TIMEOUT', $agent['last_failed_job']['error_code'] ?? null);
         self::assertSame(1, $agent['debug']['max_parallel_jobs'] ?? null);
         self::assertNull($agent['debug']['feature_flags_contract_version'] ?? null);
         self::assertSame('1.0.0', $agent['debug']['effective_feature_flags_contract_version'] ?? null);
