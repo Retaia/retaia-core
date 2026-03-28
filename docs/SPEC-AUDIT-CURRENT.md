@@ -23,9 +23,9 @@ Important context:
 
 No concrete OpenAPI path/schema drift remains identified in this snapshot.
 
-That does not mean the runtime is free of shortcuts. A deeper implementation review still shows several production-grade quick fixes and minimal implementations that should be treated as active engineering debt, especially around MCP signature semantics, operational projections and remaining prod-path error masking.
+That does not mean the runtime is free of shortcuts. A deeper implementation review still shows several production-grade quick fixes and minimal implementations that should be treated as active engineering debt, especially around MCP signature semantics and operational projections.
 
-The codebase also still contains several structural shortcuts that are below the quality bar expected for long-lived core runtime code: production code that still masks infrastructure failures too broadly, and operational projections coupled directly to transport/controller concerns.
+The codebase also still contains several structural shortcuts that are below the quality bar expected for long-lived core runtime code, especially operational projections coupled directly to transport/controller concerns.
 
 ## Findings
 
@@ -51,23 +51,6 @@ The codebase also still contains several structural shortcuts that are below the
   - operational views and identity-conflict detection are therefore semantically approximate
 - Why this is a quick fix:
   - it reuses an available authenticated identifier to fill a spec field, but does not model the actual client/agent identity layer cleanly
-
-### P2. Runtime code still swallows broad DB failures to tolerate “minimal test schemas”
-
-- Runtime locations:
-  - [`src/Ingest/Repository/IngestDiagnosticsRepository.php:31`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Repository/IngestDiagnosticsRepository.php:31)
-  - [`src/Workflow/Service/BatchWorkflowService.php:334`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Workflow/Service/BatchWorkflowService.php:334)
-- Critical lines:
-  - [`src/Ingest/Repository/IngestDiagnosticsRepository.php:41`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Repository/IngestDiagnosticsRepository.php:41)
-  - [`src/Ingest/Repository/IngestDiagnosticsRepository.php:53`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Repository/IngestDiagnosticsRepository.php:53)
-  - [`src/Ingest/Repository/IngestDiagnosticsRepository.php:67`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Repository/IngestDiagnosticsRepository.php:67)
-  - [`src/Workflow/Service/BatchWorkflowService.php:339`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Workflow/Service/BatchWorkflowService.php:339)
-- Impact:
-  - real DB/configuration failures can be silently degraded into partial behavior
-  - prod behavior becomes harder to observe and reason about because the failure is intentionally masked
-  - purge/ingest can report success while some persistence-side effects are skipped
-- Why this is a quick fix:
-  - test-environment resilience is implemented directly in production code paths through broad `catch (\Throwable)`
 
 ### P3. Several runtime services still combine domain orchestration with infrastructure details in the same class
 
@@ -112,12 +95,7 @@ No remaining secondary gap is tracked in this snapshot.
 
 ## Recommended remediation order
 
-### Batch 1: remove prod-path “minimal test schema” fallbacks
-
-- replace broad `catch (\Throwable)` masking with explicit optional-table handling or environment-scoped test helpers
-- make ingest/purge fail loudly when prod persistence is inconsistent
-
-### Batch 2: finish the operational model behind `/ops/agents`
+### Batch 1: finish the operational model behind `/ops/agents`
 
 - introduce a proper technical `client_id` model for registered agents
 - add enough job execution history to populate `current_job`, `last_successful_job`, and `last_failed_job` without inventing timestamps
@@ -126,4 +104,4 @@ No remaining secondary gap is tracked in this snapshot.
 
 The repo is currently aligned with the current OpenAPI v1 runtime contract to the extent verified by the implemented runtime and current local validation suite.
 
-However, this snapshot still contains real quick fixes in production code, most notably around auth state persistence, agent-signing persistence and runtime error masking. The remaining work is now less about path/schema drift and more about replacing those shortcuts with durable runtime models.
+However, this snapshot still contains real quick fixes in production code, now concentrated around MCP signature semantics and the incomplete operational model behind `/ops/agents`. The remaining work is now less about path/schema drift and more about replacing those shortcuts with durable runtime models.

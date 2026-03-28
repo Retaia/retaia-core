@@ -4,6 +4,7 @@ namespace App\Ingest\Repository;
 
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
+use Doctrine\DBAL\Exception\TableNotFoundException;
 use Doctrine\DBAL\ParameterType;
 
 final class IngestDiagnosticsRepository
@@ -38,7 +39,7 @@ final class IngestDiagnosticsRepository
             return;
         } catch (UniqueConstraintViolationException) {
             // Upsert behavior across supported databases.
-        } catch (\Throwable) {
+        } catch (TableNotFoundException) {
             // Keep ingest resilient for minimal test schemas.
             return;
         }
@@ -50,7 +51,7 @@ final class IngestDiagnosticsRepository
             ], [
                 'path' => $normalizedPath,
             ]);
-        } catch (\Throwable) {
+        } catch (TableNotFoundException) {
             // Keep ingest resilient for minimal test schemas.
         }
     }
@@ -64,7 +65,7 @@ final class IngestDiagnosticsRepository
 
         try {
             $this->connection->delete('ingest_unmatched_sidecar', ['path' => $normalizedPath]);
-        } catch (\Throwable) {
+        } catch (TableNotFoundException) {
             // Keep ingest resilient for minimal test schemas.
         }
     }
@@ -114,7 +115,7 @@ final class IngestDiagnosticsRepository
                 'SELECT COUNT(*) FROM ingest_scan_file WHERE status = :status',
                 ['status' => $status]
             );
-        } catch (\Throwable) {
+        } catch (TableNotFoundException) {
             return 0;
         }
     }
@@ -141,7 +142,7 @@ final class IngestDiagnosticsRepository
                 'SELECT COUNT(*) FROM ingest_unmatched_sidecar'.$where,
                 $params
             );
-        } catch (\Throwable) {
+        } catch (TableNotFoundException) {
             return 0;
         }
     }
@@ -157,7 +158,7 @@ final class IngestDiagnosticsRepository
                 ['limit' => $limit],
                 ['limit' => ParameterType::INTEGER]
             );
-        } catch (\Throwable) {
+        } catch (TableNotFoundException) {
             return [];
         }
 
@@ -195,7 +196,7 @@ final class IngestDiagnosticsRepository
                 $params,
                 $types
             );
-        } catch (\Throwable) {
+        } catch (TableNotFoundException) {
             return [];
         }
 
