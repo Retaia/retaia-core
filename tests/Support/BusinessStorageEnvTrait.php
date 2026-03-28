@@ -14,7 +14,22 @@ trait BusinessStorageEnvTrait
     }
 
     /**
-     * @param list<array{id:string, driver?:string, root_path:string, watch_directory?:string, ingest_enabled?:bool, managed_directories?:list<string>}> $storages
+     * @param list<array{
+     *     id:string,
+     *     driver?:string,
+     *     root_path?:string,
+     *     watch_directory?:string,
+     *     ingest_enabled?:bool,
+     *     managed_directories?:list<string>,
+     *     host?:string,
+     *     share?:string,
+     *     username?:string,
+     *     password?:string,
+     *     workgroup?:string,
+     *     timeout_seconds?:int,
+     *     smb_version_min?:string,
+     *     smb_version_max?:string
+     * }> $storages
      */
     private function configureBusinessStorages(array $storages, ?string $defaultStorageId = null): void
     {
@@ -34,7 +49,9 @@ trait BusinessStorageEnvTrait
             $prefix = 'APP_STORAGE_'.$this->storageEnvKey($storageId).'_';
 
             $this->setStorageEnv($prefix.'DRIVER', $storage['driver'] ?? 'local');
-            $this->setStorageEnv($prefix.'ROOT_PATH', $storage['root_path']);
+            if (array_key_exists('root_path', $storage)) {
+                $this->setStorageEnv($prefix.'ROOT_PATH', (string) $storage['root_path']);
+            }
             $this->setStorageEnv($prefix.'WATCH_DIRECTORY', $storage['watch_directory'] ?? 'INBOX');
 
             if (array_key_exists('ingest_enabled', $storage)) {
@@ -43,6 +60,21 @@ trait BusinessStorageEnvTrait
 
             if (array_key_exists('managed_directories', $storage)) {
                 $this->setStorageEnv($prefix.'MANAGED_DIRECTORIES', implode(',', $storage['managed_directories']));
+            }
+
+            foreach ([
+                'host' => 'HOST',
+                'share' => 'SHARE',
+                'username' => 'USERNAME',
+                'password' => 'PASSWORD',
+                'workgroup' => 'WORKGROUP',
+                'timeout_seconds' => 'TIMEOUT_SECONDS',
+                'smb_version_min' => 'SMB_VERSION_MIN',
+                'smb_version_max' => 'SMB_VERSION_MAX',
+            ] as $field => $suffix) {
+                if (array_key_exists($field, $storage)) {
+                    $this->setStorageEnv($prefix.$suffix, (string) $storage[$field]);
+                }
             }
         }
     }

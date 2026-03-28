@@ -84,8 +84,19 @@ Le storage metier est configure avec des variables explicites par storage, sans 
 - `APP_STORAGE_IDS`
 - `APP_STORAGE_DEFAULT_ID`
 - `APP_STORAGE_<ID>_DRIVER`
-- `APP_STORAGE_<ID>_ROOT_PATH`
 - `APP_STORAGE_<ID>_WATCH_DIRECTORY`
+- si `DRIVER=local` :
+  - `APP_STORAGE_<ID>_ROOT_PATH`
+- si `DRIVER=smb` :
+  - `APP_STORAGE_<ID>_HOST`
+  - `APP_STORAGE_<ID>_SHARE`
+  - `APP_STORAGE_<ID>_USERNAME`
+  - `APP_STORAGE_<ID>_PASSWORD`
+  - optionnel : `APP_STORAGE_<ID>_ROOT_PATH`
+  - optionnel : `APP_STORAGE_<ID>_WORKGROUP`
+  - optionnel : `APP_STORAGE_<ID>_TIMEOUT_SECONDS`
+  - optionnel : `APP_STORAGE_<ID>_SMB_VERSION_MIN`
+  - optionnel : `APP_STORAGE_<ID>_SMB_VERSION_MAX`
 - optionnel : `APP_STORAGE_<ID>_INGEST_ENABLED`
 - optionnel : `APP_STORAGE_<ID>_MANAGED_DIRECTORIES`
 

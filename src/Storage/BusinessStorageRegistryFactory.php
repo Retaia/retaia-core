@@ -2,12 +2,23 @@
 
 namespace App\Storage;
 
-use League\Flysystem\Filesystem;
-use League\Flysystem\Local\LocalFilesystemAdapter;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 final class BusinessStorageRegistryFactory
 {
+    private const SMB_PROTOCOLS = [
+        'NT1',
+        'SMB2',
+        'SMB2_02',
+        'SMB2_22',
+        'SMB2_24',
+        'SMB3',
+        'SMB3_00',
+        'SMB3_02',
+        'SMB3_10',
+        'SMB3_11',
+    ];
+
     public function __construct(
         #[Autowire('%kernel.project_dir%')]
         private string $projectDir,
@@ -21,27 +32,13 @@ final class BusinessStorageRegistryFactory
         $storages = [];
         foreach ($ids as $id) {
             $driver = strtolower($this->requiredStorageValue($id, 'DRIVER'));
-            $rootPath = $this->requiredStorageValue($id, 'ROOT_PATH');
             $watchDirectory = $this->storageValue($id, 'WATCH_DIRECTORY', 'INBOX');
             $managedDirectories = $this->storageListValue($id, 'MANAGED_DIRECTORIES');
             $ingestEnabled = $this->storageBoolValue($id, 'INGEST_ENABLED', true);
 
-            if ($driver !== 'local') {
-                throw new \RuntimeException(sprintf('Unsupported business storage driver "%s".', $driver));
-            }
-
-            $config = new BusinessStorageConfig(
-                $this->normalizeRootPath($rootPath),
-                $watchDirectory,
-                $managedDirectories
-            );
-
             $storages[] = new BusinessStorageDefinition(
                 $id,
-                new FlysystemBusinessStorage(
-                    new Filesystem(new LocalFilesystemAdapter($config->rootPath(), null, LOCK_EX, LocalFilesystemAdapter::SKIP_LINKS)),
-                    $config,
-                ),
+                $this->buildStorage($id, $driver, $watchDirectory, $managedDirectories),
                 $ingestEnabled,
             );
         }
@@ -198,5 +195,116 @@ final class BusinessStorageRegistryFactory
         }
 
         return (string) $value;
+    }
+
+    /**
+     * @param list<string>|null $managedDirectories
+     */
+    private function buildStorage(string $storageId, string $driver, string $watchDirectory, ?array $managedDirectories): BusinessStorageInterface
+    {
+        return match ($driver) {
+            'local' => $this->buildLocalStorage($storageId, $watchDirectory, $managedDirectories),
+            'smb' => $this->buildSmbStorage($storageId, $watchDirectory, $managedDirectories),
+            default => throw new \RuntimeException(sprintf('Unsupported business storage driver "%s".', $driver)),
+        };
+    }
+
+    /**
+     * @param list<string>|null $managedDirectories
+     */
+    private function buildLocalStorage(string $storageId, string $watchDirectory, ?array $managedDirectories): BusinessStorageInterface
+    {
+        $rootPath = $this->requiredStorageValue($storageId, 'ROOT_PATH');
+        $config = new BusinessStorageConfig(
+            $this->normalizeRootPath($rootPath),
+            $watchDirectory,
+            $managedDirectories
+        );
+
+        return (new LocalBusinessStorageFactory($config))->create();
+    }
+
+    /**
+     * @param list<string>|null $managedDirectories
+     */
+    private function buildSmbStorage(string $storageId, string $watchDirectory, ?array $managedDirectories): BusinessStorageInterface
+    {
+        $host = $this->requiredStorageValue($storageId, 'HOST');
+        $share = $this->requiredStorageValue($storageId, 'SHARE');
+        $username = $this->requiredStorageValue($storageId, 'USERNAME');
+        $password = $this->requiredStorageValue($storageId, 'PASSWORD');
+        $workgroup = $this->nullableStorageValue($storageId, 'WORKGROUP');
+        $rootPrefix = $this->storageValue($storageId, 'ROOT_PATH', '');
+        $timeoutSeconds = $this->storageIntValue($storageId, 'TIMEOUT_SECONDS', 20, 1);
+        $minProtocol = $this->protocolValue($storageId, 'SMB_VERSION_MIN');
+        $maxProtocol = $this->protocolValue($storageId, 'SMB_VERSION_MAX');
+
+        $config = new BusinessStorageConfig(
+            $this->smbDisplayRoot($host, $share, $rootPrefix),
+            $watchDirectory,
+            $managedDirectories
+        );
+
+        return (new SmbBusinessStorageFactory(
+            $config,
+            $host,
+            $share,
+            $username,
+            $password,
+            $workgroup,
+            $rootPrefix,
+            $minProtocol,
+            $maxProtocol,
+            $timeoutSeconds,
+        ))->create();
+    }
+
+    private function nullableStorageValue(string $storageId, string $key): ?string
+    {
+        $value = trim($this->envValue($this->storageEnvName($storageId, $key), ''));
+
+        return $value === '' ? null : $value;
+    }
+
+    private function storageIntValue(string $storageId, string $key, int $default, int $min): int
+    {
+        $value = trim($this->envValue($this->storageEnvName($storageId, $key), (string) $default));
+        if ($value === '' || !ctype_digit($value)) {
+            throw new \RuntimeException(sprintf('Business storage "%s" requires %s to be an integer >= %d.', $storageId, strtolower($key), $min));
+        }
+
+        $parsed = (int) $value;
+        if ($parsed < $min) {
+            throw new \RuntimeException(sprintf('Business storage "%s" requires %s to be an integer >= %d.', $storageId, strtolower($key), $min));
+        }
+
+        return $parsed;
+    }
+
+    private function protocolValue(string $storageId, string $key): ?string
+    {
+        $value = strtoupper(trim($this->envValue($this->storageEnvName($storageId, $key), '')));
+        if ($value === '') {
+            return null;
+        }
+        if (!in_array($value, self::SMB_PROTOCOLS, true)) {
+            throw new \RuntimeException(sprintf(
+                'Business storage "%s" requires %s to be one of: %s.',
+                $storageId,
+                strtolower($key),
+                implode(', ', self::SMB_PROTOCOLS)
+            ));
+        }
+
+        return $value;
+    }
+
+    private function smbDisplayRoot(string $host, string $share, string $rootPrefix): string
+    {
+        $normalizedPrefix = trim(str_replace('\\', '/', $rootPrefix), '/');
+
+        return $normalizedPrefix === ''
+            ? sprintf('smb://%s/%s', $host, $share)
+            : sprintf('smb://%s/%s/%s', $host, $share, $normalizedPrefix);
     }
 }
