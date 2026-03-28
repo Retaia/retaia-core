@@ -717,6 +717,7 @@ final class OpenApiContractTest extends WebTestCase
         $this->ensureUnmatchedSidecarTable($connection);
         $this->ensureUserAuthSessionTable($connection);
         $this->ensureAgentRuntimeTable($connection);
+        $this->ensureAgentSignatureTables($connection);
     }
 
     private function resetTwoFactorState(string $email): void

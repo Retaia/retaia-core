@@ -2,8 +2,8 @@
 
 namespace App\Tests\Unit\Application\Agent;
 
-use App\Api\Service\AgentSignature\AgentPublicKeyStore;
 use App\Api\Service\AgentRuntimeStore;
+use App\Api\Service\AgentSignature\AgentPublicKeyRepository;
 use App\Application\Agent\RegisterAgentEndpointHandler;
 use App\Application\Agent\RegisterAgentEndpointResult;
 use App\Application\Agent\RegisterAgentResult;
@@ -13,7 +13,6 @@ use App\Application\Auth\ResolveAuthenticatedUserUseCase;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Cache\Adapter\ArrayAdapter;
 
 final class RegisterAgentEndpointHandlerTest extends TestCase
 {
@@ -26,7 +25,7 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
 
         $resolver = $this->createMock(ResolveAuthenticatedUserUseCase::class);
         $resolver->expects(self::never())->method('handle');
-        $keyStore = new AgentPublicKeyStore(new ArrayAdapter());
+        $keyStore = new AgentPublicKeyRepository($this->connection());
 
         $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore, $this->runtimeStore()))->handle([
             'agent_id' => '11111111-1111-4111-8111-111111111111',
@@ -50,7 +49,7 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
 
         $resolver = $this->createMock(ResolveAuthenticatedUserUseCase::class);
         $resolver->expects(self::never())->method('handle');
-        $keyStore = new AgentPublicKeyStore(new ArrayAdapter());
+        $keyStore = new AgentPublicKeyRepository($this->connection());
 
         $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore, $this->runtimeStore()))->handle([
             'agent_id' => '11111111-1111-4111-8111-111111111111',
@@ -74,7 +73,7 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
 
         $resolver = $this->createMock(ResolveAuthenticatedUserUseCase::class);
         $resolver->expects(self::never())->method('handle');
-        $keyStore = new AgentPublicKeyStore(new ArrayAdapter());
+        $keyStore = new AgentPublicKeyRepository($this->connection());
 
         $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore, $this->runtimeStore()))->handle([
             'agent_id' => '11111111-1111-4111-8111-111111111111',
@@ -98,7 +97,7 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
 
         $resolver = $this->createMock(ResolveAuthenticatedUserUseCase::class);
         $resolver->expects(self::never())->method('handle');
-        $keyStore = new AgentPublicKeyStore(new ArrayAdapter());
+        $keyStore = new AgentPublicKeyRepository($this->connection());
 
         $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore, $this->runtimeStore()))->handle([
             'agent_id' => '11111111-1111-4111-8111-111111111111',
@@ -122,7 +121,7 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
 
         $resolver = $this->createMock(ResolveAuthenticatedUserUseCase::class);
         $resolver->expects(self::never())->method('handle');
-        $keyStore = new AgentPublicKeyStore(new ArrayAdapter());
+        $keyStore = new AgentPublicKeyRepository($this->connection());
 
         $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore, $this->runtimeStore()))->handle([
             'agent_id' => '11111111-1111-4111-8111-111111111111',
@@ -151,7 +150,7 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
         $resolver->expects(self::once())->method('handle')->willReturn(
             new ResolveAuthenticatedUserResult(ResolveAuthenticatedUserResult::STATUS_AUTHENTICATED, 'u1', 'u1@retaia.local', ['ROLE_USER'])
         );
-        $keyStore = new AgentPublicKeyStore(new ArrayAdapter());
+        $keyStore = new AgentPublicKeyRepository($this->connection());
 
         $runtimeStore = $this->runtimeStore();
         $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore, $runtimeStore))->handle([
@@ -173,7 +172,7 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
         self::assertSame([], $result->payload()['capability_warnings'] ?? null);
         self::assertSame(
             self::ARMORED_PUBLIC_KEY,
-            $keyStore->publicKeyFor('11111111-1111-4111-8111-111111111111', 'ABCD1234EF567890ABCD1234EF567890ABCD1234')
+            $keyStore->findByAgentIdAndFingerprint('11111111-1111-4111-8111-111111111111', 'ABCD1234EF567890ABCD1234EF567890ABCD1234')?->publicKey
         );
         self::assertCount(1, $runtimeStore->list());
     }
@@ -189,7 +188,7 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
         $resolver->expects(self::once())->method('handle')->willReturn(
             new ResolveAuthenticatedUserResult(ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED)
         );
-        $keyStore = new AgentPublicKeyStore(new ArrayAdapter());
+        $keyStore = new AgentPublicKeyRepository($this->connection());
 
         $result = (new RegisterAgentEndpointHandler($register, $resolver, $keyStore, $this->runtimeStore()))->handle([
             'agent_id' => '11111111-1111-4111-8111-111111111111',
@@ -220,6 +219,7 @@ final class RegisterAgentEndpointHandlerTest extends TestCase
             'memory' => true,
         ]);
         $connection->executeStatement("CREATE TABLE agent_runtime (agent_id VARCHAR(36) PRIMARY KEY NOT NULL, client_id VARCHAR(64) NOT NULL, agent_name VARCHAR(255) NOT NULL, agent_version VARCHAR(64) NOT NULL, os_name VARCHAR(32) DEFAULT NULL, os_version VARCHAR(64) DEFAULT NULL, arch VARCHAR(32) DEFAULT NULL, effective_capabilities CLOB NOT NULL, capability_warnings CLOB NOT NULL, last_register_at DATETIME NOT NULL, last_seen_at DATETIME NOT NULL, last_heartbeat_at DATETIME DEFAULT NULL, max_parallel_jobs INTEGER NOT NULL, feature_flags_contract_version VARCHAR(32) DEFAULT NULL, effective_feature_flags_contract_version VARCHAR(32) DEFAULT NULL, server_time_skew_seconds INTEGER DEFAULT NULL)");
+        $connection->executeStatement('CREATE TABLE agent_public_key (agent_id VARCHAR(36) PRIMARY KEY NOT NULL, openpgp_fingerprint VARCHAR(40) NOT NULL, openpgp_public_key CLOB NOT NULL, updated_at INTEGER NOT NULL)');
 
         return $connection;
     }

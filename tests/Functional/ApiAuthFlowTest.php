@@ -1953,6 +1953,10 @@ final class ApiAuthFlowTest extends WebTestCase
         $connection->executeStatement('DELETE FROM user_auth_session');
         $connection->executeStatement('DELETE FROM user_two_factor_state');
         $this->ensureAgentRuntimeTable($connection);
+        $this->ensureAgentSignatureTables($connection);
+        $connection->executeStatement('DELETE FROM agent_runtime');
+        $connection->executeStatement('DELETE FROM agent_public_key');
+        $connection->executeStatement('DELETE FROM agent_signature_nonce');
         /** @var CacheItemPoolInterface $cache */
         $cache = static::getContainer()->get('cache.app');
         $cache->clear();
