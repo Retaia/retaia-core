@@ -7,11 +7,11 @@ use App\Asset\Repository\AssetRepositoryInterface;
 use App\Asset\Service\AssetStateMachine;
 use App\Asset\Service\StateConflictException;
 use App\Entity\Asset;
+use App\Derived\DerivedFileRepositoryInterface;
+use App\Ingest\Service\WatchPathResolver;
 use App\Lock\OperationLockType;
 use App\Lock\Repository\OperationLockRepository;
-use App\Ingest\Service\WatchPathResolver;
 use Doctrine\DBAL\Connection;
-use Doctrine\DBAL\Exception\TableNotFoundException;
 
 final class BatchWorkflowService
 {
@@ -20,6 +20,7 @@ final class BatchWorkflowService
         private AssetStateMachine $stateMachine,
         private Connection $connection,
         private OperationLockRepository $locks,
+        private DerivedFileRepositoryInterface $derivedFiles,
         private ?WatchPathResolver $watchPathResolver = null,
     ) {
     }
@@ -309,18 +310,11 @@ final class BatchWorkflowService
             }
         }
 
-        try {
-            $rows = $this->connection->fetchAllAssociative(
-                'SELECT storage_path FROM asset_derived_file WHERE asset_uuid = :assetUuid',
-                ['assetUuid' => $asset->getUuid()]
-            );
-        } catch (TableNotFoundException) {
-            $rows = [];
-        }
+        $paths = $this->derivedFiles->listStoragePathsByAsset($asset->getUuid());
 
         if ($root !== null) {
-            foreach ($rows as $row) {
-                $storagePath = $this->normalizeRelativePath((string) ($row['storage_path'] ?? ''));
+            foreach ($paths as $path) {
+                $storagePath = $this->normalizeRelativePath($path);
                 if ($storagePath === null) {
                     continue;
                 }
@@ -332,14 +326,7 @@ final class BatchWorkflowService
             }
         }
 
-        try {
-            $this->connection->executeStatement(
-                'DELETE FROM asset_derived_file WHERE asset_uuid = :assetUuid',
-                ['assetUuid' => $asset->getUuid()]
-            );
-        } catch (TableNotFoundException) {
-            // Keep purge behavior resilient for minimal test schemas.
-        }
+        $this->derivedFiles->deleteByAsset($asset->getUuid());
 
         if ($root !== null) {
             $this->deleteDirectoryRecursiveIfExists($root.DIRECTORY_SEPARATOR.'.derived'.DIRECTORY_SEPARATOR.$asset->getUuid());
