@@ -1,29 +1,7 @@
-# OpenAPI Runtime Audit (`specs@b6eb044`)
+# Runtime Audit (`specs@b6eb044`)
 
 Date: 2026-03-28
 Spec baseline: `specs/api/openapi/v1.yaml` from `retaia-docs@b6eb0447cf3c9d3bf3d4b9d2969ceda4cd38202a`
-Runtime baseline: `retaia-core@master + auth-me alignment batch`
-
-## Validation baseline
-
-Executed locally:
-
-- `composer check:openapi` ✅
-- `composer check:openapi-docs-coherence` ✅
-- `composer test:openapi-contract` ✅
-- `composer test` ✅
-- `composer test:quality` ✅
-
-Important context:
-
-- Route coverage is green: all OpenAPI v1 paths are present in the runtime router.
-- The previous `assets`, agent-signing, `jobs` lease and `/auth/me` drifts have been aligned in runtime and guarded by tests.
-
-## Executive summary
-
-No concrete OpenAPI path/schema drift remains identified in this snapshot.
-
-That does not mean the runtime is free of shortcuts. A deeper implementation review still shows a small number of structural shortcuts that should be treated as active engineering debt, now mostly around service boundaries that still mix orchestration and infrastructure details.
 
 ## Findings
 
@@ -38,26 +16,65 @@ That does not mean the runtime is free of shortcuts. A deeper implementation rev
   - the codebase keeps growing around “god services” instead of stable domain/infrastructure seams
 - Why this is below the target quality bar:
   - the core pattern should be: application service/use case orchestrates, repositories/gateways persist, lower-level adapters handle transport or filesystem concerns
-- Progress already made:
-  - existing proxy materialization and derived-file persistence have been extracted out of `IngestEnqueueStableCommand` into a dedicated service/repository seam
-  - the remaining ingest debt is now mostly asset creation, auxiliary sidecar attachment and job-enqueue orchestration still concentrated in the command
 
-## Coverage gaps in current tests
+### P3. Filesystem access is still handled through local ad hoc seams instead of a repo-wide storage abstraction
 
-No major test-depth gap is currently tracked relative to the implemented runtime surface.
-
-### Critical-path gaps
-
-No remaining critical-path gap is tracked in this snapshot.
-
-### Secondary gaps
-
-No remaining secondary gap is tracked in this snapshot.
-
-### Notes on surfaces already reviewed
-
-- `assets`, `purge`, `derived upload`, `jobs` lease/fencing, app policy/features, device flow, client token mint/revoke/rotate, ops endpoints, and `/auth/me` shape all have direct runtime coverage.
-- the remaining work identified above is not contract drift; it is implementation-hardening and model-completeness work.
+- Architecture rule:
+  - every runtime access to business storage for ingest, assets, derived files, archive, rejects, purge and readiness on those volumes must go through a shared Flysystem-based storage port
+  - local filesystem calls are not acceptable anymore on those paths, because the runtime may be backed by SMB storage instead of a local disk
+- Representative locations:
+  - [`src/Ingest/Service/ExistingProxyFilesystem.php:5`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Service/ExistingProxyFilesystem.php:5)
+  - [`src/Ingest/Service/FilesystemFilePoller.php:7`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Service/FilesystemFilePoller.php:7)
+  - [`src/Workflow/Service/BatchWorkflowService.php:373`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Workflow/Service/BatchWorkflowService.php:373)
+- Impact:
+  - filesystem concerns are being extracted case by case, but each flow still defines its own local seam and path conventions
+  - the repo has no single storage abstraction for local disk vs future alternate backends
+  - cross-cutting concerns like move/copy/delete semantics, path normalization and test doubles are still fragmented
+- Why this is below the target quality bar:
+  - if filesystem access is part of the runtime model, it should be represented by an explicit storage port reused across ingest, derived, purge and related operational flows
+  - the target remediation should be a dedicated PR introducing a repo-wide abstraction, likely via `league/flysystem`, rather than more one-off wrappers
+  - if network-mounted storage remains a supported runtime target, that batch should also evaluate an SMB adapter such as `jerodev/flysystem-v3-smb-adapter` so the abstraction covers both local disk and SMB-backed volumes explicitly
+- Concrete migration inventory once Flysystem is introduced:
+  - ingest watch-root resolution and directory validation:
+    - [`src/Ingest/Service/WatchPathResolver.php:25`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Service/WatchPathResolver.php:25)
+    - used to resolve the ingest storage root before any polling or sidecar lookup
+  - ingest polling and file discovery:
+    - [`src/Ingest/Service/FilesystemFilePoller.php:20`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Service/FilesystemFilePoller.php:20)
+    - this is the current local-disk enumerator for inbox content
+  - sidecar detection against sibling files:
+    - [`src/Ingest/Service/SidecarFileDetector.php:262`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Service/SidecarFileDetector.php:262)
+    - sidecar presence checks must move to the same storage abstraction as the source asset
+  - existing proxy materialization into `.derived`:
+    - [`src/Ingest/Service/ExistingProxyFilesystem.php:9`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Service/ExistingProxyFilesystem.php:9)
+    - this is already a local seam, but still tied to direct local disk semantics
+  - outbox apply and archive/reject file moves:
+    - [`src/Command/IngestApplyOutboxCommand.php:82`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Command/IngestApplyOutboxCommand.php:82)
+    - [`src/Command/IngestApplyOutboxCommand.php:171`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Command/IngestApplyOutboxCommand.php:171)
+    - [`src/Command/IngestApplyOutboxCommand.php:248`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Command/IngestApplyOutboxCommand.php:248)
+    - archive/reject handling is part of the same business storage domain and must stop using direct path moves
+  - ingest enqueue source-file existence checks:
+    - [`src/Command/IngestEnqueueStableCommand.php:94`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Command/IngestEnqueueStableCommand.php:94)
+    - source asset presence must be checked through the storage port, not `is_file`
+  - purge and derived cleanup:
+    - [`src/Workflow/Service/BatchWorkflowService.php:307`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Workflow/Service/BatchWorkflowService.php:307)
+    - [`src/Workflow/Service/BatchWorkflowService.php:323`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Workflow/Service/BatchWorkflowService.php:323)
+    - [`src/Workflow/Service/BatchWorkflowService.php:368`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Workflow/Service/BatchWorkflowService.php:368)
+    - delete/list/recursive cleanup on derived storage must be Flysystem-backed
+  - startup storage marker lifecycle:
+    - [`src/Startup/StorageMarkerStartupValidator.php:31`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Startup/StorageMarkerStartupValidator.php:31)
+    - if the marker is used to validate the same storage volume used by ingest/assets, it belongs to the Flysystem batch too
+  - ops/readiness directory checks for configured storage roots:
+    - [`src/Controller/Api/OpsController.php:92`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Controller/Api/OpsController.php:92)
+    - [`src/Command/OpsReadinessCheckCommand.php:41`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Command/OpsReadinessCheckCommand.php:41)
+    - readiness on business storage must validate the abstract storage backend, not only local directories
+- Additional runtime spots that should be reviewed in the same Flysystem batch even if they are partly indirect today:
+  - [`src/Command/IngestEnqueueStableCommand.php:103`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Command/IngestEnqueueStableCommand.php:103)
+    - the command still orchestrates source/sidecar/proxy decisions around local-path assumptions
+  - [`src/Ingest/Service/ExistingProxyAttachmentService.php:25`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Service/ExistingProxyAttachmentService.php:25)
+    - once Flysystem exists, this local helper seam should probably disappear behind the shared storage port
+- Explicit non-targets for the Flysystem batch:
+  - [`src/Api/Service/AgentSignature/GpgCliAgentRequestSignatureVerifier.php:17`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentSignature/GpgCliAgentRequestSignatureVerifier.php:17)
+  - [`src/Controller/Api/DocsController.php:77`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Controller/Api/DocsController.php:77)
 
 ## Recommended remediation order
 
@@ -66,9 +83,4 @@ No remaining secondary gap is tracked in this snapshot.
 - keep reducing SQL / filesystem coordination inside `BatchWorkflowService`
 - split operational command-side logic in `IngestEnqueueStableCommand` into narrower collaborators
 - continue extracting purge-side file and filesystem coordination out of `BatchWorkflowService`
-
-## Bottom line
-
-The repo is currently aligned with the current OpenAPI v1 runtime contract to the extent verified by the implemented runtime and current local validation suite.
-
-However, this snapshot still contains structural shortcuts in production code, now concentrated around service decomposition and separation of concerns rather than contract drift or missing persistence. The remaining work is now mostly about keeping the runtime model maintainable as the codebase grows.
+- prepare a dedicated filesystem/storage abstraction batch so future refactors stop creating local one-off seams
