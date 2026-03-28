@@ -42,8 +42,12 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
 
         /** @var Connection $connection */
         $connection = static::getContainer()->get(Connection::class);
+        $this->ensureAuthClientTables($connection);
         $this->ensureUserAuthSessionTable($connection);
         $this->ensureUserTwoFactorStateTable($connection);
+        $connection->executeStatement('DELETE FROM auth_client_access_token');
+        $connection->executeStatement('DELETE FROM auth_device_flow');
+        $connection->executeStatement('DELETE FROM auth_mcp_challenge');
         $connection->executeStatement('DELETE FROM user_auth_session');
         $connection->executeStatement('DELETE FROM user_two_factor_state');
     }
@@ -1316,8 +1320,12 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
         $resolvedRemoteAddress = $remoteAddress ?? sprintf('10.50.%d.%d', random_int(1, 200), random_int(1, 200));
         /** @var Connection $connection */
         $connection = static::getContainer()->get(Connection::class);
+        $this->ensureAuthClientTables($connection);
         $this->ensureUserAuthSessionTable($connection);
         $this->ensureUserTwoFactorStateTable($connection);
+        $connection->executeStatement('DELETE FROM auth_client_access_token');
+        $connection->executeStatement('DELETE FROM auth_device_flow');
+        $connection->executeStatement('DELETE FROM auth_mcp_challenge');
         $connection->executeStatement('DELETE FROM user_two_factor_state');
         /** @var CacheItemPoolInterface $cache */
         $cache = static::getContainer()->get('cache.app');
@@ -1420,20 +1428,20 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
 
     private function seedClientRegistryEntry(string $clientId, string $clientKind, string $secretKey): void
     {
-        /** @var CacheItemPoolInterface $cache */
-        $cache = static::getContainer()->get('cache.app');
-        $item = $cache->getItem('auth_client_registry');
-        $registry = $item->get();
-        if (!is_array($registry)) {
-            $registry = [];
-        }
-
-        $registry[$clientId] = [
+        /** @var Connection $connection */
+        $connection = static::getContainer()->get(Connection::class);
+        $this->ensureAuthClientTables($connection);
+        $connection->delete('auth_client_registry', ['client_id' => $clientId]);
+        $connection->insert('auth_client_registry', [
+            'client_id' => $clientId,
             'client_kind' => $clientKind,
             'secret_key' => $secretKey,
-        ];
-        $item->set($registry);
-        $cache->save($item);
+            'client_label' => null,
+            'openpgp_public_key' => null,
+            'openpgp_fingerprint' => null,
+            'registered_at' => null,
+            'rotated_at' => null,
+        ]);
     }
 
     /**

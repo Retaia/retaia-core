@@ -23,27 +23,11 @@ Important context:
 
 No concrete OpenAPI path/schema drift remains identified in this snapshot.
 
-That does not mean the runtime is free of shortcuts. A deeper implementation review still shows several production-grade quick fixes and minimal implementations that should be treated as active engineering debt, especially around remaining auth/security persistence, agent signing and operational projections.
+That does not mean the runtime is free of shortcuts. A deeper implementation review still shows several production-grade quick fixes and minimal implementations that should be treated as active engineering debt, especially around remaining agent-signing persistence, MCP signature semantics and operational projections.
 
-The codebase also still contains several structural shortcuts that are below the quality bar expected for long-lived core runtime code: services that mix orchestration with SQL persistence, cache-backed registries with no repository boundary, and operational projections coupled directly to transport/controller concerns.
+The codebase also still contains several structural shortcuts that are below the quality bar expected for long-lived core runtime code: cache-backed security stores with no repository boundary, production code that still masks infrastructure failures too broadly, and operational projections coupled directly to transport/controller concerns.
 
 ## Findings
-
-### P1. Technical client registry, technical access tokens, device flows and MCP challenges are all cache-backed
-
-- Runtime location: [`src/Auth/AuthClientStateStore.php:8`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthClientStateStore.php:8)
-- Critical lines:
-  - [`src/Auth/AuthClientStateStore.php:18`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthClientStateStore.php:18)
-  - [`src/Auth/AuthClientStateStore.php:26`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthClientStateStore.php:26)
-  - [`src/Auth/AuthClientStateStore.php:55`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthClientStateStore.php:55)
-  - [`src/Auth/AuthClientStateStore.php:76`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthClientStateStore.php:76)
-  - [`src/Auth/AuthClientStateStore.php:97`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthClientStateStore.php:97)
-- Impact:
-  - provisioned technical clients, device flow approvals and MCP challenges are not durable
-  - default fallback credentials (`agent-default`, `mcp-default`) are synthesized at runtime when the cache is empty
-  - any restart or non-shared cache topology can rewrite or lose the client registry state
-- Why this is a quick fix:
-  - a large part of technical-client auth is implemented as application cache state instead of persistent auth/client tables
 
 ### P1. Agent public keys are still stored in `cache.app`
 
@@ -107,20 +91,6 @@ The codebase also still contains several structural shortcuts that are below the
   - purge/ingest can report success while some persistence-side effects are skipped
 - Why this is a quick fix:
   - test-environment resilience is implemented directly in production code paths through broad `catch (\Throwable)`
-
-### P2. Technical client auth is still modeled as a monolithic cache-backed state store instead of repositories per concern
-
-- Runtime locations:
-  - [`src/Auth/AuthClientStateStore.php:8`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthClientStateStore.php:8)
-  - [`src/Auth/AuthClientAdminService.php:8`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthClientAdminService.php:8)
-  - [`src/Auth/AuthClientDeviceFlowService.php:10`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthClientDeviceFlowService.php:10)
-  - [`src/Auth/AuthMcpService.php:12`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthMcpService.php:12)
-- Impact:
-  - registry entries, active tokens, device flows and MCP challenges all share one coarse storage abstraction
-  - lifecycle rules for distinct domains are entangled behind one cache-shaped API
-  - replacing this with durable storage later will be a cross-cutting refactor rather than an isolated repository swap
-- Why this is below the target quality bar:
-  - these concerns should be split into explicit repositories/stores such as client registry, active technical tokens, device-flow state and MCP challenge store, each with a domain-specific contract
 
 ### P2. Agent signing still lacks repository-grade boundaries around trust material and replay state
 
@@ -192,12 +162,11 @@ No remaining secondary gap is tracked in this snapshot.
 
 ### Batch 1: auth state persistence hardening
 
-- replace `AuthClientStateStore` cache-backed registry/flows/tokens/challenges with persistent auth-client tables
+- move `AgentPublicKeyStore` to a persistent DB-backed repository
+- move `AgentSignatureNonceStore` to a durable/shared atomic store
 
 ### Batch 2: agent-signing persistence hardening
 
-- move `AgentPublicKeyStore` to a persistent DB-backed repository
-- move `AgentSignatureNonceStore` to a durable/shared atomic store
 - keep the current GPG verification path, but stop depending on volatile cache state for trust and replay guarantees
 
 ### Batch 3: introduce missing repository boundaries on already-persistent runtime state

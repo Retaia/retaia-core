@@ -5,7 +5,8 @@ namespace App\Auth;
 final class AuthClientAdminService
 {
     public function __construct(
-        private AuthClientStateStore $stateStore,
+        private AuthClientRegistryRepositoryInterface $registryRepository,
+        private TechnicalAccessTokenRepositoryInterface $accessTokenRepository,
         private ClientAccessTokenFactory $clientAccessTokenFactory,
         private AuthClientPolicyService $policyService,
     ) {
@@ -16,17 +17,16 @@ final class AuthClientAdminService
      */
     public function mintToken(string $clientId, string $clientKind, string $secretKey): ?array
     {
-        $registry = $this->stateStore->registry();
-        $client = $registry[$clientId] ?? null;
-        if (!is_array($client)) {
+        $client = $this->registryRepository->findByClientId($clientId);
+        if (!$client instanceof AuthClientRegistryEntry) {
             return null;
         }
 
-        if (!hash_equals((string) ($client['secret_key'] ?? ''), $secretKey)) {
+        if (!hash_equals((string) ($client->secretKey ?? ''), $secretKey)) {
             return null;
         }
 
-        if ((string) ($client['client_kind'] ?? '') !== $clientKind) {
+        if ($client->clientKind !== $clientKind) {
             return null;
         }
 
@@ -38,13 +38,12 @@ final class AuthClientAdminService
      */
     public function mintRegisteredClientToken(string $clientId): ?array
     {
-        $registry = $this->stateStore->registry();
-        $client = $registry[$clientId] ?? null;
-        if (!is_array($client)) {
+        $client = $this->registryRepository->findByClientId($clientId);
+        if (!$client instanceof AuthClientRegistryEntry) {
             return null;
         }
 
-        $clientKind = (string) ($client['client_kind'] ?? '');
+        $clientKind = $client->clientKind;
         if ($clientKind === '') {
             return null;
         }
@@ -58,14 +57,7 @@ final class AuthClientAdminService
     private function issueToken(string $clientId, string $clientKind): array
     {
         $token = $this->clientAccessTokenFactory->issue($clientId, $clientKind);
-        $tokens = $this->stateStore->activeTokens();
-        $tokens[$clientId] = [
-            'access_token' => $token,
-            'client_id' => $clientId,
-            'client_kind' => $clientKind,
-            'issued_at' => time(),
-        ];
-        $this->stateStore->saveActiveTokens($tokens);
+        $this->accessTokenRepository->save(new TechnicalAccessTokenRecord($clientId, $token, $clientKind, time()));
 
         return [
             'access_token' => $token,
@@ -82,20 +74,12 @@ final class AuthClientAdminService
 
     public function hasClient(string $clientId): bool
     {
-        return array_key_exists($clientId, $this->stateStore->registry());
+        return $this->registryRepository->findByClientId($clientId) instanceof AuthClientRegistryEntry;
     }
 
     public function clientKind(string $clientId): ?string
     {
-        $registry = $this->stateStore->registry();
-        $client = $registry[$clientId] ?? null;
-        if (!is_array($client)) {
-            return null;
-        }
-
-        $clientKind = $client['client_kind'] ?? null;
-
-        return is_string($clientKind) ? $clientKind : null;
+        return $this->registryRepository->findByClientId($clientId)?->clientKind;
     }
 
     public function revokeToken(string $clientId): bool
@@ -104,25 +88,29 @@ final class AuthClientAdminService
             return false;
         }
 
-        $tokens = $this->stateStore->activeTokens();
-        unset($tokens[$clientId]);
-        $this->stateStore->saveActiveTokens($tokens);
+        $this->accessTokenRepository->deleteByClientId($clientId);
 
         return true;
     }
 
     public function rotateSecret(string $clientId): ?string
     {
-        $registry = $this->stateStore->registry();
-        $client = $registry[$clientId] ?? null;
-        if (!is_array($client)) {
+        $client = $this->registryRepository->findByClientId($clientId);
+        if (!$client instanceof AuthClientRegistryEntry) {
             return null;
         }
 
         $newSecret = bin2hex(random_bytes(24));
-        $client['secret_key'] = $newSecret;
-        $registry[$clientId] = $client;
-        $this->stateStore->saveRegistry($registry);
+        $this->registryRepository->save(new AuthClientRegistryEntry(
+            $client->clientId,
+            $client->clientKind,
+            $newSecret,
+            $client->clientLabel,
+            $client->openPgpPublicKey,
+            $client->openPgpFingerprint,
+            $client->registeredAt,
+            $client->rotatedAt,
+        ));
         $this->revokeToken($clientId);
 
         return $newSecret;

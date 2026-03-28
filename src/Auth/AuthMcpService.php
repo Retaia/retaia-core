@@ -9,7 +9,8 @@ final class AuthMcpService
     private const CHALLENGE_TTL_SECONDS = 300;
 
     public function __construct(
-        private AuthClientStateStore $stateStore,
+        private AuthClientRegistryRepositoryInterface $registryRepository,
+        private AuthMcpChallengeRepositoryInterface $challengeRepository,
         private AuthClientAdminService $adminService,
         private AuthClientPolicyService $policyService,
     ) {
@@ -32,54 +33,54 @@ final class AuthMcpService
 
         $now = (new \DateTimeImmutable())->format(\DateTimeInterface::ATOM);
         $normalizedLabel = $this->normalizeLabel($clientLabel);
-        $registry = $this->stateStore->registry();
-
-        foreach ($registry as $clientId => $client) {
-            if (!is_array($client) || (string) ($client['client_kind'] ?? '') !== ClientKind::MCP) {
+        foreach ($this->registryRepository->findAll() as $client) {
+            if ($client->clientKind !== ClientKind::MCP) {
                 continue;
             }
 
-            if (!hash_equals((string) ($client['openpgp_fingerprint'] ?? ''), $normalizedFingerprint)) {
+            if (!hash_equals((string) ($client->openPgpFingerprint ?? ''), $normalizedFingerprint)) {
                 continue;
             }
 
-            $registeredAt = (string) ($client['registered_at'] ?? $now);
+            $registeredAt = (string) ($client->registeredAt ?? $now);
             $rotatedAt = null;
-            if (!hash_equals((string) ($client['openpgp_public_key'] ?? ''), $normalizedPublicKey)) {
+            if (!hash_equals((string) ($client->openPgpPublicKey ?? ''), $normalizedPublicKey)) {
                 $rotatedAt = $now;
             }
-
-            $client['openpgp_public_key'] = $normalizedPublicKey;
-            $client['openpgp_fingerprint'] = $normalizedFingerprint;
-            $client['registered_at'] = $registeredAt;
-            $client['rotated_at'] = $rotatedAt;
-            if ($normalizedLabel !== null) {
-                $client['client_label'] = $normalizedLabel;
-            }
-
-            $registry[(string) $clientId] = $client;
-            $this->stateStore->saveRegistry($registry);
+            $updated = new AuthClientRegistryEntry(
+                $client->clientId,
+                $client->clientKind,
+                $client->secretKey,
+                $normalizedLabel ?? $client->clientLabel,
+                $normalizedPublicKey,
+                $normalizedFingerprint,
+                $registeredAt,
+                $rotatedAt,
+            );
+            $this->registryRepository->save($updated);
 
             return [
                 'status' => 'SUCCESS',
-                'payload' => $this->registrationPayload((string) $clientId, $client),
+                'payload' => $this->registrationPayload($updated),
             ];
         }
 
         $clientId = 'mcp-'.bin2hex(random_bytes(6));
-        $registry[$clientId] = array_filter([
-            'client_kind' => ClientKind::MCP,
-            'client_label' => $normalizedLabel,
-            'openpgp_public_key' => $normalizedPublicKey,
-            'openpgp_fingerprint' => $normalizedFingerprint,
-            'registered_at' => $now,
-            'rotated_at' => null,
-        ], static fn (mixed $value): bool => $value !== null);
-        $this->stateStore->saveRegistry($registry);
+        $created = new AuthClientRegistryEntry(
+            $clientId,
+            ClientKind::MCP,
+            null,
+            $normalizedLabel,
+            $normalizedPublicKey,
+            $normalizedFingerprint,
+            $now,
+            null,
+        );
+        $this->registryRepository->save($created);
 
         return [
             'status' => 'SUCCESS',
-            'payload' => $this->registrationPayload($clientId, $registry[$clientId]),
+            'payload' => $this->registrationPayload($created),
         ];
     }
 
@@ -98,44 +99,40 @@ final class AuthMcpService
             return ['status' => 'VALIDATION_FAILED'];
         }
 
-        $registry = $this->stateStore->registry();
-        $client = $registry[$clientId] ?? null;
-        if (!is_array($client) || (string) ($client['client_kind'] ?? '') !== ClientKind::MCP) {
+        $client = $this->registryRepository->findByClientId($clientId);
+        if (!$client instanceof AuthClientRegistryEntry || $client->clientKind !== ClientKind::MCP) {
             return ['status' => 'STATE_CONFLICT'];
         }
 
-        foreach ($registry as $registeredClientId => $registeredClient) {
-            if (!is_string($registeredClientId) || $registeredClientId === $clientId || !is_array($registeredClient)) {
+        foreach ($this->registryRepository->findAll() as $registeredClient) {
+            if ($registeredClient->clientId === $clientId) {
                 continue;
             }
-
-            if ((string) ($registeredClient['client_kind'] ?? '') !== ClientKind::MCP) {
+            if ($registeredClient->clientKind !== ClientKind::MCP) {
                 continue;
             }
-
-            if (hash_equals((string) ($registeredClient['openpgp_fingerprint'] ?? ''), $normalizedFingerprint)) {
+            if (hash_equals((string) ($registeredClient->openPgpFingerprint ?? ''), $normalizedFingerprint)) {
                 return ['status' => 'STATE_CONFLICT'];
             }
         }
 
-        $client['openpgp_public_key'] = $normalizedPublicKey;
-        $client['openpgp_fingerprint'] = $normalizedFingerprint;
-        $client['rotated_at'] = (new \DateTimeImmutable())->format(\DateTimeInterface::ATOM);
-        if (($client['registered_at'] ?? null) === null) {
-            $client['registered_at'] = $client['rotated_at'];
-        }
-
+        $rotatedAt = (new \DateTimeImmutable())->format(\DateTimeInterface::ATOM);
         $normalizedLabel = $this->normalizeLabel($clientLabel);
-        if ($normalizedLabel !== null) {
-            $client['client_label'] = $normalizedLabel;
-        }
-
-        $registry[$clientId] = $client;
-        $this->stateStore->saveRegistry($registry);
+        $updated = new AuthClientRegistryEntry(
+            $client->clientId,
+            $client->clientKind,
+            $client->secretKey,
+            $normalizedLabel ?? $client->clientLabel,
+            $normalizedPublicKey,
+            $normalizedFingerprint,
+            $client->registeredAt ?? $rotatedAt,
+            $rotatedAt,
+        );
+        $this->registryRepository->save($updated);
 
         return [
             'status' => 'SUCCESS',
-            'payload' => $this->registrationPayload($clientId, $client),
+            'payload' => $this->registrationPayload($updated),
         ];
     }
 
@@ -161,15 +158,15 @@ final class AuthMcpService
         $challengeId = 'mcpc_'.bin2hex(random_bytes(12));
         $challenge = rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '=');
 
-        $challenges = $this->activeChallenges();
-        $challenges[$challengeId] = [
-            'client_id' => $clientId,
-            'openpgp_fingerprint' => $normalizedFingerprint,
-            'challenge' => $challenge,
-            'expires_at' => time() + self::CHALLENGE_TTL_SECONDS,
-            'used' => false,
-        ];
-        $this->stateStore->saveMcpChallenges($challenges);
+        $this->challengeRepository->save(new AuthMcpChallenge(
+            $challengeId,
+            $clientId,
+            $normalizedFingerprint,
+            $challenge,
+            time() + self::CHALLENGE_TTL_SECONDS,
+            false,
+            null,
+        ));
 
         return [
             'status' => 'SUCCESS',
@@ -200,30 +197,33 @@ final class AuthMcpService
             return ['status' => 'UNAUTHORIZED'];
         }
 
-        $challenges = $this->activeChallenges();
-        $challenge = $challenges[$challengeId] ?? null;
-        if (!is_array($challenge)) {
+        $challenge = $this->challengeRepository->findByChallengeId($challengeId);
+        if (!$challenge instanceof AuthMcpChallenge || $challenge->expiresAt < time()) {
             return ['status' => 'UNAUTHORIZED'];
         }
 
-        $invalidChallenge = (bool) ($challenge['used'] ?? false)
-            || !hash_equals((string) ($challenge['client_id'] ?? ''), $clientId)
-            || !hash_equals((string) ($challenge['openpgp_fingerprint'] ?? ''), $normalizedFingerprint);
+        $invalidChallenge = $challenge->used
+            || !hash_equals($challenge->clientId, $clientId)
+            || !hash_equals($challenge->openPgpFingerprint, $normalizedFingerprint);
         if ($invalidChallenge) {
-            unset($challenges[$challengeId]);
-            $this->stateStore->saveMcpChallenges($challenges);
+            $this->challengeRepository->delete($challengeId);
 
             return ['status' => 'UNAUTHORIZED'];
         }
 
-        if (!$this->isValidSignature(trim($signature), (string) ($challenge['challenge'] ?? ''), $client)) {
+        if (!$this->isValidSignature(trim($signature), $challenge->challenge, $client)) {
             return ['status' => 'UNAUTHORIZED'];
         }
 
-        $challenge['used'] = true;
-        $challenge['used_at'] = time();
-        $challenges[$challengeId] = $challenge;
-        $this->stateStore->saveMcpChallenges($challenges);
+        $this->challengeRepository->save(new AuthMcpChallenge(
+            $challenge->challengeId,
+            $challenge->clientId,
+            $challenge->openPgpFingerprint,
+            $challenge->challenge,
+            $challenge->expiresAt,
+            true,
+            time(),
+        ));
 
         $tokenPayload = $this->adminService->mintRegisteredClientToken($clientId);
         if (!is_array($tokenPayload)) {
@@ -237,19 +237,17 @@ final class AuthMcpService
     }
 
     /**
-     * @param array<string, mixed> $client
-     * @return array<string, mixed>
      */
-    private function registrationPayload(string $clientId, array $client): array
+    private function registrationPayload(AuthClientRegistryEntry $client): array
     {
         $payload = [
-            'client_id' => $clientId,
+            'client_id' => $client->clientId,
             'client_kind' => ClientKind::MCP,
-            'openpgp_fingerprint' => (string) ($client['openpgp_fingerprint'] ?? ''),
-            'registered_at' => (string) ($client['registered_at'] ?? ''),
+            'openpgp_fingerprint' => (string) ($client->openPgpFingerprint ?? ''),
+            'registered_at' => (string) ($client->registeredAt ?? ''),
         ];
 
-        $rotatedAt = $client['rotated_at'] ?? null;
+        $rotatedAt = $client->rotatedAt;
         if (is_string($rotatedAt) && $rotatedAt !== '') {
             $payload['rotated_at'] = $rotatedAt;
         }
@@ -258,46 +256,23 @@ final class AuthMcpService
     }
 
     /**
-     * @return array<string, mixed>|null
      */
-    private function mcpClient(string $clientId, string $openPgpFingerprint): ?array
+    private function mcpClient(string $clientId, string $openPgpFingerprint): ?AuthClientRegistryEntry
     {
-        $registry = $this->stateStore->registry();
-        $client = $registry[$clientId] ?? null;
-        if (!is_array($client)) {
+        $client = $this->registryRepository->findByClientId($clientId);
+        if (!$client instanceof AuthClientRegistryEntry) {
             return null;
         }
 
-        if ((string) ($client['client_kind'] ?? '') !== ClientKind::MCP) {
+        if ($client->clientKind !== ClientKind::MCP) {
             return null;
         }
 
-        if (!hash_equals((string) ($client['openpgp_fingerprint'] ?? ''), $openPgpFingerprint)) {
+        if (!hash_equals((string) ($client->openPgpFingerprint ?? ''), $openPgpFingerprint)) {
             return null;
         }
 
         return $client;
-    }
-
-    /**
-     * @return array<string, array<string, mixed>>
-     */
-    private function activeChallenges(): array
-    {
-        $active = [];
-        foreach ($this->stateStore->mcpChallenges() as $challengeId => $challenge) {
-            if (!is_string($challengeId) || !is_array($challenge)) {
-                continue;
-            }
-
-            if ((int) ($challenge['expires_at'] ?? 0) < time()) {
-                continue;
-            }
-
-            $active[$challengeId] = $challenge;
-        }
-
-        return $active;
     }
 
     private function normalizeFingerprint(string $fingerprint): ?string
@@ -319,13 +294,11 @@ final class AuthMcpService
 
     /**
      * Lightweight signature validation until a dedicated OpenPGP library is introduced.
-     *
-     * @param array<string, mixed> $client
      */
-    private function isValidSignature(string $signature, string $challenge, array $client): bool
+    private function isValidSignature(string $signature, string $challenge, AuthClientRegistryEntry $client): bool
     {
-        $publicKey = (string) ($client['openpgp_public_key'] ?? '');
-        $fingerprint = (string) ($client['openpgp_fingerprint'] ?? '');
+        $publicKey = (string) ($client->openPgpPublicKey ?? '');
+        $fingerprint = (string) ($client->openPgpFingerprint ?? '');
         if ($publicKey === '' || $fingerprint === '' || $challenge === '') {
             return false;
         }

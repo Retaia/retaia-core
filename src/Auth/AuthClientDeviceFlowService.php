@@ -7,7 +7,7 @@ use App\Domain\AuthClient\DeviceFlowStatus;
 final class AuthClientDeviceFlowService
 {
     public function __construct(
-        private AuthClientStateStore $stateStore,
+        private AuthDeviceFlowRepositoryInterface $deviceFlowRepository,
         private AuthClientProvisioningService $provisioningService,
     ) {
     }
@@ -20,20 +20,18 @@ final class AuthClientDeviceFlowService
         $deviceCode = 'dc_'.bin2hex(random_bytes(12));
         $userCode = strtoupper(substr(bin2hex(random_bytes(4)), 0, 8));
         $now = time();
-        $flow = [
-            'device_code' => $deviceCode,
-            'user_code' => $userCode,
-            'client_kind' => $clientKind,
-            'status' => DeviceFlowStatus::PENDING,
-            'created_at' => $now,
-            'expires_at' => $now + 600,
-            'interval' => 5,
-            'last_polled_at' => 0,
-        ];
-
-        $flows = $this->stateStore->deviceFlows();
-        $flows[$deviceCode] = $flow;
-        $this->stateStore->saveDeviceFlows($flows);
+        $this->deviceFlowRepository->save(new AuthDeviceFlow(
+            $deviceCode,
+            $userCode,
+            $clientKind,
+            DeviceFlowStatus::PENDING,
+            $now,
+            $now + 600,
+            5,
+            0,
+            null,
+            null,
+        ));
 
         return [
             'device_code' => $deviceCode,
@@ -50,23 +48,31 @@ final class AuthClientDeviceFlowService
      */
     public function pollDeviceFlow(string $deviceCode): ?array
     {
-        $flows = $this->stateStore->deviceFlows();
-        $flow = $flows[$deviceCode] ?? null;
-        if (!is_array($flow)) {
+        $flow = $this->deviceFlowRepository->findByDeviceCode($deviceCode);
+        if (!$flow instanceof AuthDeviceFlow) {
             return null;
         }
 
         $now = time();
-        if (($flow['expires_at'] ?? 0) < $now) {
-            $flow['status'] = DeviceFlowStatus::EXPIRED;
-            $flows[$deviceCode] = $flow;
-            $this->stateStore->saveDeviceFlows($flows);
+        if ($flow->expiresAt < $now) {
+            $this->deviceFlowRepository->save(new AuthDeviceFlow(
+                $flow->deviceCode,
+                $flow->userCode,
+                $flow->clientKind,
+                DeviceFlowStatus::EXPIRED,
+                $flow->createdAt,
+                $flow->expiresAt,
+                $flow->intervalSeconds,
+                $flow->lastPolledAt,
+                $flow->approvedClientId,
+                $flow->approvedSecretKey,
+            ));
 
             return ['status' => DeviceFlowStatus::EXPIRED];
         }
 
-        $interval = (int) ($flow['interval'] ?? 5);
-        $lastPolledAt = (int) ($flow['last_polled_at'] ?? 0);
+        $interval = $flow->intervalSeconds;
+        $lastPolledAt = $flow->lastPolledAt;
         if ($lastPolledAt > 0 && ($now - $lastPolledAt) < $interval) {
             return [
                 'status' => DeviceFlowStatus::PENDING,
@@ -75,14 +81,13 @@ final class AuthClientDeviceFlowService
             ];
         }
 
-        $status = (string) ($flow['status'] ?? DeviceFlowStatus::PENDING);
+        $status = $flow->status;
         if ($status === DeviceFlowStatus::APPROVED) {
-            $clientId = (string) ($flow['approved_client_id'] ?? '');
-            $clientKind = (string) ($flow['client_kind'] ?? '');
-            $secretKey = (string) ($flow['approved_secret_key'] ?? '');
+            $clientId = (string) ($flow->approvedClientId ?? '');
+            $clientKind = $flow->clientKind;
+            $secretKey = (string) ($flow->approvedSecretKey ?? '');
             if ($clientId !== '' && $clientKind !== '' && $secretKey !== '') {
-                unset($flows[$deviceCode]);
-                $this->stateStore->saveDeviceFlows($flows);
+                $this->deviceFlowRepository->delete($deviceCode);
 
                 return [
                     'status' => DeviceFlowStatus::APPROVED,
@@ -93,9 +98,18 @@ final class AuthClientDeviceFlowService
             }
         }
 
-        $flow['last_polled_at'] = $now;
-        $flows[$deviceCode] = $flow;
-        $this->stateStore->saveDeviceFlows($flows);
+        $this->deviceFlowRepository->save(new AuthDeviceFlow(
+            $flow->deviceCode,
+            $flow->userCode,
+            $flow->clientKind,
+            $flow->status,
+            $flow->createdAt,
+            $flow->expiresAt,
+            $flow->intervalSeconds,
+            $now,
+            $flow->approvedClientId,
+            $flow->approvedSecretKey,
+        ));
 
         return ['status' => $status];
     }
@@ -105,20 +119,28 @@ final class AuthClientDeviceFlowService
      */
     public function cancelDeviceFlow(string $deviceCode): ?array
     {
-        $flows = $this->stateStore->deviceFlows();
-        $flow = $flows[$deviceCode] ?? null;
-        if (!is_array($flow)) {
+        $flow = $this->deviceFlowRepository->findByDeviceCode($deviceCode);
+        if (!$flow instanceof AuthDeviceFlow) {
             return null;
         }
 
         $now = time();
-        if (($flow['expires_at'] ?? 0) < $now) {
+        if ($flow->expiresAt < $now) {
             return ['status' => DeviceFlowStatus::EXPIRED];
         }
 
-        $flow['status'] = DeviceFlowStatus::DENIED;
-        $flows[$deviceCode] = $flow;
-        $this->stateStore->saveDeviceFlows($flows);
+        $this->deviceFlowRepository->save(new AuthDeviceFlow(
+            $flow->deviceCode,
+            $flow->userCode,
+            $flow->clientKind,
+            DeviceFlowStatus::DENIED,
+            $flow->createdAt,
+            $flow->expiresAt,
+            $flow->intervalSeconds,
+            $flow->lastPolledAt,
+            $flow->approvedClientId,
+            $flow->approvedSecretKey,
+        ));
 
         return ['status' => DeviceFlowStatus::DENIED];
     }
@@ -133,52 +155,54 @@ final class AuthClientDeviceFlowService
             return null;
         }
 
-        $flows = $this->stateStore->deviceFlows();
-        $matchedKey = null;
-        $matchedFlow = null;
-        foreach ($flows as $deviceCode => $flow) {
-            if (!is_array($flow)) {
-                continue;
-            }
-            if (strtoupper((string) ($flow['user_code'] ?? '')) !== $normalizedUserCode) {
-                continue;
-            }
-            $matchedKey = is_string($deviceCode) ? $deviceCode : null;
-            $matchedFlow = $flow;
-            break;
-        }
-
-        if ($matchedKey === null || !is_array($matchedFlow)) {
+        $matchedFlow = $this->deviceFlowRepository->findByUserCode($normalizedUserCode);
+        if (!$matchedFlow instanceof AuthDeviceFlow) {
             return null;
         }
 
         $now = time();
-        if (($matchedFlow['expires_at'] ?? 0) < $now) {
-            $matchedFlow['status'] = DeviceFlowStatus::EXPIRED;
-            $flows[$matchedKey] = $matchedFlow;
-            $this->stateStore->saveDeviceFlows($flows);
+        if ($matchedFlow->expiresAt < $now) {
+            $this->deviceFlowRepository->save(new AuthDeviceFlow(
+                $matchedFlow->deviceCode,
+                $matchedFlow->userCode,
+                $matchedFlow->clientKind,
+                DeviceFlowStatus::EXPIRED,
+                $matchedFlow->createdAt,
+                $matchedFlow->expiresAt,
+                $matchedFlow->intervalSeconds,
+                $matchedFlow->lastPolledAt,
+                $matchedFlow->approvedClientId,
+                $matchedFlow->approvedSecretKey,
+            ));
 
             return ['status' => DeviceFlowStatus::EXPIRED];
         }
 
-        if (($matchedFlow['status'] ?? '') === DeviceFlowStatus::DENIED) {
+        if ($matchedFlow->status === DeviceFlowStatus::DENIED) {
             return ['status' => DeviceFlowStatus::DENIED];
         }
-        if (($matchedFlow['status'] ?? '') === DeviceFlowStatus::APPROVED) {
+        if ($matchedFlow->status === DeviceFlowStatus::APPROVED) {
             return ['status' => DeviceFlowStatus::APPROVED];
         }
 
-        $clientKind = (string) ($matchedFlow['client_kind'] ?? '');
+        $clientKind = $matchedFlow->clientKind;
         $credentials = $this->provisioningService->provisionClient($clientKind);
         if ($credentials === null) {
             return null;
         }
 
-        $matchedFlow['status'] = DeviceFlowStatus::APPROVED;
-        $matchedFlow['approved_client_id'] = $credentials['client_id'];
-        $matchedFlow['approved_secret_key'] = $credentials['secret_key'];
-        $flows[$matchedKey] = $matchedFlow;
-        $this->stateStore->saveDeviceFlows($flows);
+        $this->deviceFlowRepository->save(new AuthDeviceFlow(
+            $matchedFlow->deviceCode,
+            $matchedFlow->userCode,
+            $matchedFlow->clientKind,
+            DeviceFlowStatus::APPROVED,
+            $matchedFlow->createdAt,
+            $matchedFlow->expiresAt,
+            $matchedFlow->intervalSeconds,
+            $matchedFlow->lastPolledAt,
+            (string) $credentials['client_id'],
+            (string) $credentials['secret_key'],
+        ));
 
         return ['status' => DeviceFlowStatus::APPROVED];
     }

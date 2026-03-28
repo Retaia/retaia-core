@@ -2,8 +2,9 @@
 
 namespace App\Tests\Unit\Security;
 
-use App\Auth\AuthClientStateStore;
 use App\Auth\ClientAccessTokenResolver;
+use App\Auth\TechnicalAccessTokenRecord;
+use App\Auth\TechnicalAccessTokenRepository;
 use App\Auth\UserAccessTokenService;
 use App\Auth\UserAuthSessionRepository;
 use App\Domain\AuthClient\ClientKind;
@@ -13,7 +14,6 @@ use App\Security\ApiClientPrincipal;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Security\Core\Exception\CustomUserMessageAuthenticationException;
@@ -36,10 +36,9 @@ final class ApiBearerAuthenticatorTest extends TestCase
 
     public function testAuthenticateBuildsPassportForUserToken(): void
     {
-        $cache = new ArrayAdapter();
-        $userTokens = new UserAccessTokenService(new UserAuthSessionRepository($this->connection()), 'test-secret', 3600);
-        $stateStore = new AuthClientStateStore($cache);
-        $authenticator = $this->authenticator($userTokens, new ClientAccessTokenResolver($stateStore));
+        $connection = $this->connection();
+        $userTokens = new UserAccessTokenService(new UserAuthSessionRepository($connection), 'test-secret', 3600);
+        $authenticator = $this->authenticator($userTokens, new ClientAccessTokenResolver(new TechnicalAccessTokenRepository($connection)));
         $user = new User('user-1', 'user@example.test', 'hash');
 
         $issued = $userTokens->issue($user, 'ui-web', ClientKind::UI_WEB);
@@ -54,18 +53,13 @@ final class ApiBearerAuthenticatorTest extends TestCase
 
     public function testAuthenticateBuildsPassportForClientToken(): void
     {
-        $cache = new ArrayAdapter();
-        $stateStore = new AuthClientStateStore($cache);
-        $stateStore->saveActiveTokens([
-            'agent-client' => [
-                'access_token' => 'client-token',
-                'client_kind' => ClientKind::AGENT,
-            ],
-        ]);
+        $connection = $this->connection();
+        $tokenRepository = new TechnicalAccessTokenRepository($connection);
+        $tokenRepository->save(new TechnicalAccessTokenRecord('agent-client', 'client-token', ClientKind::AGENT, 1_700_000_000));
 
         $authenticator = $this->authenticator(
-            new UserAccessTokenService(new UserAuthSessionRepository($this->connection()), 'test-secret', 3600),
-            new ClientAccessTokenResolver($stateStore)
+            new UserAccessTokenService(new UserAuthSessionRepository($connection), 'test-secret', 3600),
+            new ClientAccessTokenResolver($tokenRepository)
         );
 
         $passport = $authenticator->authenticate($this->request('/api/v1/jobs/claim', 'Bearer client-token'));
@@ -119,11 +113,11 @@ final class ApiBearerAuthenticatorTest extends TestCase
         ?ClientAccessTokenResolver $clientResolver = null,
         ?TranslatorInterface $translator = null,
     ): ApiBearerAuthenticator {
-        $cache = new ArrayAdapter();
+        $connection = $this->connection();
 
         return new ApiBearerAuthenticator(
-            $userTokens ?? new UserAccessTokenService(new UserAuthSessionRepository($this->connection()), 'test-secret', 3600),
-            $clientResolver ?? new ClientAccessTokenResolver(new AuthClientStateStore($cache)),
+            $userTokens ?? new UserAccessTokenService(new UserAuthSessionRepository($connection), 'test-secret', 3600),
+            $clientResolver ?? new ClientAccessTokenResolver(new TechnicalAccessTokenRepository($connection)),
             $translator ?? $this->createStub(TranslatorInterface::class),
         );
     }
@@ -134,6 +128,8 @@ final class ApiBearerAuthenticatorTest extends TestCase
         $connection->executeStatement('CREATE TABLE user_auth_session (session_id VARCHAR(32) PRIMARY KEY NOT NULL, access_token CLOB NOT NULL, refresh_token VARCHAR(255) NOT NULL, access_expires_at INTEGER NOT NULL, refresh_expires_at INTEGER NOT NULL, user_id VARCHAR(32) NOT NULL, email VARCHAR(180) NOT NULL, client_id VARCHAR(64) NOT NULL, client_kind VARCHAR(32) NOT NULL, created_at INTEGER NOT NULL, last_used_at INTEGER NOT NULL)');
         $connection->executeStatement('CREATE UNIQUE INDEX uniq_user_auth_session_refresh_token ON user_auth_session (refresh_token)');
         $connection->executeStatement('CREATE INDEX idx_user_auth_session_user_id ON user_auth_session (user_id)');
+        $connection->executeStatement('CREATE TABLE auth_client_access_token (client_id VARCHAR(64) PRIMARY KEY NOT NULL, access_token CLOB NOT NULL, client_kind VARCHAR(32) NOT NULL, issued_at INTEGER NOT NULL)');
+        $connection->executeStatement('CREATE UNIQUE INDEX uniq_auth_client_access_token_token ON auth_client_access_token (access_token)');
 
         return $connection;
     }
