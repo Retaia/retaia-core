@@ -43,6 +43,7 @@ services:
     App\Asset\Repository\AssetRepositoryInterface: '@App\Asset\Repository\AssetRepository'
     App\Derived\DerivedUploadSessionRepositoryInterface: '@App\Derived\DerivedUploadSessionRepository'
     App\Derived\DerivedFileRepositoryInterface: '@App\Derived\DerivedFileRepository'
+    App\Workflow\BatchMoveReportRepositoryInterface: '@App\Workflow\BatchMoveReportRepository'
     App\Auth\UserAuthSessionRepositoryInterface: '@App\Auth\UserAuthSessionRepository'
     App\Auth\AuthClientRegistryRepositoryInterface: '@App\Auth\AuthClientRegistryRepository'
     App\Auth\TechnicalAccessTokenRepositoryInterface: '@App\Auth\TechnicalAccessTokenRepository'

@@ -9,6 +9,8 @@ use App\Asset\Service\StateConflictException;
 use App\Derived\DerivedFileRepositoryInterface;
 use App\Entity\Asset;
 use App\Lock\Repository\OperationLockRepository;
+use App\Workflow\BatchMoveReportRepositoryInterface;
+use App\Workflow\Service\AssetPurgeStorageService;
 use App\Workflow\Service\BatchWorkflowService;
 use Doctrine\DBAL\Connection;
 use PHPUnit\Framework\TestCase;
@@ -24,7 +26,14 @@ final class BatchWorkflowServiceTest extends TestCase
         $assets = $this->createMock(AssetRepositoryInterface::class);
         $assets->method('listAssets')->willReturn([$assetKeep, $assetReject, $assetIgnored]);
 
-        $service = new BatchWorkflowService($assets, new AssetStateMachine(), $this->createMock(Connection::class), $this->locks(false), $this->derivedFiles());
+        $service = new BatchWorkflowService(
+            $assets,
+            new AssetStateMachine(),
+            $this->createMock(Connection::class),
+            $this->locks(false),
+            $this->batchMoveReports(),
+            $this->purgeStorage()
+        );
         $preview = $service->previewMoves();
 
         self::assertSame(2, $preview['eligible_count']);
@@ -48,13 +57,22 @@ final class BatchWorkflowServiceTest extends TestCase
             }
         );
 
-        $connection = $this->createMock(Connection::class);
-        $connection->expects(self::once())->method('insert')->with(
-            'batch_move_report',
-            self::callback(static fn (array $payload): bool => isset($payload['batch_id'], $payload['payload']))
-        );
+        $reports = $this->createMock(BatchMoveReportRepositoryInterface::class);
+        $reports->expects(self::once())
+            ->method('store')
+            ->with(
+                self::isType('string'),
+                self::callback(static fn (array $payload): bool => isset($payload['batch_id'], $payload['success_count'], $payload['error_count']))
+            );
 
-        $service = new BatchWorkflowService($assets, new AssetStateMachine(), $connection, $this->locks(false), $this->derivedFiles());
+        $service = new BatchWorkflowService(
+            $assets,
+            new AssetStateMachine(),
+            $this->createMock(Connection::class),
+            $this->locks(false),
+            $reports,
+            $this->purgeStorage()
+        );
         $result = $service->applyMoves();
 
         self::assertSame(1, $result['success_count']);
@@ -76,7 +94,14 @@ final class BatchWorkflowServiceTest extends TestCase
         });
         $assets->expects(self::once())->method('save')->with($eligible);
 
-        $service = new BatchWorkflowService($assets, new AssetStateMachine(), $this->createMock(Connection::class), $this->locks(false), $this->derivedFiles());
+        $service = new BatchWorkflowService(
+            $assets,
+            new AssetStateMachine(),
+            $this->createMock(Connection::class),
+            $this->locks(false),
+            $this->batchMoveReports(),
+            $this->purgeStorage()
+        );
         $preview = $service->previewDecisions(['a-1', 'a-2', 'a-3'], 'keep');
         $apply = $service->applyDecisions(['a-1', 'a-2'], 'keep');
 
@@ -89,15 +114,15 @@ final class BatchWorkflowServiceTest extends TestCase
     public function testGetBatchReportAndPurgePaths(): void
     {
         $assets = $this->createMock(AssetRepositoryInterface::class);
-        $connection = $this->createMock(Connection::class);
-
-        $connection->expects(self::exactly(3))
-            ->method('fetchAssociative')
+        $reports = $this->createMock(BatchMoveReportRepositoryInterface::class);
+        $reports->expects(self::exactly(3))
+            ->method('find')
             ->willReturnOnConsecutiveCalls(
-                ['payload' => '{"batch_id":"b-1"}'],
-                ['payload' => 'not-json'],
-                false
+                ['batch_id' => 'b-1'],
+                null,
+                null
             );
+        $connection = $this->createMock(Connection::class);
         $connection->method('fetchOne')->willReturn(0);
 
         $rejected = $this->asset('a-r', 'r.mp4', AssetState::REJECTED);
@@ -109,7 +134,14 @@ final class BatchWorkflowServiceTest extends TestCase
         $derivedFiles->expects(self::once())->method('listStoragePathsByAsset')->with('a-r')->willReturn([]);
         $derivedFiles->expects(self::once())->method('deleteByAsset')->with('a-r');
 
-        $service = new BatchWorkflowService($assets, new AssetStateMachine(), $connection, $this->locks(false), $derivedFiles);
+        $service = new BatchWorkflowService(
+            $assets,
+            new AssetStateMachine(),
+            $connection,
+            $this->locks(false),
+            $reports,
+            new AssetPurgeStorageService($derivedFiles)
+        );
 
         self::assertSame(['batch_id' => 'b-1'], $service->getBatchReport('b-1'));
         self::assertNull($service->getBatchReport('b-2'));
@@ -152,5 +184,15 @@ final class BatchWorkflowServiceTest extends TestCase
         $derivedFiles->method('listStoragePathsByAsset')->willReturn([]);
 
         return $derivedFiles;
+    }
+
+    private function batchMoveReports(): BatchMoveReportRepositoryInterface
+    {
+        return $this->createMock(BatchMoveReportRepositoryInterface::class);
+    }
+
+    private function purgeStorage(): AssetPurgeStorageService
+    {
+        return new AssetPurgeStorageService($this->derivedFiles());
     }
 }

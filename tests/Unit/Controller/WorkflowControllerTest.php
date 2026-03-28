@@ -27,6 +27,8 @@ use App\Entity\Asset;
 use App\Entity\User;
 use App\Infrastructure\Workflow\WorkflowGateway;
 use App\Lock\Repository\OperationLockRepository;
+use App\Workflow\BatchMoveReportRepositoryInterface;
+use App\Workflow\Service\AssetPurgeStorageService;
 use App\Workflow\Service\BatchWorkflowService;
 use Doctrine\DBAL\Connection;
 use PHPUnit\Framework\TestCase;
@@ -40,7 +42,7 @@ final class WorkflowControllerTest extends TestCase
     {
         $repo = new InMemoryAssetRepo([$this->asset('a2', AssetState::REJECTED)]);
         $connection = $this->createMock(Connection::class);
-        $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false), $this->derivedFiles());
+        $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false), $this->batchMoveReports(), $this->purgeStorage());
         $controller = $this->controller($workflows, $repo, $this->idempotencyPassthrough(), $this->translator(), true, null, false);
 
         $request = Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{"asset_uuids":["a2"],"confirm":true}');
@@ -53,7 +55,7 @@ final class WorkflowControllerTest extends TestCase
     {
         $repo = new InMemoryAssetRepo([$this->asset('a2', AssetState::REJECTED)]);
         $connection = $this->createMock(Connection::class);
-        $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false), $this->derivedFiles());
+        $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false), $this->batchMoveReports(), $this->purgeStorage());
         $controller = $this->controller($workflows, $repo, $this->idempotencyPassthrough(), $this->translator(), false, null, false);
 
         $request = Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{"asset_uuids":[],"confirm":false}');
@@ -71,7 +73,7 @@ final class WorkflowControllerTest extends TestCase
         $connection->method('fetchOne')->willReturn(0);
         $derivedFiles = $this->derivedFiles();
         $derivedFiles->method('listStoragePathsByAsset')->willReturn([]);
-        $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false), $derivedFiles);
+        $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false), $this->batchMoveReports(), new AssetPurgeStorageService($derivedFiles));
         $controller = $this->controller($workflows, $repo, $this->idempotencyPassthrough(), $this->translator(), false, null, false);
 
         $request = Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{"asset_uuids":["a2","a3"],"confirm":true}');
@@ -94,7 +96,7 @@ final class WorkflowControllerTest extends TestCase
         $connection->method('fetchOne')->willReturn(0);
         $derivedFiles = $this->derivedFiles();
         $derivedFiles->method('listStoragePathsByAsset')->willReturn([]);
-        $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false), $derivedFiles);
+        $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false), $this->batchMoveReports(), new AssetPurgeStorageService($derivedFiles));
         $idempotency = $this->idempotencyPassthrough();
         $translator = $this->translator();
         $controller = $this->controller($workflows, $repo, $idempotency, $translator, false, null, false);
@@ -161,6 +163,16 @@ final class WorkflowControllerTest extends TestCase
         $derivedFiles->method('listStoragePathsByAsset')->willReturn([]);
 
         return $derivedFiles;
+    }
+
+    private function batchMoveReports(): BatchMoveReportRepositoryInterface
+    {
+        return $this->createMock(BatchMoveReportRepositoryInterface::class);
+    }
+
+    private function purgeStorage(): AssetPurgeStorageService
+    {
+        return new AssetPurgeStorageService($this->derivedFiles());
     }
 
     private function controller(
