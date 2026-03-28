@@ -4,39 +4,38 @@ namespace App\Tests\Unit\User;
 
 use App\User\Service\TwoFactorSecretCipher;
 use App\User\Service\TwoFactorService;
+use App\User\UserTwoFactorStateRepository;
+use Doctrine\DBAL\DriverManager;
 use OTPHP\TOTP;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Cache\Adapter\ArrayAdapter;
 
 final class TwoFactorServiceSecurityTest extends TestCase
 {
     public function testSecretsAreEncryptedAtRestAndRecoveryCodesUseArgon2id(): void
     {
-        $cache = new ArrayAdapter();
-        $service = new TwoFactorService($cache, $this->cipher('v2'));
+        $repository = $this->repository();
+        $service = new TwoFactorService($repository, $this->cipher('v2'));
 
         $setup = $service->setup('u-1', 'user@retaia.local');
         $secret = (string) ($setup['secret'] ?? '');
         self::assertNotSame('', $secret);
 
-        $stateAfterSetup = $cache->getItem($this->cacheKey('u-1'))->get();
-        self::assertIsArray($stateAfterSetup);
-        self::assertArrayHasKey('pending_secret_encrypted', $stateAfterSetup);
-        self::assertArrayNotHasKey('pending_secret', $stateAfterSetup);
-        self::assertStringNotContainsString($secret, (string) $stateAfterSetup['pending_secret_encrypted']);
+        $stateAfterSetup = $repository->findByUserId('u-1');
+        self::assertNotNull($stateAfterSetup);
+        self::assertNotNull($stateAfterSetup->pendingSecretEncrypted);
+        self::assertStringNotContainsString($secret, $stateAfterSetup->pendingSecretEncrypted);
 
         self::assertTrue($service->enable('u-1', TOTP::createFromSecret($secret)->now()));
-        $stateAfterEnable = $cache->getItem($this->cacheKey('u-1'))->get();
-        self::assertIsArray($stateAfterEnable);
-        self::assertArrayHasKey('secret_encrypted', $stateAfterEnable);
-        self::assertArrayNotHasKey('secret', $stateAfterEnable);
-        self::assertStringNotContainsString($secret, (string) $stateAfterEnable['secret_encrypted']);
+        $stateAfterEnable = $repository->findByUserId('u-1');
+        self::assertNotNull($stateAfterEnable);
+        self::assertNotNull($stateAfterEnable->secretEncrypted);
+        self::assertStringNotContainsString($secret, $stateAfterEnable->secretEncrypted);
 
         $codes = $service->regenerateRecoveryCodes('u-1');
         self::assertCount(10, $codes);
-        $stateAfterCodes = $cache->getItem($this->cacheKey('u-1'))->get();
-        self::assertIsArray($stateAfterCodes);
-        $hashes = (array) ($stateAfterCodes['recovery_code_hashes'] ?? []);
+        $stateAfterCodes = $repository->findByUserId('u-1');
+        self::assertNotNull($stateAfterCodes);
+        $hashes = $stateAfterCodes->recoveryCodeHashes;
         self::assertCount(10, $hashes);
         foreach ($hashes as $hash) {
             self::assertIsString($hash);
@@ -46,8 +45,8 @@ final class TwoFactorServiceSecurityTest extends TestCase
 
     public function testRecoveryCodeIsOneShotAndKeyRotationReencryptsSecret(): void
     {
-        $cache = new ArrayAdapter();
-        $serviceV1 = new TwoFactorService($cache, $this->cipher('v1'));
+        $repository = $this->repository();
+        $serviceV1 = new TwoFactorService($repository, $this->cipher('v1'));
 
         $setup = $serviceV1->setup('u-2', 'user@retaia.local');
         $secret = (string) ($setup['secret'] ?? '');
@@ -59,16 +58,16 @@ final class TwoFactorServiceSecurityTest extends TestCase
         self::assertTrue($serviceV1->consumeRecoveryCode('u-2', $code));
         self::assertFalse($serviceV1->consumeRecoveryCode('u-2', $code));
 
-        $stateBeforeRotation = $cache->getItem($this->cacheKey('u-2'))->get();
-        self::assertIsArray($stateBeforeRotation);
-        self::assertStringStartsWith('v1:', (string) ($stateBeforeRotation['secret_encrypted'] ?? ''));
+        $stateBeforeRotation = $repository->findByUserId('u-2');
+        self::assertNotNull($stateBeforeRotation);
+        self::assertStringStartsWith('v1:', (string) $stateBeforeRotation->secretEncrypted);
 
-        $serviceV2 = new TwoFactorService($cache, $this->cipher('v2'));
+        $serviceV2 = new TwoFactorService($repository, $this->cipher('v2'));
         self::assertTrue($serviceV2->verifyLoginOtp('u-2', TOTP::createFromSecret($secret)->now()));
 
-        $stateAfterRotation = $cache->getItem($this->cacheKey('u-2'))->get();
-        self::assertIsArray($stateAfterRotation);
-        self::assertStringStartsWith('v2:', (string) ($stateAfterRotation['secret_encrypted'] ?? ''));
+        $stateAfterRotation = $repository->findByUserId('u-2');
+        self::assertNotNull($stateAfterRotation);
+        self::assertStringStartsWith('v2:', (string) $stateAfterRotation->secretEncrypted);
     }
 
     private function cipher(string $activeVersion): TwoFactorSecretCipher
@@ -79,8 +78,11 @@ final class TwoFactorServiceSecurityTest extends TestCase
         );
     }
 
-    private function cacheKey(string $userId): string
+    private function repository(): UserTwoFactorStateRepository
     {
-        return 'auth_2fa_'.sha1($userId);
+        $connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]);
+        $connection->executeStatement('CREATE TABLE user_two_factor_state (user_id VARCHAR(32) PRIMARY KEY NOT NULL, enabled BOOLEAN NOT NULL, pending_secret_encrypted CLOB DEFAULT NULL, secret_encrypted CLOB DEFAULT NULL, recovery_code_hashes CLOB NOT NULL, legacy_recovery_code_sha256 CLOB NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)');
+
+        return new UserTwoFactorStateRepository($connection);
     }
 }

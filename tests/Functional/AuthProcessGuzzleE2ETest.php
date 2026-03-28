@@ -43,7 +43,9 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
         /** @var Connection $connection */
         $connection = static::getContainer()->get(Connection::class);
         $this->ensureUserAuthSessionTable($connection);
+        $this->ensureUserTwoFactorStateTable($connection);
         $connection->executeStatement('DELETE FROM user_auth_session');
+        $connection->executeStatement('DELETE FROM user_two_factor_state');
     }
 
     public function testSpecLoginMeLogoutBearerProcess(): void
@@ -1315,6 +1317,8 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
         /** @var Connection $connection */
         $connection = static::getContainer()->get(Connection::class);
         $this->ensureUserAuthSessionTable($connection);
+        $this->ensureUserTwoFactorStateTable($connection);
+        $connection->executeStatement('DELETE FROM user_two_factor_state');
         /** @var CacheItemPoolInterface $cache */
         $cache = static::getContainer()->get('cache.app');
         $cache->clear();

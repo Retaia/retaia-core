@@ -6,6 +6,11 @@ use Doctrine\DBAL\Connection;
 
 trait FunctionalSchemaTrait
 {
+    protected function ensureUserTwoFactorStateTable(Connection $connection): void
+    {
+        $connection->executeStatement('CREATE TABLE IF NOT EXISTS user_two_factor_state (user_id VARCHAR(32) PRIMARY KEY NOT NULL, enabled BOOLEAN NOT NULL, pending_secret_encrypted CLOB DEFAULT NULL, secret_encrypted CLOB DEFAULT NULL, recovery_code_hashes CLOB NOT NULL, legacy_recovery_code_sha256 CLOB NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)');
+    }
+
     protected function ensureUserAuthSessionTable(Connection $connection): void
     {
         $connection->executeStatement('CREATE TABLE IF NOT EXISTS user_auth_session (session_id VARCHAR(32) PRIMARY KEY NOT NULL, access_token CLOB NOT NULL, refresh_token VARCHAR(255) NOT NULL, access_expires_at INTEGER NOT NULL, refresh_expires_at INTEGER NOT NULL, user_id VARCHAR(32) NOT NULL, email VARCHAR(180) NOT NULL, client_id VARCHAR(64) NOT NULL, client_kind VARCHAR(32) NOT NULL, created_at INTEGER NOT NULL, last_used_at INTEGER NOT NULL)');

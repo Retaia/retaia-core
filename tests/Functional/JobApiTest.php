@@ -661,7 +661,9 @@ final class JobApiTest extends WebTestCase
         /** @var Connection $connection */
         $connection = self::getContainer()->get(Connection::class);
         $this->ensureUserAuthSessionTable($connection);
+        $this->ensureUserTwoFactorStateTable($connection);
         $connection->executeStatement('DELETE FROM user_auth_session');
+        $connection->executeStatement('DELETE FROM user_two_factor_state');
         $cache = self::getContainer()->get('cache.app');
         if (method_exists($cache, 'clear')) {
             $cache->clear();

@@ -1945,7 +1945,9 @@ final class ApiAuthFlowTest extends WebTestCase
         $client->disableReboot();
         $connection = static::getContainer()->get(Connection::class);
         $this->ensureUserAuthSessionTable($connection);
+        $this->ensureUserTwoFactorStateTable($connection);
         $connection->executeStatement('DELETE FROM user_auth_session');
+        $connection->executeStatement('DELETE FROM user_two_factor_state');
         $this->ensureAgentRuntimeTable($connection);
         /** @var CacheItemPoolInterface $cache */
         $cache = static::getContainer()->get('cache.app');

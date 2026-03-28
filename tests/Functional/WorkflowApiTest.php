@@ -700,15 +700,13 @@ final class WorkflowApiTest extends WebTestCase
     {
         /** @var Connection $connection */
         $connection = static::getContainer()->get(Connection::class);
+        $this->ensureUserTwoFactorStateTable($connection);
         $userId = $connection->fetchOne('SELECT id FROM app_user WHERE email = :email', ['email' => $email]);
         if (!is_string($userId) || $userId === '') {
             return;
         }
 
-        $cache = static::getContainer()->get('cache.app');
-        if (method_exists($cache, 'deleteItem')) {
-            $cache->deleteItem('auth_2fa_'.sha1($userId));
-        }
+        $connection->delete('user_two_factor_state', ['user_id' => $userId]);
     }
 
     private function ensureWorkflowSchema(): void

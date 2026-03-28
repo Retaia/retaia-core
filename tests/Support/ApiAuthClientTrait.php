@@ -15,6 +15,7 @@ trait ApiAuthClientTrait
         /** @var Connection $connection */
         $connection = static::getContainer()->get(Connection::class);
         $this->ensureUserAuthSessionTable($connection);
+        $this->ensureUserTwoFactorStateTable($connection);
 
         $client->jsonRequest('POST', '/api/v1/auth/login', [
             'email' => $email,
@@ -88,6 +89,7 @@ trait ApiAuthClientTrait
         /** @var Connection $connection */
         $connection = static::getContainer()->get(Connection::class);
         $this->ensureUserAuthSessionTable($connection);
+        $this->ensureUserTwoFactorStateTable($connection);
         $this->ensureAgentRuntimeTable($connection);
     }
 }
