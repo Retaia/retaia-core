@@ -102,7 +102,7 @@ final class ExistingProxyAttachmentServiceTest extends TestCase
         ]);
 
         self::assertTrue((bool) ($asset->getFields()['proxy_done'] ?? false));
-        self::assertContains('.derived/asset-1/proxy.jpg', $asset->getFields()['paths']['sidecars_relative'] ?? []);
+        self::assertSame([], $asset->getFields()['paths']['sidecars_relative'] ?? []);
         self::assertStringContainsString('/api/v1/assets/asset-1/derived/proxy_photo', (string) ($asset->getFields()['derived']['proxy_photo_url'] ?? ''));
     }
 

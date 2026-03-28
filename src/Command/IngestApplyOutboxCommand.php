@@ -81,16 +81,14 @@ final class IngestApplyOutboxCommand extends Command
         if ($storage->fileExists($fromRelative)) {
             [$finalRelative] = $this->resolveAvailableTarget($storage, $targetFolder, $targetRelative, $asset->getUuid());
             $storage->move($fromRelative, $finalRelative);
-            $remap = $this->moveDerivedFilesForAsset($storage, $asset->getUuid(), $targetFolder);
-            $this->applyDerivedPathRemap($asset, $remap);
+            $this->moveDerivedFilesForAsset($storage, $asset->getUuid(), $targetFolder);
             $this->persistPathUpdate($asset, $fromRelative, $finalRelative);
 
             return 1;
         }
 
         if ($storage->fileExists($targetRelative)) {
-            $remap = $this->moveDerivedFilesForAsset($storage, $asset->getUuid(), $targetFolder);
-            $this->applyDerivedPathRemap($asset, $remap);
+            $this->moveDerivedFilesForAsset($storage, $asset->getUuid(), $targetFolder);
             $this->persistPathUpdate($asset, $fromRelative, $targetRelative);
 
             return 0;
@@ -172,49 +170,6 @@ final class IngestApplyOutboxCommand extends Command
         }
 
         return $remap;
-    }
-
-    /**
-     * @param array<string, string> $remap
-     */
-    private function applyDerivedPathRemap(Asset $asset, array $remap): void
-    {
-        if ($remap === []) {
-            return;
-        }
-
-        $fields = $asset->getFields();
-
-        $paths = is_array($fields['paths'] ?? null) ? $fields['paths'] : [];
-        $sidecars = is_array($paths['sidecars_relative'] ?? null) ? $paths['sidecars_relative'] : [];
-        $mappedSidecars = [];
-        foreach ($sidecars as $sidecar) {
-            $normalized = ltrim((string) $sidecar, '/');
-            $mappedSidecars[] = $remap[$normalized] ?? $normalized;
-        }
-        $paths['sidecars_relative'] = array_values(array_unique(array_filter(array_map('strval', $mappedSidecars), static fn (string $v): bool => $v !== '')));
-
-        $derived = is_array($fields['derived'] ?? null) ? $fields['derived'] : [];
-        $manifest = is_array($derived['derived_manifest'] ?? null) ? $derived['derived_manifest'] : [];
-        foreach ($manifest as $index => $item) {
-            if (!is_array($item)) {
-                continue;
-            }
-            $ref = ltrim((string) ($item['ref'] ?? ''), '/');
-            if ($ref === '') {
-                continue;
-            }
-            if (isset($remap[$ref])) {
-                $item['ref'] = $remap[$ref];
-                $manifest[$index] = $item;
-            }
-        }
-        $derived['derived_manifest'] = $manifest;
-
-        $fields['paths'] = $paths;
-        $fields['derived'] = $derived;
-        $asset->setFields($fields);
-        $this->assets->save($asset);
     }
 
     private function isSafeRelativePath(string $path): bool

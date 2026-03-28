@@ -5,43 +5,6 @@ Spec baseline: `specs/api/openapi/v1.yaml` from `retaia-docs@b6eb0447cf3c9d3bf3d
 
 ## Findings
 
-### P1. Derived files are still modeled through two concurrent links: repository rows and `derived_manifest`
-
-- Representative locations:
-  - [`src/Derived/DerivedFileRepository.php:60`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Derived/DerivedFileRepository.php:60)
-  - [`src/Ingest/Service/ExistingProxyAttachmentService.php:78`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Service/ExistingProxyAttachmentService.php:78)
-  - [`src/Command/IngestApplyOutboxCommand.php:194`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Command/IngestApplyOutboxCommand.php:194)
-  - [`src/Application/Job/SubmitJobHandler.php:236`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Application/Job/SubmitJobHandler.php:236)
-- Impact:
-  - the canonical derived relation already exists in `asset_derived_file`
-  - the same relation is still duplicated in `fields['derived']['derived_manifest']`
-  - ingest, outbox moves, and job submit patches update both representations, so they can drift independently
-- Why this is below the target quality bar:
-  - derived files must have a single persisted business link
-  - asset fields should not duplicate repository state when that state already has its own table and repository
-- Target state:
-  - keep derived linkage only in `asset_derived_file`
-  - build any manifest/view payload as a projection
-  - remove runtime writes to `fields['derived']['derived_manifest']`
-
-### P2. Sidecar lists currently mix two different concepts and therefore keep a secondary concurrent link for derived files
-
-- Representative locations:
-  - [`src/Command/IngestEnqueueStableCommand.php:269`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Command/IngestEnqueueStableCommand.php:269)
-  - [`src/Ingest/Service/ExistingProxyAttachmentService.php:68`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Service/ExistingProxyAttachmentService.php:68)
-  - [`src/Command/IngestApplyOutboxCommand.php:185`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Command/IngestApplyOutboxCommand.php:185)
-- Impact:
-  - `paths.sidecars_relative` contains both true auxiliary sidecars and materialized derived/proxy files
-  - the same derived refs therefore exist in both sidecar lists and `asset_derived_file`
-  - this blurs the domain boundary between “sidecar attached to the original” and “derived output generated/materialized for the asset”
-- Why this is below the target quality bar:
-  - auxiliary sidecars and derived files are not the same business concept
-  - keeping both in one list creates another concurrent link for derived files
-- Target state:
-  - keep `paths.sidecars_relative` only for true auxiliary sidecars
-  - project derived files exclusively from the derived repository/table
-  - stop copying derived storage paths into sidecar lists
-
 ### P3. Several runtime services still combine domain orchestration with infrastructure details in the same class
 
 - Representative locations:
@@ -101,25 +64,18 @@ Spec baseline: `specs/api/openapi/v1.yaml` from `retaia-docs@b6eb0447cf3c9d3bf3d
 
 ## Recommended remediation order
 
-### Batch 1: collapse derived file linkage to one canonical representation
-
-- keep derived persistence only in `asset_derived_file`
-- stop writing `fields['derived']['derived_manifest']`
-- stop copying derived refs into `paths.sidecars_relative`
-- generate manifest-like payloads as read projections only
-
-### Batch 2: make path-based admin flows storage-aware
+### Batch 1: make path-based admin flows storage-aware
 
 - remove path-only UUID derivation in ops/admin flows
 - resolve assets with explicit storage context when a relative path is used as input
 
-### Batch 3: make the Flysystem backend configurable
+### Batch 2: make the Flysystem backend configurable
 
 - add first-class SMB backend support behind `BusinessStorageInterface`
 - remove the hardcoded local-only factory
 - keep the application/storage seam stable while finishing backend portability
 
-### Batch 4: continue decomposing remaining god services
+### Batch 3: continue decomposing remaining god services
 
 - keep reducing SQL / side-effect coordination inside `BatchWorkflowService`
 - split operational command-side logic in `IngestEnqueueStableCommand` into narrower collaborators

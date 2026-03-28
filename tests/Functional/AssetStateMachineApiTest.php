@@ -579,6 +579,7 @@ final class AssetStateMachineApiTest extends WebTestCase
         $connection = self::getContainer()->get(Connection::class);
         $this->ensureOperationLockTable($connection);
         $this->ensureIdempotencyTable($connection);
+        $this->ensureAssetDerivedFileTable($connection);
     }
 
     private function seedAssets(): void

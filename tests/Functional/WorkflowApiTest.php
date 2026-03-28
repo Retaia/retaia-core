@@ -669,7 +669,6 @@ final class WorkflowApiTest extends WebTestCase
                 'storage_id' => 'nas-main',
                 'original_relative' => 'REJECTS/purge-derived.mov',
                 'sidecars_relative' => [
-                    'REJECTS/.derived/99999999-9999-4999-8999-999999999999/proxy.mp4',
                     'REJECTS/purge-derived.srt',
                 ],
             ],

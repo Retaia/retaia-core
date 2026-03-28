@@ -5,6 +5,7 @@ namespace App\Infrastructure\Asset;
 use App\Application\Asset\Port\AssetReadGateway as AssetReadGatewayPort;
 use App\Asset\AssetRevisionTag;
 use App\Asset\Repository\AssetRepositoryInterface;
+use App\Derived\DerivedFileRepositoryInterface;
 use App\Entity\Asset;
 use App\Storage\BusinessStorageRegistryInterface;
 
@@ -14,6 +15,7 @@ final class AssetReadGateway implements AssetReadGatewayPort
 
     public function __construct(
         private AssetRepositoryInterface $assets,
+        private DerivedFileRepositoryInterface $derivedFiles,
         private BusinessStorageRegistryInterface $storageRegistry,
     ) {
     }
@@ -67,7 +69,7 @@ final class AssetReadGateway implements AssetReadGatewayPort
     {
         $fields = $asset->getFields();
         $source = $this->sourceFromFields($fields, $asset->getFilename());
-        $derived = $this->derivedFromFields($fields);
+        $derived = $this->derivedFromAsset($asset);
         $summary = $this->summary($asset);
         $projects = $this->projectsFromFields($fields);
 
@@ -123,7 +125,7 @@ final class AssetReadGateway implements AssetReadGatewayPort
     private function summary(Asset $asset): array
     {
         $fields = $asset->getFields();
-        $derived = $this->derivedFromFields($fields);
+        $derived = $this->derivedFromAsset($asset);
 
         return [
             'uuid' => $asset->getUuid(),
@@ -183,7 +185,7 @@ final class AssetReadGateway implements AssetReadGatewayPort
         }
 
         return array_values(array_filter($assets, function (Asset $asset) use ($hasPreview): bool {
-            $derived = $this->derivedFromFields($asset->getFields());
+            $derived = $this->derivedFromAsset($asset);
             $value = $derived['preview_video_url'] !== null
                 || $derived['preview_audio_url'] !== null
                 || $derived['preview_photo_url'] !== null;
@@ -277,20 +279,37 @@ final class AssetReadGateway implements AssetReadGatewayPort
      * @param array<string, mixed> $fields
      * @return array<string, mixed>
      */
-    private function derivedFromFields(array $fields): array
+    private function derivedFromAsset(Asset $asset): array
     {
+        $fields = $asset->getFields();
         $derived = is_array($fields['derived'] ?? null) ? $fields['derived'] : [];
+        $files = $this->derivedFiles->listByAsset($asset->getUuid());
+        $byKind = [];
+        foreach ($files as $file) {
+            $byKind[$file->kind] ??= $file;
+        }
 
         $thumbs = $derived['thumbs'] ?? $fields['thumbs'] ?? [];
         if (!is_array($thumbs)) {
             $thumbs = [];
         }
+        if (isset($byKind['thumb'])) {
+            $thumbs = [sprintf('/api/v1/assets/%s/derived/%s', $asset->getUuid(), 'thumb')];
+        }
 
         return [
-            'preview_video_url' => $this->optionalString($derived['preview_video_url'] ?? $derived['proxy_video_url'] ?? $fields['preview_video_url'] ?? $fields['proxy_video_url'] ?? null),
-            'preview_audio_url' => $this->optionalString($derived['preview_audio_url'] ?? $derived['proxy_audio_url'] ?? $fields['preview_audio_url'] ?? $fields['proxy_audio_url'] ?? null),
-            'preview_photo_url' => $this->optionalString($derived['preview_photo_url'] ?? $derived['proxy_photo_url'] ?? $fields['preview_photo_url'] ?? $fields['proxy_photo_url'] ?? null),
-            'waveform_url' => $this->optionalString($derived['waveform_url'] ?? $fields['waveform_url'] ?? null),
+            'preview_video_url' => isset($byKind['proxy_video'])
+                ? sprintf('/api/v1/assets/%s/derived/%s', $asset->getUuid(), 'proxy_video')
+                : $this->optionalString($derived['preview_video_url'] ?? $derived['proxy_video_url'] ?? $fields['preview_video_url'] ?? $fields['proxy_video_url'] ?? null),
+            'preview_audio_url' => isset($byKind['proxy_audio'])
+                ? sprintf('/api/v1/assets/%s/derived/%s', $asset->getUuid(), 'proxy_audio')
+                : $this->optionalString($derived['preview_audio_url'] ?? $derived['proxy_audio_url'] ?? $fields['preview_audio_url'] ?? $fields['proxy_audio_url'] ?? null),
+            'preview_photo_url' => isset($byKind['proxy_photo'])
+                ? sprintf('/api/v1/assets/%s/derived/%s', $asset->getUuid(), 'proxy_photo')
+                : $this->optionalString($derived['preview_photo_url'] ?? $derived['proxy_photo_url'] ?? $fields['preview_photo_url'] ?? $fields['proxy_photo_url'] ?? null),
+            'waveform_url' => isset($byKind['waveform'])
+                ? sprintf('/api/v1/assets/%s/derived/%s', $asset->getUuid(), 'waveform')
+                : $this->optionalString($derived['waveform_url'] ?? $fields['waveform_url'] ?? null),
             'thumbs' => array_values(array_filter(
                 array_map(fn (mixed $thumb): string => (string) $thumb, $thumbs),
                 static fn (string $thumb): bool => $thumb !== ''
