@@ -3,6 +3,7 @@
 namespace App\Entity;
 
 use Doctrine\ORM\Mapping as ORM;
+use Gedmo\Mapping\Annotation as Gedmo;
 
 #[ORM\Entity]
 #[ORM\Table(name: 'webauthn_device')]
@@ -22,8 +23,38 @@ class WebAuthnDevice
         #[ORM\Column(name: 'webauthn_fingerprint', type: 'string', length: 64)]
         private string $webauthnFingerprint,
         #[ORM\Column(name: 'created_at', type: 'datetime_immutable')]
-        private \DateTimeImmutable $createdAt,
+        #[Gedmo\Timestampable(on: 'create')]
+        private ?\DateTimeImmutable $createdAt = null,
     ) {
     }
-}
 
+    public function getId(): string
+    {
+        return $this->id;
+    }
+
+    public function getUserId(): string
+    {
+        return $this->userId;
+    }
+
+    public function getCredentialId(): string
+    {
+        return $this->credentialId;
+    }
+
+    public function getDeviceLabel(): string
+    {
+        return $this->deviceLabel;
+    }
+
+    public function getWebauthnFingerprint(): string
+    {
+        return $this->webauthnFingerprint;
+    }
+
+    public function getCreatedAt(): ?\DateTimeImmutable
+    {
+        return $this->createdAt;
+    }
+}

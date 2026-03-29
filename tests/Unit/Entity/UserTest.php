@@ -17,6 +17,8 @@ final class UserTest extends TestCase
         self::assertSame('hash-1', $user->getPassword());
         self::assertSame(['ROLE_ADMIN', 'ROLE_USER'], $user->getRoles());
         self::assertFalse($user->isEmailVerified());
+        self::assertNull($user->getCreatedAt());
+        self::assertNull($user->getUpdatedAt());
 
         $returned = $user->withEmailVerified(true)->withPasswordHash('hash-2');
 

@@ -713,6 +713,8 @@ final class JobApiTest extends WebTestCase
             'password_hash' => password_hash('change-me', PASSWORD_DEFAULT),
             'roles' => json_encode($roles, JSON_THROW_ON_ERROR),
             'email_verified' => 1,
+            'created_at' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
+            'updated_at' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
         ]);
     }
 }

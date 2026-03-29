@@ -4,6 +4,7 @@ namespace App\Entity;
 
 use App\Asset\AssetState;
 use Doctrine\ORM\Mapping as ORM;
+use Gedmo\Mapping\Annotation as Gedmo;
 
 #[ORM\Entity]
 #[ORM\Table(name: 'asset')]
@@ -33,6 +34,7 @@ class Asset
         #[ORM\Column(name: 'created_at', type: 'datetime_immutable')]
         private \DateTimeImmutable $createdAt = new \DateTimeImmutable(),
         #[ORM\Column(name: 'updated_at', type: 'datetime_immutable')]
+        #[Gedmo\Timestampable(on: 'update')]
         private \DateTimeImmutable $updatedAt = new \DateTimeImmutable(),
     ) {
     }
@@ -60,7 +62,6 @@ class Asset
     public function setState(AssetState $state): void
     {
         $this->state = $state;
-        $this->touch();
     }
 
     /**
@@ -77,7 +78,6 @@ class Asset
     public function setTags(array $tags): void
     {
         $this->tags = array_values(array_unique(array_map('strval', $tags)));
-        $this->touch();
     }
 
     public function getNotes(): ?string
@@ -88,7 +88,6 @@ class Asset
     public function setNotes(?string $notes): void
     {
         $this->notes = $notes;
-        $this->touch();
     }
 
     /**
@@ -105,7 +104,6 @@ class Asset
     public function setFields(array $fields): void
     {
         $this->fields = $fields;
-        $this->touch();
     }
 
     public function getCreatedAt(): \DateTimeImmutable
@@ -116,10 +114,5 @@ class Asset
     public function getUpdatedAt(): \DateTimeImmutable
     {
         return $this->updatedAt;
-    }
-
-    private function touch(): void
-    {
-        $this->updatedAt = new \DateTimeImmutable();
     }
 }

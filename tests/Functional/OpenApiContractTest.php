@@ -710,7 +710,7 @@ final class OpenApiContractTest extends WebTestCase
     {
         /** @var Connection $connection */
         $connection = static::getContainer()->get(Connection::class);
-        $connection->executeStatement('CREATE TABLE IF NOT EXISTS app_user (id VARCHAR(32) NOT NULL PRIMARY KEY, email VARCHAR(180) NOT NULL, password_hash VARCHAR(255) NOT NULL, roles CLOB NOT NULL, email_verified BOOLEAN NOT NULL DEFAULT 0)');
+        $connection->executeStatement('CREATE TABLE IF NOT EXISTS app_user (id VARCHAR(32) NOT NULL PRIMARY KEY, email VARCHAR(180) NOT NULL, password_hash VARCHAR(255) NOT NULL, roles CLOB NOT NULL, email_verified BOOLEAN NOT NULL DEFAULT 0, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL)');
         $connection->executeStatement('CREATE UNIQUE INDEX IF NOT EXISTS uniq_app_user_email ON app_user (email)');
         $this->ensureIdempotencyTable($connection);
         $this->ensureOperationLockTable($connection);

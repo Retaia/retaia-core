@@ -2108,6 +2108,8 @@ final class ApiAuthFlowTest extends WebTestCase
             'password_hash' => password_hash($plainPassword, PASSWORD_DEFAULT),
             'roles' => json_encode($roles, JSON_THROW_ON_ERROR),
             'email_verified' => $emailVerified ? 1 : 0,
+            'created_at' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
+            'updated_at' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
         ]);
     }
 
