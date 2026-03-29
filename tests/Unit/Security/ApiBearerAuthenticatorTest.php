@@ -6,7 +6,9 @@ use App\Auth\ClientAccessTokenResolver;
 use App\Auth\TechnicalAccessTokenRecord;
 use App\Auth\TechnicalAccessTokenRepository;
 use App\Auth\UserAccessTokenService;
+use App\Auth\UserAccessJwtService;
 use App\Auth\UserAuthSessionRepository;
+use App\Auth\UserAuthSessionService;
 use App\Domain\AuthClient\ClientKind;
 use App\Entity\User;
 use App\Security\ApiBearerAuthenticator;
@@ -37,7 +39,8 @@ final class ApiBearerAuthenticatorTest extends TestCase
     public function testAuthenticateBuildsPassportForUserToken(): void
     {
         $connection = $this->connection();
-        $userTokens = new UserAccessTokenService(new UserAuthSessionRepository($connection), 'test-secret', 3600);
+        $repository = new UserAuthSessionRepository($connection);
+        $userTokens = new UserAccessTokenService(new UserAuthSessionService($repository), new UserAccessJwtService('test-secret', 3600));
         $authenticator = $this->authenticator($userTokens, new ClientAccessTokenResolver(new TechnicalAccessTokenRepository($connection)));
         $user = new User('user-1', 'user@example.test', 'hash');
 
@@ -58,7 +61,10 @@ final class ApiBearerAuthenticatorTest extends TestCase
         $tokenRepository->save(new TechnicalAccessTokenRecord('agent-client', 'client-token', ClientKind::AGENT, 1_700_000_000));
 
         $authenticator = $this->authenticator(
-            new UserAccessTokenService(new UserAuthSessionRepository($connection), 'test-secret', 3600),
+            new UserAccessTokenService(
+                new UserAuthSessionService(new UserAuthSessionRepository($connection)),
+                new UserAccessJwtService('test-secret', 3600)
+            ),
             new ClientAccessTokenResolver($tokenRepository)
         );
 
@@ -116,7 +122,10 @@ final class ApiBearerAuthenticatorTest extends TestCase
         $connection = $this->connection();
 
         return new ApiBearerAuthenticator(
-            $userTokens ?? new UserAccessTokenService(new UserAuthSessionRepository($connection), 'test-secret', 3600),
+            $userTokens ?? new UserAccessTokenService(
+                new UserAuthSessionService(new UserAuthSessionRepository($connection)),
+                new UserAccessJwtService('test-secret', 3600)
+            ),
             $clientResolver ?? new ClientAccessTokenResolver(new TechnicalAccessTokenRepository($connection)),
             $translator ?? $this->createStub(TranslatorInterface::class),
         );

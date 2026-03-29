@@ -3,7 +3,9 @@
 namespace App\Tests\Unit\Security;
 
 use App\Auth\UserAccessTokenService;
+use App\Auth\UserAccessJwtService;
 use App\Auth\UserAuthSessionRepository;
+use App\Auth\UserAuthSessionService;
 use App\Entity\User;
 use App\Security\ApiLoginAuthenticator;
 use App\User\Service\TwoFactorSecretCipher;
@@ -207,7 +209,11 @@ final class ApiLoginAuthenticatorTest extends TestCase
                 'v2'
             )
         );
-        $userTokens = new UserAccessTokenService(new UserAuthSessionRepository($this->connection()), 'test-secret', 3600);
+        $repository = new UserAuthSessionRepository($this->connection());
+        $userTokens = new UserAccessTokenService(
+            new UserAuthSessionService($repository),
+            new UserAccessJwtService('test-secret', 3600)
+        );
 
         return new ApiLoginAuthenticator(
             new NullLogger(),

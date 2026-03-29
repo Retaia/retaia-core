@@ -3,7 +3,9 @@
 namespace App\Tests\Unit\Auth;
 
 use App\Auth\UserAccessTokenService;
+use App\Auth\UserAccessJwtService;
 use App\Auth\UserAuthSessionRepository;
+use App\Auth\UserAuthSessionService;
 use App\Entity\User;
 use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\TestCase;
@@ -75,7 +77,13 @@ final class UserAccessTokenServiceTest extends TestCase
 
     private function service(): UserAccessTokenService
     {
-        return new UserAccessTokenService(new UserAuthSessionRepository($this->connection()), 'test-secret', 3600, 86400);
+        $repository = new UserAuthSessionRepository($this->connection());
+
+        return new UserAccessTokenService(
+            new UserAuthSessionService($repository),
+            new UserAccessJwtService('test-secret', 3600),
+            86400
+        );
     }
 
     private function connection(): \Doctrine\DBAL\Connection
