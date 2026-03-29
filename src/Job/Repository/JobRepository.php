@@ -14,7 +14,10 @@ final class JobRepository
     public function __construct(
         private Connection $connection,
         private BusinessStorageRegistryInterface $storageRegistry,
+        private JobQueueDiagnosticsProjector $diagnosticsProjector = new JobQueueDiagnosticsProjector(),
+        private ?JobSourceProjector $sourceProjector = null,
     ) {
+        $this->sourceProjector ??= new JobSourceProjector($storageRegistry);
     }
 
     /**
@@ -366,73 +369,7 @@ final class JobRepository
             ];
         }
 
-        $summary = [
-            'pending_total' => 0,
-            'claimed_total' => 0,
-            'failed_total' => 0,
-        ];
-        foreach ($summaryRows as $row) {
-            $status = trim((string) ($row['status'] ?? ''));
-            $total = max(0, (int) ($row['total'] ?? 0));
-            if ($status === JobStatus::PENDING->value) {
-                $summary['pending_total'] = $total;
-            } elseif ($status === JobStatus::CLAIMED->value) {
-                $summary['claimed_total'] = $total;
-            } elseif ($status === JobStatus::FAILED->value) {
-                $summary['failed_total'] = $total;
-            }
-        }
-
-        /** @var array<string, array{job_type:string,pending:int,claimed:int,failed:int,oldest_pending_age_seconds:?int}> $byType */
-        $byType = [];
-        foreach ($byTypeRows as $row) {
-            $jobType = trim((string) ($row['job_type'] ?? ''));
-            $status = trim((string) ($row['status'] ?? ''));
-            $total = max(0, (int) ($row['total'] ?? 0));
-            if ($jobType === '') {
-                continue;
-            }
-
-            if (!isset($byType[$jobType])) {
-                $byType[$jobType] = [
-                    'job_type' => $jobType,
-                    'pending' => 0,
-                    'claimed' => 0,
-                    'failed' => 0,
-                    'oldest_pending_age_seconds' => null,
-                ];
-            }
-
-            if ($status === JobStatus::PENDING->value) {
-                $byType[$jobType]['pending'] = $total;
-            } elseif ($status === JobStatus::CLAIMED->value) {
-                $byType[$jobType]['claimed'] = $total;
-            } elseif ($status === JobStatus::FAILED->value) {
-                $byType[$jobType]['failed'] = $total;
-            }
-        }
-
-        $now = new \DateTimeImmutable();
-        foreach ($oldestPendingRows as $row) {
-            $jobType = trim((string) ($row['job_type'] ?? ''));
-            $oldestRaw = trim((string) ($row['oldest_pending_at'] ?? ''));
-            if ($jobType === '' || !isset($byType[$jobType]) || $oldestRaw === '') {
-                continue;
-            }
-
-            try {
-                $oldest = new \DateTimeImmutable($oldestRaw);
-                $age = max(0, $now->getTimestamp() - $oldest->getTimestamp());
-                $byType[$jobType]['oldest_pending_age_seconds'] = $age;
-            } catch (\Throwable) {
-                $byType[$jobType]['oldest_pending_age_seconds'] = null;
-            }
-        }
-
-        return [
-            'summary' => $summary,
-            'by_type' => array_values($byType),
-        ];
+        return $this->diagnosticsProjector->project($summaryRows, $byTypeRows, $oldestPendingRows);
     }
 
     /**
@@ -460,96 +397,9 @@ final class JobRepository
             isset($row['lock_token']) ? (string) $row['lock_token'] : null,
             $lockedUntil,
             $result,
-            $this->sourceFromAssetFields($row['asset_fields'] ?? null, (string) ($row['asset_filename'] ?? '')),
+            $this->sourceProjector->sourceFromAssetFields($row['asset_fields'] ?? null, (string) ($row['asset_filename'] ?? '')),
             is_string($row['correlation_id'] ?? null) ? (string) $row['correlation_id'] : null,
             isset($row['fencing_token']) ? (int) $row['fencing_token'] : null,
         );
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function sourceFromAssetFields(mixed $assetFieldsRaw, string $assetFilename): array
-    {
-        $fields = [];
-        if (is_array($assetFieldsRaw)) {
-            $fields = $assetFieldsRaw;
-        } elseif (is_string($assetFieldsRaw) && $assetFieldsRaw !== '') {
-            $decoded = json_decode($assetFieldsRaw, true);
-            if (is_array($decoded)) {
-                $fields = $decoded;
-            }
-        }
-
-        $paths = is_array($fields['paths'] ?? null) ? $fields['paths'] : [];
-        $storageId = $this->requiredStorageId($paths, $assetFilename);
-        $original = $this->requiredOriginalRelativePath($paths, $assetFilename);
-        $sidecars = $this->sanitizeRelativePaths(is_array($paths['sidecars_relative'] ?? null) ? $paths['sidecars_relative'] : []);
-
-        return [
-            'storage_id' => $storageId,
-            'original_relative' => $original,
-            'sidecars_relative' => $sidecars,
-        ];
-    }
-
-    private function sanitizeRelativePath(string $path): string
-    {
-        $trimmed = ltrim(trim($path), '/');
-        if ($trimmed === '' || str_contains($trimmed, "\0") || str_contains($trimmed, '../') || str_contains($trimmed, '..\\')) {
-            return '';
-        }
-
-        return $trimmed;
-    }
-
-    /**
-     * @param mixed $paths
-     * @return array<int, string>
-     */
-    private function sanitizeRelativePaths(mixed $paths): array
-    {
-        if (!is_array($paths)) {
-            return [];
-        }
-
-        $result = [];
-        foreach ($paths as $path) {
-            $normalized = $this->sanitizeRelativePath((string) $path);
-            if ($normalized !== '') {
-                $result[] = $normalized;
-            }
-        }
-
-        return array_values(array_unique($result));
-    }
-
-    /**
-     * @param array<string, mixed> $paths
-     */
-    private function requiredStorageId(array $paths, string $assetFilename): string
-    {
-        $storageId = trim((string) ($paths['storage_id'] ?? ''));
-        if ($storageId === '') {
-            throw new \RuntimeException(sprintf('Asset "%s" is missing canonical paths.storage_id.', $assetFilename));
-        }
-        if (!$this->storageRegistry->has($storageId)) {
-            throw new \RuntimeException(sprintf('Asset "%s" references unknown storage "%s".', $assetFilename, $storageId));
-        }
-
-        return $storageId;
-    }
-
-    /**
-     * @param array<string, mixed> $paths
-     */
-    private function requiredOriginalRelativePath(array $paths, string $assetFilename): string
-    {
-        $original = $this->sanitizeRelativePath((string) ($paths['original_relative'] ?? ''));
-        if ($original === '') {
-            throw new \RuntimeException(sprintf('Asset "%s" is missing canonical paths.original_relative.', $assetFilename));
-        }
-
-        return $original;
     }
 }
