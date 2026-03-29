@@ -26,6 +26,12 @@ doctrine:
                 dir: '%kernel.project_dir%/src/Auth'
                 prefix: 'App\Auth'
                 alias: AppAuth
+            AppDerived:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Derived'
+                prefix: 'App\Derived'
+                alias: AppDerived
         controller_resolver:
             auto_mapping: false
 

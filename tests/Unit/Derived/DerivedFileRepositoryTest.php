@@ -3,15 +3,16 @@
 namespace App\Tests\Unit\Derived;
 
 use App\Derived\DerivedFileRepository;
-use Doctrine\DBAL\Connection;
-use Doctrine\DBAL\DriverManager;
+use App\Tests\Support\DerivedFileEntityManagerTrait;
 use PHPUnit\Framework\TestCase;
 
 final class DerivedFileRepositoryTest extends TestCase
 {
+    use DerivedFileEntityManagerTrait;
+
     public function testCreateListFindAndDeleteByAsset(): void
     {
-        $repository = new DerivedFileRepository($this->connection());
+        $repository = new DerivedFileRepository($this->derivedFileEntityManager());
 
         $created = $repository->create('asset-1', 'proxy', 'video/mp4', 456, 'hash');
         self::assertSame('asset-1', $created->assetUuid);
@@ -33,7 +34,7 @@ final class DerivedFileRepositoryTest extends TestCase
 
     public function testUpsertMaterializedUpdatesExistingRecord(): void
     {
-        $repository = new DerivedFileRepository($this->connection());
+        $repository = new DerivedFileRepository($this->derivedFileEntityManager());
         $created = $repository->create('asset-2', 'proxy_video', 'video/mp4', 100, 'hash-a');
 
         $repository->upsertMaterialized('asset-2', 'proxy_video', 'video/mp4', 200, 'hash-b', '.derived/asset-2/proxy.mp4');
@@ -44,16 +45,5 @@ final class DerivedFileRepositoryTest extends TestCase
         self::assertSame('.derived/asset-2/proxy.mp4', $found->storagePath);
         self::assertSame(200, $found->sizeBytes);
         self::assertSame('hash-b', $found->sha256);
-    }
-
-    private function connection(): Connection
-    {
-        $connection = DriverManager::getConnection([
-            'driver' => 'pdo_sqlite',
-            'memory' => true,
-        ]);
-        $connection->executeStatement('CREATE TABLE asset_derived_file (id VARCHAR(16) PRIMARY KEY NOT NULL, asset_uuid VARCHAR(36) NOT NULL, kind VARCHAR(64) NOT NULL, content_type VARCHAR(128) NOT NULL, size_bytes INTEGER NOT NULL, sha256 VARCHAR(64) DEFAULT NULL, storage_path VARCHAR(255) NOT NULL, created_at DATETIME NOT NULL)');
-
-        return $connection;
     }
 }

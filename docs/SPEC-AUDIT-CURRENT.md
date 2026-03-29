@@ -302,8 +302,6 @@ These are the files that should change first if the codebase moves to an ORM-fir
 
 #### Derived storage and upload state
 
-- [`src/Derived/DerivedFile.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Derived/DerivedFile.php)
-- [`src/Derived/DerivedFileRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Derived/DerivedFileRepository.php)
 - [`src/Derived/DerivedUploadSession.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Derived/DerivedUploadSession.php)
 - [`src/Derived/DerivedUploadSessionRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Derived/DerivedUploadSessionRepository.php)
 - [`src/Derived/Service/DerivedUploadService.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Derived/Service/DerivedUploadService.php)
@@ -319,7 +317,6 @@ These are the files that should change first if the codebase moves to an ORM-fir
 - [`src/Asset/Repository/AssetRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Asset/Repository/AssetRepository.php)
   - filters, search, pagination, sorting
 - future ORM repositories replacing:
-  - [`src/Derived/DerivedFileRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Derived/DerivedFileRepository.php)
   - [`src/Derived/DerivedUploadSessionRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Derived/DerivedUploadSessionRepository.php)
 
 ### Likely DBAL holdouts even in an ORM-first model
