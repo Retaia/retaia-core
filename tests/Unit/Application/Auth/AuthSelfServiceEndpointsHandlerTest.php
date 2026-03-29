@@ -4,6 +4,8 @@ namespace App\Tests\Unit\Application\Auth;
 
 use App\Application\Auth\AuthMeEndpointResult;
 use App\Application\Auth\AuthSelfServiceEndpointsHandler;
+use App\Application\Auth\AuthSelfServiceProfileEndpointsHandler;
+use App\Application\Auth\AuthSelfServiceTwoFactorEndpointsHandler;
 use App\Application\Auth\DisableTwoFactorHandler;
 use App\Application\Auth\EnableTwoFactorHandler;
 use App\Application\Auth\GetAuthMeProfileHandler;
@@ -256,34 +258,39 @@ final class AuthSelfServiceEndpointsHandlerTest extends TestCase
         $featureGateway ??= $this->createMock(FeatureGovernanceGateway::class);
 
         return new AuthSelfServiceEndpointsHandler(
-            new ResolveAuthenticatedUserHandler($authenticatedUserGateway),
-            new GetAuthMeProfileHandler(
-                new class implements \App\User\Repository\UserRepositoryInterface {
-                    public function findByEmail(string $email): ?\App\Entity\User
-                    {
-                        return null;
-                    }
+            new AuthSelfServiceProfileEndpointsHandler(
+                new ResolveAuthenticatedUserHandler($authenticatedUserGateway),
+                new GetAuthMeProfileHandler(
+                    new class implements \App\User\Repository\UserRepositoryInterface {
+                        public function findByEmail(string $email): ?\App\Entity\User
+                        {
+                            return null;
+                        }
 
-                    public function findById(string $id): ?\App\Entity\User
-                    {
-                        return null;
-                    }
+                        public function findById(string $id): ?\App\Entity\User
+                        {
+                            return null;
+                        }
 
-                    public function save(\App\Entity\User $user): void
-                    {
-                    }
-                },
-                new \App\User\Service\TwoFactorService(
-                    $this->twoFactorRepository(),
-                    new \App\User\Service\TwoFactorSecretCipher('v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', 'v1')
-                )
+                        public function save(\App\Entity\User $user): void
+                        {
+                        }
+                    },
+                    new \App\User\Service\TwoFactorService(
+                        $this->twoFactorRepository(),
+                        new \App\User\Service\TwoFactorSecretCipher('v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', 'v1')
+                    )
+                ),
+                new GetMyFeaturesHandler($featureGateway),
+                new PatchMyFeaturesHandler($featureGateway, new GetMyFeaturesHandler($featureGateway)),
             ),
-            new SetupTwoFactorHandler($twoFactorGateway),
-            new EnableTwoFactorHandler($twoFactorGateway),
-            new DisableTwoFactorHandler($twoFactorGateway),
-            new RegenerateTwoFactorRecoveryCodesHandler($twoFactorGateway),
-            new GetMyFeaturesHandler($featureGateway),
-            new PatchMyFeaturesHandler($featureGateway, new GetMyFeaturesHandler($featureGateway)),
+            new AuthSelfServiceTwoFactorEndpointsHandler(
+                new ResolveAuthenticatedUserHandler($authenticatedUserGateway),
+                new SetupTwoFactorHandler($twoFactorGateway),
+                new EnableTwoFactorHandler($twoFactorGateway),
+                new DisableTwoFactorHandler($twoFactorGateway),
+                new RegenerateTwoFactorRecoveryCodesHandler($twoFactorGateway),
+            ),
         );
     }
 
