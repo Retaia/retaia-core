@@ -16,15 +16,15 @@ use App\Auth\ClientAccessTokenFactory;
 use App\Auth\TechnicalAccessTokenRepository;
 use App\Feature\FeatureGovernanceService;
 use App\Tests\Support\AgentSigningTestHelper;
+use App\Tests\Support\AuthClientRegistryEntityManagerTrait;
 use App\Tests\Support\AuthMcpChallengeEntityManagerTrait;
 use App\Tests\Support\TechnicalAccessTokenEntityManagerTrait;
-use Doctrine\DBAL\Connection;
-use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 
 final class AuthMcpServiceTest extends TestCase
 {
+    use AuthClientRegistryEntityManagerTrait;
     use AuthMcpChallengeEntityManagerTrait;
     use TechnicalAccessTokenEntityManagerTrait;
 
@@ -79,8 +79,7 @@ final class AuthMcpServiceTest extends TestCase
 
     private function service(): AuthMcpService
     {
-        $connection = $this->connection();
-        $registry = new AuthClientRegistryRepository($connection);
+        $registry = new AuthClientRegistryRepository($this->authClientRegistryEntityManager());
         $challengeRepository = new AuthMcpChallengeRepository($this->authMcpChallengeEntityManager());
         $policyService = new AuthClientPolicyService(new FeatureGovernanceService(new ArrayAdapter(), true, false, false));
         $tokenRepository = new TechnicalAccessTokenRepository($this->technicalAccessTokenEntityManager());
@@ -109,15 +108,4 @@ final class AuthMcpServiceTest extends TestCase
         );
     }
 
-    private function connection(): Connection
-    {
-        $connection = DriverManager::getConnection([
-            'driver' => 'pdo_sqlite',
-            'memory' => true,
-        ]);
-
-        $connection->executeStatement('CREATE TABLE auth_client_registry (client_id VARCHAR(64) PRIMARY KEY NOT NULL, client_kind VARCHAR(32) NOT NULL, secret_key VARCHAR(128) DEFAULT NULL, client_label VARCHAR(255) DEFAULT NULL, openpgp_public_key CLOB DEFAULT NULL, openpgp_fingerprint VARCHAR(40) DEFAULT NULL, registered_at VARCHAR(32) DEFAULT NULL, rotated_at VARCHAR(32) DEFAULT NULL)');
-
-        return $connection;
-    }
 }
