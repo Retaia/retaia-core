@@ -2,55 +2,64 @@
 
 namespace App\Auth;
 
-use Doctrine\DBAL\Connection;
+use Doctrine\ORM\EntityManagerInterface;
 
 final class AuthMcpChallengeRepository implements AuthMcpChallengeRepositoryInterface
 {
     public function __construct(
-        private Connection $connection,
+        private EntityManagerInterface $entityManager,
     ) {
     }
 
     public function findByChallengeId(string $challengeId): ?AuthMcpChallenge
     {
-        $row = $this->connection->fetchAssociative(
-            'SELECT challenge_id, client_id, openpgp_fingerprint, challenge, expires_at, used, used_at
-             FROM auth_mcp_challenge WHERE challenge_id = :challengeId LIMIT 1',
-            ['challengeId' => $challengeId]
-        );
+        $challenge = $this->entityManager->find(AuthMcpChallenge::class, $challengeId);
+        if ($challenge instanceof AuthMcpChallenge) {
+            $this->entityManager->refresh($challenge);
+        }
 
-        return is_array($row) ? AuthMcpChallenge::fromArray($row) : null;
+        return $challenge instanceof AuthMcpChallenge ? $challenge : null;
     }
 
     public function findAll(): array
     {
-        $rows = $this->connection->fetchAllAssociative(
-            'SELECT challenge_id, client_id, openpgp_fingerprint, challenge, expires_at, used, used_at FROM auth_mcp_challenge'
-        );
-        $challenges = [];
-        foreach ($rows as $row) {
-            $challenge = AuthMcpChallenge::fromArray($row);
-            if ($challenge !== null) {
-                $challenges[] = $challenge;
-            }
-        }
+        /** @var list<AuthMcpChallenge> $challenges */
+        $challenges = $this->entityManager->createQueryBuilder()
+            ->select('c')
+            ->from(AuthMcpChallenge::class, 'c')
+            ->getQuery()
+            ->getResult();
 
         return $challenges;
     }
 
     public function save(AuthMcpChallenge $challenge): void
     {
-        $data = $challenge->toRow();
-        if ($this->findByChallengeId($challenge->challengeId) !== null) {
-            $this->connection->update('auth_mcp_challenge', $data, ['challenge_id' => $challenge->challengeId]);
+        $existing = $this->entityManager->find(AuthMcpChallenge::class, $challenge->challengeId);
+        if ($existing instanceof AuthMcpChallenge) {
+            $existing->syncFrom($challenge);
+            $this->entityManager->flush();
+
             return;
         }
 
-        $this->connection->insert('auth_mcp_challenge', $data);
+        $this->entityManager->persist($challenge);
+        $this->entityManager->flush();
     }
 
     public function delete(string $challengeId): void
     {
-        $this->connection->delete('auth_mcp_challenge', ['challenge_id' => trim($challengeId)]);
+        $challengeId = trim($challengeId);
+        if ($challengeId === '') {
+            return;
+        }
+
+        $challenge = $this->entityManager->find(AuthMcpChallenge::class, $challengeId);
+        if (!$challenge instanceof AuthMcpChallenge) {
+            return;
+        }
+
+        $this->entityManager->remove($challenge);
+        $this->entityManager->flush();
     }
 }

@@ -16,6 +16,7 @@ use App\Auth\ClientAccessTokenFactory;
 use App\Auth\TechnicalAccessTokenRepository;
 use App\Feature\FeatureGovernanceService;
 use App\Tests\Support\AgentSigningTestHelper;
+use App\Tests\Support\AuthMcpChallengeEntityManagerTrait;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\TestCase;
@@ -23,6 +24,8 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
 
 final class AuthMcpServiceTest extends TestCase
 {
+    use AuthMcpChallengeEntityManagerTrait;
+
     public function testMintTokenAcceptsValidOpenPgpSignature(): void
     {
         $service = $this->service();
@@ -76,7 +79,7 @@ final class AuthMcpServiceTest extends TestCase
     {
         $connection = $this->connection();
         $registry = new AuthClientRegistryRepository($connection);
-        $challengeRepository = new AuthMcpChallengeRepository($connection);
+        $challengeRepository = new AuthMcpChallengeRepository($this->authMcpChallengeEntityManager());
         $policyService = new AuthClientPolicyService(new FeatureGovernanceService(new ArrayAdapter(), true, false, false));
         $tokenRepository = new TechnicalAccessTokenRepository($connection);
         $adminService = new AuthClientAdminService(
@@ -114,7 +117,6 @@ final class AuthMcpServiceTest extends TestCase
         $connection->executeStatement('CREATE TABLE auth_client_registry (client_id VARCHAR(64) PRIMARY KEY NOT NULL, client_kind VARCHAR(32) NOT NULL, secret_key VARCHAR(128) DEFAULT NULL, client_label VARCHAR(255) DEFAULT NULL, openpgp_public_key CLOB DEFAULT NULL, openpgp_fingerprint VARCHAR(40) DEFAULT NULL, registered_at VARCHAR(32) DEFAULT NULL, rotated_at VARCHAR(32) DEFAULT NULL)');
         $connection->executeStatement('CREATE TABLE auth_client_access_token (client_id VARCHAR(64) PRIMARY KEY NOT NULL, access_token CLOB NOT NULL, client_kind VARCHAR(32) NOT NULL, issued_at INTEGER NOT NULL)');
         $connection->executeStatement('CREATE UNIQUE INDEX uniq_auth_client_access_token_token ON auth_client_access_token (access_token)');
-        $connection->executeStatement('CREATE TABLE auth_mcp_challenge (challenge_id VARCHAR(32) PRIMARY KEY NOT NULL, client_id VARCHAR(64) NOT NULL, openpgp_fingerprint VARCHAR(40) NOT NULL, challenge VARCHAR(128) NOT NULL, expires_at INTEGER NOT NULL, used BOOLEAN NOT NULL, used_at INTEGER DEFAULT NULL)');
 
         return $connection;
     }

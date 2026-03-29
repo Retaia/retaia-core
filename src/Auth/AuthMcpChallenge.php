@@ -2,16 +2,29 @@
 
 namespace App\Auth;
 
+use Doctrine\ORM\Mapping as ORM;
+
+#[ORM\Entity]
+#[ORM\Table(name: 'auth_mcp_challenge')]
+#[ORM\Index(name: 'idx_auth_mcp_challenge_expires_at', columns: ['expires_at'])]
 final class AuthMcpChallenge
 {
     public function __construct(
-        public readonly string $challengeId,
-        public readonly string $clientId,
-        public readonly string $openPgpFingerprint,
-        public readonly string $challenge,
-        public readonly int $expiresAt,
-        public readonly bool $used,
-        public readonly ?int $usedAt,
+        #[ORM\Id]
+        #[ORM\Column(name: 'challenge_id', type: 'string', length: 32)]
+        public string $challengeId,
+        #[ORM\Column(name: 'client_id', type: 'string', length: 64)]
+        public string $clientId,
+        #[ORM\Column(name: 'openpgp_fingerprint', type: 'string', length: 40)]
+        public string $openPgpFingerprint,
+        #[ORM\Column(name: 'challenge', type: 'string', length: 128)]
+        public string $challenge,
+        #[ORM\Column(name: 'expires_at', type: 'bigint')]
+        public int $expiresAt,
+        #[ORM\Column(name: 'used', type: 'boolean')]
+        public bool $used,
+        #[ORM\Column(name: 'used_at', type: 'bigint', nullable: true)]
+        public ?int $usedAt,
     ) {
     }
 
@@ -41,19 +54,13 @@ final class AuthMcpChallenge
         );
     }
 
-    /**
-     * @return array<string, scalar|null>
-     */
-    public function toRow(): array
+    public function syncFrom(self $challenge): void
     {
-        return [
-            'challenge_id' => $this->challengeId,
-            'client_id' => $this->clientId,
-            'openpgp_fingerprint' => $this->openPgpFingerprint,
-            'challenge' => $this->challenge,
-            'expires_at' => $this->expiresAt,
-            'used' => $this->used ? 1 : 0,
-            'used_at' => $this->usedAt,
-        ];
+        $this->clientId = $challenge->clientId;
+        $this->openPgpFingerprint = $challenge->openPgpFingerprint;
+        $this->challenge = $challenge->challenge;
+        $this->expiresAt = $challenge->expiresAt;
+        $this->used = $challenge->used;
+        $this->usedAt = $challenge->usedAt;
     }
 }
