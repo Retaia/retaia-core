@@ -7,17 +7,18 @@ use App\Job\JobStatus;
 use App\Storage\BusinessStorageRegistryInterface;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\ParameterType;
-use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 
 final class JobRepository
 {
     public function __construct(
         private Connection $connection,
-        private BusinessStorageRegistryInterface $storageRegistry,
+        BusinessStorageRegistryInterface $storageRegistry,
         private JobQueueDiagnosticsProjector $diagnosticsProjector = new JobQueueDiagnosticsProjector(),
         private ?JobSourceProjector $sourceProjector = null,
+        private ?JobQueueWriter $queueWriter = null,
     ) {
         $this->sourceProjector ??= new JobSourceProjector($storageRegistry);
+        $this->queueWriter ??= new JobQueueWriter($connection);
     }
 
     /**
@@ -96,28 +97,7 @@ final class JobRepository
 
     public function enqueuePending(string $assetUuid, string $jobType, string $stateVersion = '1'): Job
     {
-        $id = bin2hex(random_bytes(16));
-        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
-        $this->connection->insert('processing_job', [
-            'id' => $id,
-            'asset_uuid' => $assetUuid,
-            'job_type' => $jobType,
-            'state_version' => $stateVersion,
-            'status' => JobStatus::PENDING->value,
-            'correlation_id' => null,
-            'claimed_by' => null,
-            'claimed_at' => null,
-            'lock_token' => null,
-            'fencing_token' => null,
-            'locked_until' => null,
-            'completed_by' => null,
-            'completed_at' => null,
-            'failed_by' => null,
-            'failed_at' => null,
-            'result_payload' => null,
-            'created_at' => $now,
-            'updated_at' => $now,
-        ]);
+        $id = $this->queueWriter->enqueuePending($assetUuid, $jobType, $stateVersion);
 
         return $this->find($id) ?? throw new \RuntimeException('Unable to load queued job.');
     }
@@ -128,35 +108,7 @@ final class JobRepository
         string $stateVersion = '1',
         ?string $correlationId = null
     ): bool {
-        $id = bin2hex(random_bytes(16));
-        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
-
-        try {
-            $this->connection->insert('processing_job', [
-                'id' => $id,
-                'asset_uuid' => $assetUuid,
-                'job_type' => $jobType,
-                'state_version' => $stateVersion,
-                'status' => JobStatus::PENDING->value,
-                'correlation_id' => $correlationId,
-                'claimed_by' => null,
-                'claimed_at' => null,
-                'lock_token' => null,
-                'fencing_token' => null,
-                'locked_until' => null,
-                'completed_by' => null,
-                'completed_at' => null,
-                'failed_by' => null,
-                'failed_at' => null,
-                'result_payload' => null,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
-        } catch (UniqueConstraintViolationException) {
-            return false;
-        }
-
-        return true;
+        return $this->queueWriter->enqueuePendingIfMissing($assetUuid, $jobType, $stateVersion, $correlationId);
     }
 
     public function claim(string $id, string $agentId, int $ttlSeconds): ?Job
