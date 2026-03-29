@@ -270,6 +270,12 @@ Target direction: maximize Doctrine ORM usage and reduce DBAL/manual persistence
 
 - ORM should be the default persistence model.
 - DBAL/manual SQL should become the exception, not the norm.
+- ORM repositories are allowed to use DQL and Doctrine `QueryBuilder` for:
+  - filters
+  - search
+  - pagination
+  - sorting
+  - partial projections
 - Any class that remains DBAL-based should have a clear justification:
   - locking/lease semantics that genuinely need explicit SQL
   - runtime projection tables
@@ -318,6 +324,16 @@ These are the files that should change first if the codebase moves to an ORM-fir
 - [`src/Entity/Asset.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Entity/Asset.php)
 - [`src/Entity/User.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Entity/User.php)
 - [`src/Entity/WebAuthnDevice.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Entity/WebAuthnDevice.php)
+
+### ORM repositories that should explicitly use QueryBuilder/DQL where needed
+
+- [`src/Asset/Repository/AssetRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Asset/Repository/AssetRepository.php)
+  - filters, search, pagination, sorting
+- future ORM repositories replacing:
+  - [`src/Derived/DerivedFileRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Derived/DerivedFileRepository.php)
+  - [`src/Derived/DerivedUploadSessionRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Derived/DerivedUploadSessionRepository.php)
+  - [`src/Auth/UserAuthSessionRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/UserAuthSessionRepository.php)
+  - [`src/Auth/AuthDeviceFlowRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthDeviceFlowRepository.php)
 
 ### Likely DBAL holdouts even in an ORM-first model
 
