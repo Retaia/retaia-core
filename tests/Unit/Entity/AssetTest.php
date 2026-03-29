@@ -40,6 +40,6 @@ final class AssetTest extends TestCase
         self::assertSame(['sports', 'highlights'], $asset->getTags());
         self::assertSame('Validated', $asset->getNotes());
         self::assertSame(['duration' => 90], $asset->getFields());
-        self::assertGreaterThan($updatedAt->getTimestamp(), $asset->getUpdatedAt()->getTimestamp());
+        self::assertSame($updatedAt, $asset->getUpdatedAt());
     }
 }
