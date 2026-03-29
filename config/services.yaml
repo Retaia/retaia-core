@@ -119,7 +119,7 @@ services:
         bind:
             Symfony\Component\RateLimiter\RateLimiterFactory $rateLimiterFactory: '@limiter.device_flow_start'
 
-    App\Feature\FeatureGovernanceService:
+    App\Feature\FeatureGovernanceRulesProvider:
         bind:
             bool $featureSuggestTagsEnabled: '%app.features.ai.suggest_tags%'
             bool $featureSuggestedTagsFiltersEnabled: '%app.features.ai.suggested_tags_filters%'

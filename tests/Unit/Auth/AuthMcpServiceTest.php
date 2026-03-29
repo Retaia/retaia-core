@@ -14,7 +14,11 @@ use App\Auth\AuthMcpChallengeRepository;
 use App\Auth\AuthMcpService;
 use App\Auth\ClientAccessTokenFactory;
 use App\Auth\TechnicalAccessTokenRepository;
+use App\Feature\FeatureExplanationBuilder;
+use App\Feature\FeatureGovernanceRulesProvider;
 use App\Feature\FeatureGovernanceService;
+use App\Feature\FeaturePayloadValidator;
+use App\Feature\FeatureToggleStore;
 use App\Tests\Support\AgentSigningTestHelper;
 use App\Tests\Support\AuthClientRegistryEntityManagerTrait;
 use App\Tests\Support\AuthMcpChallengeEntityManagerTrait;
@@ -81,7 +85,12 @@ final class AuthMcpServiceTest extends TestCase
     {
         $registry = new AuthClientRegistryRepository($this->authClientRegistryEntityManager());
         $challengeRepository = new AuthMcpChallengeRepository($this->authMcpChallengeEntityManager());
-        $policyService = new AuthClientPolicyService(new FeatureGovernanceService(new ArrayAdapter(), true, false, false));
+        $policyService = new AuthClientPolicyService(new FeatureGovernanceService(
+            new FeatureGovernanceRulesProvider(true, false, false),
+            new FeaturePayloadValidator(),
+            new FeatureToggleStore(new ArrayAdapter()),
+            new FeatureExplanationBuilder(),
+        ));
         $tokenRepository = new TechnicalAccessTokenRepository($this->technicalAccessTokenEntityManager());
         $adminService = new AuthClientAdminService(
             $registry,
