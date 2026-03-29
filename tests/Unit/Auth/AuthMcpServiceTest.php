@@ -80,13 +80,21 @@ final class AuthMcpServiceTest extends TestCase
             new ClientAccessTokenFactory('test-secret', 3600),
             $policyService,
         );
-
-        return new AuthMcpService(
+        $registrationService = new \App\Auth\AuthMcpClientRegistrationService(
             $registry,
+            $policyService,
+        );
+        $challengeService = new \App\Auth\AuthMcpChallengeService(
             $challengeRepository,
             $adminService,
             $policyService,
             new GpgCliAgentRequestSignatureVerifier(),
+            $registrationService,
+        );
+
+        return new AuthMcpService(
+            $registrationService,
+            $challengeService,
         );
     }
 
