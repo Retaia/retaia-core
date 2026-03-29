@@ -261,3 +261,52 @@ These items are not active runtime/spec regressions. They are the next code-qual
   - stable internal contract
   - implementation detail
 - Use that boundary to keep refactors aggressive internally without accidental contract drift.
+
+## Persistence Architecture Rule
+
+The codebase should not drift further into an arbitrary mix of ORM entities, DBAL repositories, and JSON-heavy pseudo-models.
+
+### Target rule
+
+- Use Doctrine ORM entities for stable business aggregates.
+- Use DBAL/manual repositories for technical tables, projections, locks, leases, nonces, and runtime state.
+- Do not use DBAL as the default just because it is quicker in the moment.
+- Do not force ORM on highly procedural tables where explicit SQL remains the clearer and safer tool.
+
+### DoctrineExtensions usage
+
+DoctrineExtensions is acceptable as a targeted simplification layer for standard ORM cross-cutting concerns.
+
+- Good fits:
+  - `Timestampable`
+  - `SoftDeleteable` where soft deletion is a real domain choice
+  - `Blameable` only if the persisted actor model is explicit and reliable
+- Not a substitute for:
+  - proper domain modeling
+  - typed value objects
+  - repository boundaries
+  - cleanup of JSON-shaped business fields
+
+### Candidates for ORM + standard traits
+
+- [`src/Entity/Asset`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Entity/Asset.php)
+  - candidate for standard timestamp behavior instead of hand-maintained `touch()`
+- [`src/Entity/User`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Entity/User.php)
+  - candidate if timestamps and actor-related metadata are normalized cleanly
+- [`src/Entity/WebAuthnDevice`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Entity/WebAuthnDevice.php)
+  - candidate for standard timestamp handling
+
+### Areas that should remain DBAL/repository-driven
+
+- [`src/Job/Repository/JobRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Job/Repository/JobRepository.php)
+- [`src/Auth/UserAuthSessionRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/UserAuthSessionRepository.php)
+- [`src/Auth/AuthDeviceFlowRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthDeviceFlowRepository.php)
+- [`src/Auth/AuthMcpChallengeRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthMcpChallengeRepository.php)
+- [`src/Derived/DerivedFileRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Derived/DerivedFileRepository.php)
+- [`src/Api/Service/AgentRuntimeRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentRuntimeRepository.php)
+
+### Explicit anti-goal
+
+- Do not try to solve model quality by sprinkling DoctrineExtensions traits across classes that are still poorly bounded.
+- First choose the right persistence style for the table.
+- Then use traits only to remove repetitive boilerplate inside the ORM part of the model.
