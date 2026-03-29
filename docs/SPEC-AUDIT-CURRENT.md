@@ -300,8 +300,6 @@ These are the files that should change first if the codebase moves to an ORM-fir
 
 #### Auth sessions and technical auth state
 
-- [`src/Auth/TechnicalAccessTokenRecord.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/TechnicalAccessTokenRecord.php)
-- [`src/Auth/TechnicalAccessTokenRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/TechnicalAccessTokenRepository.php)
 - [`src/Auth/AuthClientRegistryEntry.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthClientRegistryEntry.php)
 - [`src/Auth/AuthClientRegistryRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthClientRegistryRepository.php)
 
