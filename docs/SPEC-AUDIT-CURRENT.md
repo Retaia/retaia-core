@@ -22,8 +22,6 @@ The runtime/spec audit is green. The remaining work is structural: large classes
   - still holds too much persistence and projection logic for claiming, heartbeats, submit/fail paths, and ops/job views
 - [`src/Ingest/Service/SidecarFileDetector`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Service/SidecarFileDetector.php)
   - still centralizes too many file-discovery rules and media-specific sidecar heuristics
-- [`src/Feature/FeatureGovernanceService`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Feature/FeatureGovernanceService.php)
-  - still mixes app features, contract-version policy, and payload validation concerns
 
 ### Priority 2
 
@@ -77,7 +75,6 @@ This inventory is about direct class coverage only.
 - [`src/Controller/Api/OpsController`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Controller/Api/OpsController.php)
 - [`src/Job/Repository/JobRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Job/Repository/JobRepository.php)
 - [`src/Ingest/Service/SidecarFileDetector`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Service/SidecarFileDetector.php)
-- [`src/Feature/FeatureGovernanceService`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Feature/FeatureGovernanceService.php)
 - [`src/Infrastructure/Asset/AssetPatchGateway`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Infrastructure/Asset/AssetPatchGateway.php)
 - [`src/Storage/FlysystemBusinessStorage`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Storage/FlysystemBusinessStorage.php)
 - [`src/Controller/DeviceController`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Controller/DeviceController.php)

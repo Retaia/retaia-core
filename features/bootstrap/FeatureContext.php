@@ -4,10 +4,14 @@ use App\Asset\AssetState;
 use App\Asset\Service\AssetStateMachine;
 use App\Asset\Service\StateConflictException;
 use App\Entity\Asset;
+use App\Feature\FeatureExplanationBuilder;
+use App\Feature\FeatureGovernanceRulesProvider;
 use App\Tests\Support\InMemoryUserRepository;
 use App\Tests\Support\InMemoryPasswordResetTokenRepository;
 use App\Tests\Support\TestUserPasswordHasher;
 use App\Feature\FeatureGovernanceService;
+use App\Feature\FeaturePayloadValidator;
+use App\Feature\FeatureToggleStore;
 use App\User\Service\EmailVerificationService;
 use App\User\Service\PasswordResetService;
 use Behat\Behat\Context\Context;
@@ -340,7 +344,12 @@ final class FeatureContext implements Context
      */
     public function iValidateAppFeaturePayloadWithUnknownKey(): void
     {
-        $governance = new FeatureGovernanceService(new ArrayAdapter(), false, false, false);
+        $governance = new FeatureGovernanceService(
+            new FeatureGovernanceRulesProvider(false, false, false),
+            new FeaturePayloadValidator(),
+            new FeatureToggleStore(new ArrayAdapter()),
+            new FeatureExplanationBuilder(),
+        );
         $this->lastFeaturePayloadValidation = $governance->validateFeaturePayload(
             ['features.unknown.flag' => true],
             $governance->allowedAppFeatureKeys()
@@ -352,7 +361,12 @@ final class FeatureContext implements Context
      */
     public function iValidateAppFeaturePayloadWithNonBooleanValue(): void
     {
-        $governance = new FeatureGovernanceService(new ArrayAdapter(), false, false, false);
+        $governance = new FeatureGovernanceService(
+            new FeatureGovernanceRulesProvider(false, false, false),
+            new FeaturePayloadValidator(),
+            new FeatureToggleStore(new ArrayAdapter()),
+            new FeatureExplanationBuilder(),
+        );
         $this->lastFeaturePayloadValidation = $governance->validateFeaturePayload(
             ['features.ai' => 'disabled'],
             $governance->allowedAppFeatureKeys()
