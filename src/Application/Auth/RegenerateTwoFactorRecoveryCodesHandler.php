@@ -11,9 +11,15 @@ final class RegenerateTwoFactorRecoveryCodesHandler
     ) {
     }
 
-    public function handle(string $userId): RegenerateTwoFactorRecoveryCodesResult
+    public function handle(string $userId, string $otpCode): RegenerateTwoFactorRecoveryCodesResult
     {
         try {
+            if (!$this->gateway->verifyOtp($userId, $otpCode)) {
+                return new RegenerateTwoFactorRecoveryCodesResult(
+                    RegenerateTwoFactorRecoveryCodesResult::STATUS_INVALID_CODE
+                );
+            }
+
             $codes = $this->gateway->regenerateRecoveryCodes($userId);
         } catch (\RuntimeException) {
             return new RegenerateTwoFactorRecoveryCodesResult(

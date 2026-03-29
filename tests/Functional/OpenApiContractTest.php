@@ -440,7 +440,9 @@ final class OpenApiContractTest extends WebTestCase
         self::assertContainsOnly('string', $enablePayload['recovery_codes'] ?? []);
         self::assertNotEmpty($enablePayload['recovery_codes'] ?? []);
 
-        $client->request('POST', '/api/v1/auth/2fa/recovery-codes/regenerate');
+        $client->jsonRequest('POST', '/api/v1/auth/2fa/recovery-codes/regenerate', [
+            'otp_code' => TOTP::create((string) $setupPayload['secret'])->now(),
+        ]);
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $recoveryPayload = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertIsArray($recoveryPayload);

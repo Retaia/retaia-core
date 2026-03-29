@@ -13,6 +13,8 @@ interface TwoFactorGateway
 
     public function disable(string $userId, string $otpCode): bool;
 
+    public function verifyOtp(string $userId, string $otpCode): bool;
+
     /**
      * @return list<string>
      */

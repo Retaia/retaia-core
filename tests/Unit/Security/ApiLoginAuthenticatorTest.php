@@ -15,6 +15,8 @@ use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
+use Symfony\Component\RateLimiter\Storage\InMemoryStorage;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\Exception\AuthenticationException;
 use Symfony\Component\Security\Core\Exception\CustomUserMessageAuthenticationException;
@@ -207,7 +209,18 @@ final class ApiLoginAuthenticatorTest extends TestCase
         );
         $userTokens = new UserAccessTokenService(new UserAuthSessionRepository($this->connection()), 'test-secret', 3600);
 
-        return new ApiLoginAuthenticator(new NullLogger(), $this->translator(), $twoFactor, $userTokens);
+        return new ApiLoginAuthenticator(
+            new NullLogger(),
+            $this->translator(),
+            $twoFactor,
+            $userTokens,
+            new RateLimiterFactory([
+                'id' => 'test-auth-2fa-challenge',
+                'policy' => 'fixed_window',
+                'limit' => 50,
+                'interval' => '1 minute',
+            ], new InMemoryStorage())
+        );
     }
 
     private function connection(): Connection

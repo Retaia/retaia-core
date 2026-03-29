@@ -136,27 +136,64 @@ final class AuthSelfServiceEndpointsHandlerTest extends TestCase
     {
         $handler = $this->buildHandler(null);
 
-        $result = $handler->regenerateTwoFactorRecoveryCodes();
+        $result = $handler->regenerateTwoFactorRecoveryCodes(['otp_code' => '123456']);
 
         self::assertSame(TwoFactorRecoveryCodesEndpointResult::STATUS_UNAUTHORIZED, $result->status());
+    }
+
+    public function testRegenerateRecoveryCodesReturnsValidationFailedWhenOtpMissing(): void
+    {
+        $twoFactorGateway = $this->createMock(TwoFactorGateway::class);
+        $twoFactorGateway->expects(self::never())->method('verifyOtp');
+
+        $handler = $this->buildHandler(
+            ['id' => 'u_7a', 'email' => 'user@retaia.local', 'roles' => ['ROLE_USER']],
+            $twoFactorGateway
+        );
+
+        $result = $handler->regenerateTwoFactorRecoveryCodes([]);
+
+        self::assertSame(TwoFactorRecoveryCodesEndpointResult::STATUS_VALIDATION_FAILED, $result->status());
     }
 
     public function testRegenerateRecoveryCodesReturnsNotEnabledWhenGatewayThrows(): void
     {
         $twoFactorGateway = $this->createMock(TwoFactorGateway::class);
         $twoFactorGateway->expects(self::once())
-            ->method('regenerateRecoveryCodes')
-            ->with('u_7')
+            ->method('verifyOtp')
+            ->with('u_7', '123456')
             ->willThrowException(new \RuntimeException('MFA_NOT_ENABLED'));
+        $twoFactorGateway->expects(self::never())
+            ->method('regenerateRecoveryCodes')
+            ->with('u_7');
 
         $handler = $this->buildHandler(
             ['id' => 'u_7', 'email' => 'user@retaia.local', 'roles' => ['ROLE_USER']],
             $twoFactorGateway
         );
 
-        $result = $handler->regenerateTwoFactorRecoveryCodes();
+        $result = $handler->regenerateTwoFactorRecoveryCodes(['otp_code' => '123456']);
 
         self::assertSame(TwoFactorRecoveryCodesEndpointResult::STATUS_NOT_ENABLED, $result->status());
+    }
+
+    public function testRegenerateRecoveryCodesReturnsInvalidCodeWhenOtpCheckFails(): void
+    {
+        $twoFactorGateway = $this->createMock(TwoFactorGateway::class);
+        $twoFactorGateway->expects(self::once())
+            ->method('verifyOtp')
+            ->with('u_7b', '000000')
+            ->willReturn(false);
+        $twoFactorGateway->expects(self::never())->method('regenerateRecoveryCodes');
+
+        $handler = $this->buildHandler(
+            ['id' => 'u_7b', 'email' => 'user@retaia.local', 'roles' => ['ROLE_USER']],
+            $twoFactorGateway
+        );
+
+        $result = $handler->regenerateTwoFactorRecoveryCodes(['otp_code' => '000000']);
+
+        self::assertSame(TwoFactorRecoveryCodesEndpointResult::STATUS_INVALID_CODE, $result->status());
     }
 
     public function testGetMyFeaturesReturnsUnauthorizedWhenNotAuthenticated(): void
