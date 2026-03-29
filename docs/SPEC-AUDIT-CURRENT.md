@@ -191,3 +191,73 @@ This inventory is about direct class coverage only.
 - [`src/Application/AuthClient/MintClientTokenResult`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Application/AuthClient/MintClientTokenResult.php)
 - [`src/Application/AuthClient/CompleteDeviceApprovalResult`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Application/AuthClient/CompleteDeviceApprovalResult.php)
 - [`src/Application/AuthClient/CancelDeviceFlowEndpointResult`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Application/AuthClient/CancelDeviceFlowEndpointResult.php)
+
+## Code Reinforcement Backlog
+
+These items are not active runtime/spec regressions. They are the next code-quality and robustness improvements with the best expected payoff.
+
+### 1. Database invariants
+
+- Add stronger database-level guarantees instead of relying only on PHP guards.
+- Prefer `CHECK`, `UNIQUE`, foreign keys, and targeted indexes for:
+  - job lease and fencing consistency
+  - derived-file uniqueness and linkage
+  - auth session and refresh-token state
+  - 2FA persisted state coherence
+
+### 2. Replace weak arrays with typed models
+
+- Reduce use of `array<string, mixed>` in business paths.
+- Prioritize typed DTOs/value objects for:
+  - asset field projections and mutations
+  - job submit payloads
+  - ops/runtime projections
+  - storage configuration
+
+### 3. Add architecture tests
+
+- Introduce automated structural rules to prevent backsliding.
+- Useful rules:
+  - controllers do not contain business logic
+  - application handlers do not execute SQL directly
+  - only repositories/gateways touch persistence
+  - business storage access only goes through the storage port
+
+### 4. Add invariant/property-style tests
+
+- Add higher-signal invariant tests where example-based tests are not enough.
+- Good candidates:
+  - asset state machine transitions
+  - job leasing and fencing
+  - canonical relative path normalization
+  - 2FA and recovery-code one-shot semantics
+
+### 5. Strengthen security observability
+
+- Add or standardize security audit events and metrics for:
+  - login failures and success
+  - refresh failures and revocations
+  - 2FA enable, disable, and recovery-code regeneration
+  - auth-client secret rotation
+  - MCP and agent registration/signature failures
+
+### 6. Cover critical concrete classes directly
+
+- Best next direct-test targets:
+  - [`src/Infrastructure/Asset/AssetPatchGateway`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Infrastructure/Asset/AssetPatchGateway.php)
+  - [`src/Storage/FlysystemBusinessStorage`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Storage/FlysystemBusinessStorage.php)
+  - [`src/Ingest/Service/SidecarFileDetector`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Service/SidecarFileDetector.php)
+  - [`src/Job/Repository/JobRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Job/Repository/JobRepository.php)
+
+### 7. Prefer immutability in transport and domain helpers
+
+- Increase use of `readonly` and immutable value objects.
+- Reduce mutation-heavy helper flows where state is progressively patched in-place.
+
+### 8. Clarify compatibility boundaries
+
+- Document which code paths are:
+  - public API contract
+  - stable internal contract
+  - implementation detail
+- Use that boundary to keep refactors aggressive internally without accidental contract drift.
