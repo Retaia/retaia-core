@@ -99,7 +99,7 @@ services:
         bind:
             bool $featureSuggestTagsEnabled: '%app.features.ai.suggest_tags%'
 
-    App\Ingest\Service\SidecarFileDetector:
+    App\Ingest\Service\SidecarDetectionRules:
         bind:
             bool $videoLegacySidecarsEnabled: '%app.ingest.sidecars.video_legacy_enabled%'
 
