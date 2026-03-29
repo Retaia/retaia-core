@@ -6,6 +6,10 @@ use App\Api\Service\AgentSignature\GpgCliAgentRequestSignatureVerifier;
 use App\Auth\AuthClientAdminService;
 use App\Auth\AuthClientPolicyService;
 use App\Auth\AuthClientRegistryRepository;
+use App\Auth\AuthClientSecretRotationService;
+use App\Auth\AuthClientTokenMintingService;
+use App\Auth\AuthMcpClientRegistryService;
+use App\Auth\AuthMcpRegistrationNormalizer;
 use App\Auth\AuthMcpChallengeRepository;
 use App\Auth\AuthMcpService;
 use App\Auth\ClientAccessTokenFactory;
@@ -74,15 +78,17 @@ final class AuthMcpServiceTest extends TestCase
         $registry = new AuthClientRegistryRepository($connection);
         $challengeRepository = new AuthMcpChallengeRepository($connection);
         $policyService = new AuthClientPolicyService(new FeatureGovernanceService(new ArrayAdapter(), true, false, false));
+        $tokenRepository = new TechnicalAccessTokenRepository($connection);
         $adminService = new AuthClientAdminService(
             $registry,
-            new TechnicalAccessTokenRepository($connection),
-            new ClientAccessTokenFactory('test-secret', 3600),
+            new AuthClientTokenMintingService($registry, $tokenRepository, new ClientAccessTokenFactory('test-secret', 3600)),
+            new AuthClientSecretRotationService($registry, $tokenRepository),
             $policyService,
         );
         $registrationService = new \App\Auth\AuthMcpClientRegistrationService(
-            $registry,
             $policyService,
+            new AuthMcpRegistrationNormalizer(),
+            new AuthMcpClientRegistryService($registry),
         );
         $challengeService = new \App\Auth\AuthMcpChallengeService(
             $challengeRepository,
