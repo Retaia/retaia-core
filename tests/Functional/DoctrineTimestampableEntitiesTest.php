@@ -61,4 +61,34 @@ final class DoctrineTimestampableEntitiesTest extends KernelTestCase
 
         self::assertInstanceOf(\DateTimeImmutable::class, $device->getCreatedAt());
     }
+
+    public function testUserTimestampsAreFilledAndUpdatedByTimestampable(): void
+    {
+        $entityManager = static::getContainer()->get(EntityManagerInterface::class);
+
+        $user = new User(
+            id: 'timestamp-user-1',
+            email: 'timestamp-user@retaia.local',
+            passwordHash: password_hash('Change-me1!', PASSWORD_DEFAULT),
+            roles: ['ROLE_USER'],
+            emailVerified: false,
+        );
+
+        self::assertNull($user->getCreatedAt());
+        self::assertNull($user->getUpdatedAt());
+
+        $entityManager->persist($user);
+        $entityManager->flush();
+
+        $createdAt = $user->getCreatedAt();
+        $updatedAt = $user->getUpdatedAt();
+        self::assertInstanceOf(\DateTimeImmutable::class, $createdAt);
+        self::assertInstanceOf(\DateTimeImmutable::class, $updatedAt);
+
+        $user->withEmailVerified(true);
+        $entityManager->flush();
+
+        self::assertInstanceOf(\DateTimeImmutable::class, $user->getUpdatedAt());
+        self::assertGreaterThanOrEqual($updatedAt->getTimestamp(), $user->getUpdatedAt()->getTimestamp());
+    }
 }

@@ -3,6 +3,7 @@
 namespace App\Entity;
 
 use Doctrine\ORM\Mapping as ORM;
+use Gedmo\Mapping\Annotation as Gedmo;
 use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
 
@@ -26,6 +27,12 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         private array $roles = ['ROLE_USER'],
         #[ORM\Column(type: 'boolean')]
         private bool $emailVerified = false,
+        #[ORM\Column(name: 'created_at', type: 'datetime_immutable')]
+        #[Gedmo\Timestampable(on: 'create')]
+        private ?\DateTimeImmutable $createdAt = null,
+        #[ORM\Column(name: 'updated_at', type: 'datetime_immutable')]
+        #[Gedmo\Timestampable(on: 'update')]
+        private ?\DateTimeImmutable $updatedAt = null,
     ) {
     }
 
@@ -69,6 +76,16 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function isEmailVerified(): bool
     {
         return $this->emailVerified;
+    }
+
+    public function getCreatedAt(): ?\DateTimeImmutable
+    {
+        return $this->createdAt;
+    }
+
+    public function getUpdatedAt(): ?\DateTimeImmutable
+    {
+        return $this->updatedAt;
     }
 
     public function withEmailVerified(bool $verified): self

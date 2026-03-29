@@ -306,8 +306,6 @@ These are the files that should change first if the codebase moves to an ORM-fir
 
 #### Existing ORM entities to normalize with traits
 
-- [`src/Entity/User.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Entity/User.php)
-
 ### ORM repositories that should explicitly use QueryBuilder/DQL where needed
 
 - [`src/Asset/Repository/AssetRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Asset/Repository/AssetRepository.php)
