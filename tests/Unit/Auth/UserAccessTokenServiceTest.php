@@ -7,11 +7,13 @@ use App\Auth\UserAccessJwtService;
 use App\Auth\UserAuthSessionRepository;
 use App\Auth\UserAuthSessionService;
 use App\Entity\User;
-use Doctrine\DBAL\DriverManager;
+use App\Tests\Support\UserAuthSessionEntityManagerTrait;
 use PHPUnit\Framework\TestCase;
 
 final class UserAccessTokenServiceTest extends TestCase
 {
+    use UserAuthSessionEntityManagerTrait;
+
     public function testIssueIncludesRefreshTokenAndExpiresIn(): void
     {
         $service = $this->service();
@@ -77,22 +79,12 @@ final class UserAccessTokenServiceTest extends TestCase
 
     private function service(): UserAccessTokenService
     {
-        $repository = new UserAuthSessionRepository($this->connection());
+        $repository = new UserAuthSessionRepository($this->userAuthSessionEntityManager());
 
         return new UserAccessTokenService(
             new UserAuthSessionService($repository),
             new UserAccessJwtService('test-secret', 3600),
             86400
         );
-    }
-
-    private function connection(): \Doctrine\DBAL\Connection
-    {
-        $connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]);
-        $connection->executeStatement('CREATE TABLE user_auth_session (session_id VARCHAR(32) PRIMARY KEY NOT NULL, access_token CLOB NOT NULL, refresh_token VARCHAR(255) NOT NULL, access_expires_at INTEGER NOT NULL, refresh_expires_at INTEGER NOT NULL, user_id VARCHAR(32) NOT NULL, email VARCHAR(180) NOT NULL, client_id VARCHAR(64) NOT NULL, client_kind VARCHAR(32) NOT NULL, created_at INTEGER NOT NULL, last_used_at INTEGER NOT NULL)');
-        $connection->executeStatement('CREATE UNIQUE INDEX uniq_user_auth_session_refresh_token ON user_auth_session (refresh_token)');
-        $connection->executeStatement('CREATE INDEX idx_user_auth_session_user_id ON user_auth_session (user_id)');
-
-        return $connection;
     }
 }

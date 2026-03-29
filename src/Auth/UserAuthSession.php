@@ -2,20 +2,39 @@
 
 namespace App\Auth;
 
+use Doctrine\ORM\Mapping as ORM;
+
+#[ORM\Entity]
+#[ORM\Table(name: 'user_auth_session')]
+#[ORM\UniqueConstraint(name: 'uniq_user_auth_session_refresh_token', columns: ['refresh_token'])]
+#[ORM\Index(name: 'idx_user_auth_session_user_id', columns: ['user_id'])]
+#[ORM\Index(name: 'idx_user_auth_session_refresh_expires_at', columns: ['refresh_expires_at'])]
 final class UserAuthSession
 {
     public function __construct(
-        public readonly string $sessionId,
-        public readonly string $accessToken,
-        public readonly string $refreshToken,
-        public readonly int $accessExpiresAt,
-        public readonly int $refreshExpiresAt,
-        public readonly string $userId,
-        public readonly string $email,
-        public readonly string $clientId,
-        public readonly string $clientKind,
-        public readonly int $createdAt,
-        public readonly int $lastUsedAt,
+        #[ORM\Id]
+        #[ORM\Column(name: 'session_id', type: 'string', length: 32)]
+        public string $sessionId,
+        #[ORM\Column(name: 'access_token', type: 'text')]
+        public string $accessToken,
+        #[ORM\Column(name: 'refresh_token', type: 'string', length: 255)]
+        public string $refreshToken,
+        #[ORM\Column(name: 'access_expires_at', type: 'bigint')]
+        public int $accessExpiresAt,
+        #[ORM\Column(name: 'refresh_expires_at', type: 'bigint')]
+        public int $refreshExpiresAt,
+        #[ORM\Column(name: 'user_id', type: 'string', length: 32)]
+        public string $userId,
+        #[ORM\Column(name: 'email', type: 'string', length: 180)]
+        public string $email,
+        #[ORM\Column(name: 'client_id', type: 'string', length: 64)]
+        public string $clientId,
+        #[ORM\Column(name: 'client_kind', type: 'string', length: 32)]
+        public string $clientKind,
+        #[ORM\Column(name: 'created_at', type: 'bigint')]
+        public int $createdAt,
+        #[ORM\Column(name: 'last_used_at', type: 'bigint')]
+        public int $lastUsedAt,
     ) {
     }
 
@@ -65,26 +84,6 @@ final class UserAuthSession
         );
     }
 
-    /**
-     * @return array<string, scalar>
-     */
-    public function toRow(): array
-    {
-        return [
-            'session_id' => $this->sessionId,
-            'access_token' => $this->accessToken,
-            'refresh_token' => $this->refreshToken,
-            'access_expires_at' => $this->accessExpiresAt,
-            'refresh_expires_at' => $this->refreshExpiresAt,
-            'user_id' => $this->userId,
-            'email' => $this->email,
-            'client_id' => $this->clientId,
-            'client_kind' => $this->clientKind,
-            'created_at' => $this->createdAt,
-            'last_used_at' => $this->lastUsedAt,
-        ];
-    }
-
     public function withLastUsedAt(int $timestamp): self
     {
         return new self(
@@ -100,5 +99,19 @@ final class UserAuthSession
             $this->createdAt,
             $timestamp,
         );
+    }
+
+    public function syncFrom(self $session): void
+    {
+        $this->accessToken = $session->accessToken;
+        $this->refreshToken = $session->refreshToken;
+        $this->accessExpiresAt = $session->accessExpiresAt;
+        $this->refreshExpiresAt = $session->refreshExpiresAt;
+        $this->userId = $session->userId;
+        $this->email = $session->email;
+        $this->clientId = $session->clientId;
+        $this->clientKind = $session->clientKind;
+        $this->createdAt = $session->createdAt;
+        $this->lastUsedAt = $session->lastUsedAt;
     }
 }

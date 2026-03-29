@@ -2,70 +2,62 @@
 
 namespace App\Auth;
 
-use Doctrine\DBAL\Connection;
+use Doctrine\ORM\EntityManagerInterface;
 
 final class UserAuthSessionRepository implements UserAuthSessionRepositoryInterface
 {
     public function __construct(
-        private Connection $connection,
+        private EntityManagerInterface $entityManager,
     ) {
     }
 
     public function findByRefreshToken(string $refreshToken): ?UserAuthSession
     {
-        $row = $this->connection->fetchAssociative(
-            'SELECT session_id, access_token, refresh_token, access_expires_at, refresh_expires_at, user_id, email, client_id, client_kind, created_at, last_used_at
-             FROM user_auth_session
-             WHERE refresh_token = :refreshToken
-             LIMIT 1',
-            ['refreshToken' => $refreshToken]
-        );
+        $session = $this->entityManager->createQueryBuilder()
+            ->select('s')
+            ->from(UserAuthSession::class, 's')
+            ->andWhere('s.refreshToken = :refreshToken')
+            ->setParameter('refreshToken', $refreshToken)
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
 
-        return is_array($row) ? UserAuthSession::fromArray($row) : null;
+        return $session instanceof UserAuthSession ? $session : null;
     }
 
     public function findBySessionId(string $sessionId): ?UserAuthSession
     {
-        $row = $this->connection->fetchAssociative(
-            'SELECT session_id, access_token, refresh_token, access_expires_at, refresh_expires_at, user_id, email, client_id, client_kind, created_at, last_used_at
-             FROM user_auth_session
-             WHERE session_id = :sessionId
-             LIMIT 1',
-            ['sessionId' => $sessionId]
-        );
+        $session = $this->entityManager->find(UserAuthSession::class, $sessionId);
 
-        return is_array($row) ? UserAuthSession::fromArray($row) : null;
+        return $session instanceof UserAuthSession ? $session : null;
     }
 
     public function findByUserId(string $userId): array
     {
-        $rows = $this->connection->fetchAllAssociative(
-            'SELECT session_id, access_token, refresh_token, access_expires_at, refresh_expires_at, user_id, email, client_id, client_kind, created_at, last_used_at
-             FROM user_auth_session
-             WHERE user_id = :userId',
-            ['userId' => $userId]
-        );
-
-        $sessions = [];
-        foreach ($rows as $row) {
-            $session = UserAuthSession::fromArray($row);
-            if ($session !== null) {
-                $sessions[] = $session;
-            }
-        }
+        /** @var list<UserAuthSession> $sessions */
+        $sessions = $this->entityManager->createQueryBuilder()
+            ->select('s')
+            ->from(UserAuthSession::class, 's')
+            ->andWhere('s.userId = :userId')
+            ->setParameter('userId', $userId)
+            ->getQuery()
+            ->getResult();
 
         return $sessions;
     }
 
     public function save(UserAuthSession $session): void
     {
-        $data = $session->toRow();
-        if ($this->findBySessionId($session->sessionId) !== null) {
-            $this->connection->update('user_auth_session', $data, ['session_id' => $session->sessionId]);
+        $existing = $this->entityManager->find(UserAuthSession::class, $session->sessionId);
+        if ($existing instanceof UserAuthSession) {
+            $existing->syncFrom($session);
+            $this->entityManager->flush();
+
             return;
         }
 
-        $this->connection->insert('user_auth_session', $data);
+        $this->entityManager->persist($session);
+        $this->entityManager->flush();
     }
 
     public function delete(string $sessionId): void
@@ -75,6 +67,12 @@ final class UserAuthSessionRepository implements UserAuthSessionRepositoryInterf
             return;
         }
 
-        $this->connection->delete('user_auth_session', ['session_id' => $sessionId]);
+        $session = $this->entityManager->find(UserAuthSession::class, $sessionId);
+        if (!$session instanceof UserAuthSession) {
+            return;
+        }
+
+        $this->entityManager->remove($session);
+        $this->entityManager->flush();
     }
 }

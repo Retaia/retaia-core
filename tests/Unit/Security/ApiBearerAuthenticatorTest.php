@@ -9,6 +9,7 @@ use App\Auth\UserAccessTokenService;
 use App\Auth\UserAccessJwtService;
 use App\Auth\UserAuthSessionRepository;
 use App\Auth\UserAuthSessionService;
+use App\Tests\Support\UserAuthSessionEntityManagerTrait;
 use App\Domain\AuthClient\ClientKind;
 use App\Entity\User;
 use App\Security\ApiBearerAuthenticator;
@@ -24,6 +25,8 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class ApiBearerAuthenticatorTest extends TestCase
 {
+    use UserAuthSessionEntityManagerTrait;
+
     public function testSupportsSkipsPublicApiPathsAndNonApiPaths(): void
     {
         $authenticator = $this->authenticator();
@@ -39,7 +42,7 @@ final class ApiBearerAuthenticatorTest extends TestCase
     public function testAuthenticateBuildsPassportForUserToken(): void
     {
         $connection = $this->connection();
-        $repository = new UserAuthSessionRepository($connection);
+        $repository = new UserAuthSessionRepository($this->userAuthSessionEntityManager());
         $userTokens = new UserAccessTokenService(new UserAuthSessionService($repository), new UserAccessJwtService('test-secret', 3600));
         $authenticator = $this->authenticator($userTokens, new ClientAccessTokenResolver(new TechnicalAccessTokenRepository($connection)));
         $user = new User('user-1', 'user@example.test', 'hash');
@@ -62,7 +65,7 @@ final class ApiBearerAuthenticatorTest extends TestCase
 
         $authenticator = $this->authenticator(
             new UserAccessTokenService(
-                new UserAuthSessionService(new UserAuthSessionRepository($connection)),
+                new UserAuthSessionService(new UserAuthSessionRepository($this->userAuthSessionEntityManager())),
                 new UserAccessJwtService('test-secret', 3600)
             ),
             new ClientAccessTokenResolver($tokenRepository)
@@ -123,7 +126,7 @@ final class ApiBearerAuthenticatorTest extends TestCase
 
         return new ApiBearerAuthenticator(
             $userTokens ?? new UserAccessTokenService(
-                new UserAuthSessionService(new UserAuthSessionRepository($connection)),
+                new UserAuthSessionService(new UserAuthSessionRepository($this->userAuthSessionEntityManager())),
                 new UserAccessJwtService('test-secret', 3600)
             ),
             $clientResolver ?? new ClientAccessTokenResolver(new TechnicalAccessTokenRepository($connection)),

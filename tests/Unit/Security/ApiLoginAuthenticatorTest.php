@@ -7,6 +7,7 @@ use App\Auth\UserAccessJwtService;
 use App\Auth\UserAuthSessionRepository;
 use App\Auth\UserAuthSessionService;
 use App\Entity\User;
+use App\Tests\Support\UserAuthSessionEntityManagerTrait;
 use App\Security\ApiLoginAuthenticator;
 use App\User\Service\TwoFactorSecretCipher;
 use App\User\Service\TwoFactorService;
@@ -30,6 +31,8 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class ApiLoginAuthenticatorTest extends TestCase
 {
+    use UserAuthSessionEntityManagerTrait;
+
     public function testSupportsOnlyPostLoginRoute(): void
     {
         $authenticator = $this->authenticator();
@@ -209,7 +212,7 @@ final class ApiLoginAuthenticatorTest extends TestCase
                 'v2'
             )
         );
-        $repository = new UserAuthSessionRepository($this->connection());
+        $repository = new UserAuthSessionRepository($this->userAuthSessionEntityManager());
         $userTokens = new UserAccessTokenService(
             new UserAuthSessionService($repository),
             new UserAccessJwtService('test-secret', 3600)
