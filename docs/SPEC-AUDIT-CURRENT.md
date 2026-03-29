@@ -264,49 +264,74 @@ These items are not active runtime/spec regressions. They are the next code-qual
 
 ## Persistence Architecture Rule
 
-The codebase should not drift further into an arbitrary mix of ORM entities, DBAL repositories, and JSON-heavy pseudo-models.
+Target direction: maximize Doctrine ORM usage and reduce DBAL/manual persistence to the smallest possible surface.
 
 ### Target rule
 
-- Use Doctrine ORM entities for stable business aggregates.
-- Use DBAL/manual repositories for technical tables, projections, locks, leases, nonces, and runtime state.
-- Do not use DBAL as the default just because it is quicker in the moment.
-- Do not force ORM on highly procedural tables where explicit SQL remains the clearer and safer tool.
+- ORM should be the default persistence model.
+- DBAL/manual SQL should become the exception, not the norm.
+- Any class that remains DBAL-based should have a clear justification:
+  - locking/lease semantics that genuinely need explicit SQL
+  - runtime projection tables
+  - append-heavy observability tables
 
 ### DoctrineExtensions usage
 
-DoctrineExtensions is acceptable as a targeted simplification layer for standard ORM cross-cutting concerns.
+DoctrineExtensions should be used where it removes repetitive ORM boilerplate cleanly.
 
-- Good fits:
+- Preferred traits/extensions:
   - `Timestampable`
-  - `SoftDeleteable` where soft deletion is a real domain choice
-  - `Blameable` only if the persisted actor model is explicit and reliable
+  - `SoftDeleteable` when the domain really needs soft deletion
+  - `Blameable` when the persisted actor model is explicit and trustworthy
 - Not a substitute for:
-  - proper domain modeling
+  - proper aggregate boundaries
   - typed value objects
-  - repository boundaries
-  - cleanup of JSON-shaped business fields
+  - replacing JSON-heavy ad hoc fields with modeled state
 
-### Candidates for ORM + standard traits
+### First ORM migration targets
 
-- [`src/Entity/Asset`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Entity/Asset.php)
-  - candidate for standard timestamp behavior instead of hand-maintained `touch()`
-- [`src/Entity/User`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Entity/User.php)
-  - candidate if timestamps and actor-related metadata are normalized cleanly
-- [`src/Entity/WebAuthnDevice`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Entity/WebAuthnDevice.php)
-  - candidate for standard timestamp handling
+These are the files that should change first if the codebase moves to an ORM-first model.
 
-### Areas that should remain DBAL/repository-driven
+#### Auth sessions and technical auth state
 
-- [`src/Job/Repository/JobRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Job/Repository/JobRepository.php)
-- [`src/Auth/UserAuthSessionRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/UserAuthSessionRepository.php)
-- [`src/Auth/AuthDeviceFlowRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthDeviceFlowRepository.php)
-- [`src/Auth/AuthMcpChallengeRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthMcpChallengeRepository.php)
-- [`src/Derived/DerivedFileRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Derived/DerivedFileRepository.php)
-- [`src/Api/Service/AgentRuntimeRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentRuntimeRepository.php)
+- [`src/Auth/UserAuthSession.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/UserAuthSession.php)
+- [`src/Auth/UserAuthSessionRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/UserAuthSessionRepository.php)
+- [`src/Auth/AuthDeviceFlow.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthDeviceFlow.php)
+- [`src/Auth/AuthDeviceFlowRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthDeviceFlowRepository.php)
+- [`src/Auth/AuthMcpChallenge.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthMcpChallenge.php)
+- [`src/Auth/AuthMcpChallengeRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthMcpChallengeRepository.php)
+- [`src/Auth/TechnicalAccessTokenRecord.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/TechnicalAccessTokenRecord.php)
+- [`src/Auth/TechnicalAccessTokenRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/TechnicalAccessTokenRepository.php)
+- [`src/Auth/AuthClientRegistryEntry.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthClientRegistryEntry.php)
+- [`src/Auth/AuthClientRegistryRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthClientRegistryRepository.php)
+
+#### Derived storage and upload state
+
+- [`src/Derived/DerivedFile.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Derived/DerivedFile.php)
+- [`src/Derived/DerivedFileRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Derived/DerivedFileRepository.php)
+- [`src/Derived/DerivedUploadSession.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Derived/DerivedUploadSession.php)
+- [`src/Derived/DerivedUploadSessionRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Derived/DerivedUploadSessionRepository.php)
+- [`src/Derived/Service/DerivedUploadService.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Derived/Service/DerivedUploadService.php)
+
+#### Existing ORM entities to normalize with traits
+
+- [`src/Entity/Asset.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Entity/Asset.php)
+- [`src/Entity/User.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Entity/User.php)
+- [`src/Entity/WebAuthnDevice.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Entity/WebAuthnDevice.php)
+
+### Likely DBAL holdouts even in an ORM-first model
+
+These may still justify explicit SQL after review, but that should be a conscious exception.
+
+- [`src/Job/Repository/JobRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Job/Repository/JobRepository.php)
+- [`src/Lock/Repository/OperationLockRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Lock/Repository/OperationLockRepository.php)
+- [`src/Api/Service/AgentRuntimeRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentRuntimeRepository.php)
+- [`src/Api/Service/AgentJobProjectionRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentJobProjectionRepository.php)
+- [`src/Ingest/Repository/IngestDiagnosticsRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Repository/IngestDiagnosticsRepository.php)
+- [`src/Ingest/Repository/PathAuditRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Repository/PathAuditRepository.php)
+- [`src/Observability/Repository/MetricEventRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Observability/Repository/MetricEventRepository.php)
 
 ### Explicit anti-goal
 
-- Do not try to solve model quality by sprinkling DoctrineExtensions traits across classes that are still poorly bounded.
-- First choose the right persistence style for the table.
-- Then use traits only to remove repetitive boilerplate inside the ORM part of the model.
+- Do not keep adding new DBAL-only pseudo-models when an ORM entity would be the simpler long-term choice.
+- Do not use DoctrineExtensions traits as a substitute for the ORM migration itself.
