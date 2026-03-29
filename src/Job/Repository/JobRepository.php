@@ -7,14 +7,20 @@ use App\Job\JobStatus;
 use App\Storage\BusinessStorageRegistryInterface;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\ParameterType;
-use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 
 final class JobRepository
 {
     public function __construct(
         private Connection $connection,
-        private BusinessStorageRegistryInterface $storageRegistry,
+        BusinessStorageRegistryInterface $storageRegistry,
+        private JobQueueDiagnosticsProjector $diagnosticsProjector = new JobQueueDiagnosticsProjector(),
+        private ?JobSourceProjector $sourceProjector = null,
+        private ?JobQueueWriter $queueWriter = null,
+        private ?JobLifecycleWriter $lifecycleWriter = null,
     ) {
+        $this->sourceProjector ??= new JobSourceProjector($storageRegistry);
+        $this->queueWriter ??= new JobQueueWriter($connection);
+        $this->lifecycleWriter ??= new JobLifecycleWriter($connection);
     }
 
     /**
@@ -93,28 +99,7 @@ final class JobRepository
 
     public function enqueuePending(string $assetUuid, string $jobType, string $stateVersion = '1'): Job
     {
-        $id = bin2hex(random_bytes(16));
-        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
-        $this->connection->insert('processing_job', [
-            'id' => $id,
-            'asset_uuid' => $assetUuid,
-            'job_type' => $jobType,
-            'state_version' => $stateVersion,
-            'status' => JobStatus::PENDING->value,
-            'correlation_id' => null,
-            'claimed_by' => null,
-            'claimed_at' => null,
-            'lock_token' => null,
-            'fencing_token' => null,
-            'locked_until' => null,
-            'completed_by' => null,
-            'completed_at' => null,
-            'failed_by' => null,
-            'failed_at' => null,
-            'result_payload' => null,
-            'created_at' => $now,
-            'updated_at' => $now,
-        ]);
+        $id = $this->queueWriter->enqueuePending($assetUuid, $jobType, $stateVersion);
 
         return $this->find($id) ?? throw new \RuntimeException('Unable to load queued job.');
     }
@@ -125,74 +110,12 @@ final class JobRepository
         string $stateVersion = '1',
         ?string $correlationId = null
     ): bool {
-        $id = bin2hex(random_bytes(16));
-        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
-
-        try {
-            $this->connection->insert('processing_job', [
-                'id' => $id,
-                'asset_uuid' => $assetUuid,
-                'job_type' => $jobType,
-                'state_version' => $stateVersion,
-                'status' => JobStatus::PENDING->value,
-                'correlation_id' => $correlationId,
-                'claimed_by' => null,
-                'claimed_at' => null,
-                'lock_token' => null,
-                'fencing_token' => null,
-                'locked_until' => null,
-                'completed_by' => null,
-                'completed_at' => null,
-                'failed_by' => null,
-                'failed_at' => null,
-                'result_payload' => null,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
-        } catch (UniqueConstraintViolationException) {
-            return false;
-        }
-
-        return true;
+        return $this->queueWriter->enqueuePendingIfMissing($assetUuid, $jobType, $stateVersion, $correlationId);
     }
 
     public function claim(string $id, string $agentId, int $ttlSeconds): ?Job
     {
-        $lockToken = bin2hex(random_bytes(16));
-        $lockedUntil = (new \DateTimeImmutable(sprintf('+%d seconds', max(1, $ttlSeconds))))->format('Y-m-d H:i:s');
-        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
-
-        $affected = $this->connection->executeStatement(
-            'UPDATE processing_job
-             SET status = :claimed, claimed_by = :agentId, claimed_at = :now, lock_token = :lockToken, fencing_token = 1, locked_until = :lockedUntil, completed_by = NULL, completed_at = NULL, failed_by = NULL, failed_at = NULL, updated_at = :now
-             WHERE id = :id
-               AND (status = :pending OR (status = :claimed AND locked_until < :now))
-               AND EXISTS (
-                  SELECT 1
-                  FROM asset a
-                  WHERE a.uuid = processing_job.asset_uuid
-                    AND a.state NOT IN (:blockedStateMoveQueued, :blockedStatePurged)
-               )
-               AND NOT EXISTS (
-                  SELECT 1
-                  FROM asset_operation_lock l
-                  WHERE l.asset_uuid = processing_job.asset_uuid
-                    AND l.released_at IS NULL
-               )',
-            [
-                'claimed' => JobStatus::CLAIMED->value,
-                'agentId' => $agentId,
-                'lockToken' => $lockToken,
-                'lockedUntil' => $lockedUntil,
-                'id' => $id,
-                'pending' => JobStatus::PENDING->value,
-                'now' => $now,
-                'blockedStateMoveQueued' => 'MOVE_QUEUED',
-                'blockedStatePurged' => 'PURGED',
-            ]
-        );
-
-        if ($affected !== 1) {
+        if (!$this->lifecycleWriter->claim($id, $agentId, $ttlSeconds)) {
             return null;
         }
 
@@ -201,30 +124,7 @@ final class JobRepository
 
     public function heartbeat(string $id, string $actorId, string $lockToken, int $fencingToken, int $ttlSeconds): ?Job
     {
-        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
-        $lockedUntil = (new \DateTimeImmutable(sprintf('+%d seconds', max(1, $ttlSeconds))))->format('Y-m-d H:i:s');
-
-        $affected = $this->connection->executeStatement(
-            'UPDATE processing_job
-             SET locked_until = :lockedUntil, fencing_token = fencing_token + 1, updated_at = :now
-             WHERE id = :id
-               AND status = :claimed
-               AND claimed_by = :actorId
-               AND lock_token = :lockToken
-               AND fencing_token = :fencingToken
-               AND locked_until >= :now',
-            [
-                'id' => $id,
-                'actorId' => $actorId,
-                'claimed' => JobStatus::CLAIMED->value,
-                'lockToken' => $lockToken,
-                'fencingToken' => $fencingToken,
-                'lockedUntil' => $lockedUntil,
-                'now' => $now,
-            ]
-        );
-
-        if ($affected !== 1) {
+        if (!$this->lifecycleWriter->heartbeat($id, $actorId, $lockToken, $fencingToken, $ttlSeconds)) {
             return null;
         }
 
@@ -236,30 +136,7 @@ final class JobRepository
      */
     public function submit(string $id, string $actorId, string $lockToken, int $fencingToken, array $result): ?Job
     {
-        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
-
-        $affected = $this->connection->executeStatement(
-            'UPDATE processing_job
-             SET status = :completed, result_payload = :result, claimed_by = NULL, lock_token = NULL, fencing_token = NULL, locked_until = NULL, completed_by = :actorId, completed_at = :now, failed_by = NULL, failed_at = NULL, updated_at = :now
-             WHERE id = :id
-               AND status = :claimed
-               AND claimed_by = :actorId
-               AND lock_token = :lockToken
-               AND fencing_token = :fencingToken
-               AND locked_until >= :now',
-            [
-                'id' => $id,
-                'actorId' => $actorId,
-                'completed' => JobStatus::COMPLETED->value,
-                'claimed' => JobStatus::CLAIMED->value,
-                'result' => json_encode($result, JSON_THROW_ON_ERROR),
-                'lockToken' => $lockToken,
-                'fencingToken' => $fencingToken,
-                'now' => $now,
-            ]
-        );
-
-        if ($affected !== 1) {
+        if (!$this->lifecycleWriter->submit($id, $actorId, $lockToken, $fencingToken, $result)) {
             return null;
         }
 
@@ -268,40 +145,7 @@ final class JobRepository
 
     public function fail(string $id, string $actorId, string $lockToken, int $fencingToken, bool $retryable, string $errorCode, string $message): ?Job
     {
-        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
-        $nextStatus = $retryable ? JobStatus::PENDING->value : JobStatus::FAILED->value;
-        $result = [
-            'error_code' => $errorCode,
-            'message' => $message,
-            'retryable' => $retryable,
-        ];
-
-        $affected = $this->connection->executeStatement(
-            'UPDATE processing_job
-             SET status = :nextStatus, result_payload = :result, claimed_by = :nextClaimedBy, claimed_at = :nextClaimedAt, lock_token = NULL, fencing_token = NULL, locked_until = NULL, completed_by = NULL, completed_at = NULL, failed_by = :nextFailedBy, failed_at = :nextFailedAt, updated_at = :now
-             WHERE id = :id
-               AND status = :claimed
-               AND claimed_by = :actorId
-               AND lock_token = :lockToken
-               AND fencing_token = :fencingToken
-               AND locked_until >= :now',
-            [
-                'id' => $id,
-                'actorId' => $actorId,
-                'nextStatus' => $nextStatus,
-                'nextClaimedBy' => $retryable ? null : $actorId,
-                'nextClaimedAt' => null,
-                'nextFailedBy' => $retryable ? null : $actorId,
-                'nextFailedAt' => $retryable ? null : $now,
-                'claimed' => JobStatus::CLAIMED->value,
-                'result' => json_encode($result, JSON_THROW_ON_ERROR),
-                'lockToken' => $lockToken,
-                'fencingToken' => $fencingToken,
-                'now' => $now,
-            ]
-        );
-
-        if ($affected !== 1) {
+        if (!$this->lifecycleWriter->fail($id, $actorId, $lockToken, $fencingToken, $retryable, $errorCode, $message)) {
             return null;
         }
 
@@ -310,22 +154,7 @@ final class JobRepository
 
     public function hasActiveJobForAgent(string $agentId): bool
     {
-        $row = $this->connection->fetchOne(
-            'SELECT 1
-             FROM processing_job
-             WHERE claimed_by = :agentId
-               AND status = :claimed
-               AND locked_until IS NOT NULL
-               AND locked_until >= :now
-             LIMIT 1',
-            [
-                'agentId' => $agentId,
-                'claimed' => JobStatus::CLAIMED->value,
-                'now' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
-            ]
-        );
-
-        return $row !== false;
+        return $this->lifecycleWriter->hasActiveJobForAgent($agentId);
     }
 
     /**
@@ -366,73 +195,7 @@ final class JobRepository
             ];
         }
 
-        $summary = [
-            'pending_total' => 0,
-            'claimed_total' => 0,
-            'failed_total' => 0,
-        ];
-        foreach ($summaryRows as $row) {
-            $status = trim((string) ($row['status'] ?? ''));
-            $total = max(0, (int) ($row['total'] ?? 0));
-            if ($status === JobStatus::PENDING->value) {
-                $summary['pending_total'] = $total;
-            } elseif ($status === JobStatus::CLAIMED->value) {
-                $summary['claimed_total'] = $total;
-            } elseif ($status === JobStatus::FAILED->value) {
-                $summary['failed_total'] = $total;
-            }
-        }
-
-        /** @var array<string, array{job_type:string,pending:int,claimed:int,failed:int,oldest_pending_age_seconds:?int}> $byType */
-        $byType = [];
-        foreach ($byTypeRows as $row) {
-            $jobType = trim((string) ($row['job_type'] ?? ''));
-            $status = trim((string) ($row['status'] ?? ''));
-            $total = max(0, (int) ($row['total'] ?? 0));
-            if ($jobType === '') {
-                continue;
-            }
-
-            if (!isset($byType[$jobType])) {
-                $byType[$jobType] = [
-                    'job_type' => $jobType,
-                    'pending' => 0,
-                    'claimed' => 0,
-                    'failed' => 0,
-                    'oldest_pending_age_seconds' => null,
-                ];
-            }
-
-            if ($status === JobStatus::PENDING->value) {
-                $byType[$jobType]['pending'] = $total;
-            } elseif ($status === JobStatus::CLAIMED->value) {
-                $byType[$jobType]['claimed'] = $total;
-            } elseif ($status === JobStatus::FAILED->value) {
-                $byType[$jobType]['failed'] = $total;
-            }
-        }
-
-        $now = new \DateTimeImmutable();
-        foreach ($oldestPendingRows as $row) {
-            $jobType = trim((string) ($row['job_type'] ?? ''));
-            $oldestRaw = trim((string) ($row['oldest_pending_at'] ?? ''));
-            if ($jobType === '' || !isset($byType[$jobType]) || $oldestRaw === '') {
-                continue;
-            }
-
-            try {
-                $oldest = new \DateTimeImmutable($oldestRaw);
-                $age = max(0, $now->getTimestamp() - $oldest->getTimestamp());
-                $byType[$jobType]['oldest_pending_age_seconds'] = $age;
-            } catch (\Throwable) {
-                $byType[$jobType]['oldest_pending_age_seconds'] = null;
-            }
-        }
-
-        return [
-            'summary' => $summary,
-            'by_type' => array_values($byType),
-        ];
+        return $this->diagnosticsProjector->project($summaryRows, $byTypeRows, $oldestPendingRows);
     }
 
     /**
@@ -460,96 +223,9 @@ final class JobRepository
             isset($row['lock_token']) ? (string) $row['lock_token'] : null,
             $lockedUntil,
             $result,
-            $this->sourceFromAssetFields($row['asset_fields'] ?? null, (string) ($row['asset_filename'] ?? '')),
+            $this->sourceProjector->sourceFromAssetFields($row['asset_fields'] ?? null, (string) ($row['asset_filename'] ?? '')),
             is_string($row['correlation_id'] ?? null) ? (string) $row['correlation_id'] : null,
             isset($row['fencing_token']) ? (int) $row['fencing_token'] : null,
         );
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function sourceFromAssetFields(mixed $assetFieldsRaw, string $assetFilename): array
-    {
-        $fields = [];
-        if (is_array($assetFieldsRaw)) {
-            $fields = $assetFieldsRaw;
-        } elseif (is_string($assetFieldsRaw) && $assetFieldsRaw !== '') {
-            $decoded = json_decode($assetFieldsRaw, true);
-            if (is_array($decoded)) {
-                $fields = $decoded;
-            }
-        }
-
-        $paths = is_array($fields['paths'] ?? null) ? $fields['paths'] : [];
-        $storageId = $this->requiredStorageId($paths, $assetFilename);
-        $original = $this->requiredOriginalRelativePath($paths, $assetFilename);
-        $sidecars = $this->sanitizeRelativePaths(is_array($paths['sidecars_relative'] ?? null) ? $paths['sidecars_relative'] : []);
-
-        return [
-            'storage_id' => $storageId,
-            'original_relative' => $original,
-            'sidecars_relative' => $sidecars,
-        ];
-    }
-
-    private function sanitizeRelativePath(string $path): string
-    {
-        $trimmed = ltrim(trim($path), '/');
-        if ($trimmed === '' || str_contains($trimmed, "\0") || str_contains($trimmed, '../') || str_contains($trimmed, '..\\')) {
-            return '';
-        }
-
-        return $trimmed;
-    }
-
-    /**
-     * @param mixed $paths
-     * @return array<int, string>
-     */
-    private function sanitizeRelativePaths(mixed $paths): array
-    {
-        if (!is_array($paths)) {
-            return [];
-        }
-
-        $result = [];
-        foreach ($paths as $path) {
-            $normalized = $this->sanitizeRelativePath((string) $path);
-            if ($normalized !== '') {
-                $result[] = $normalized;
-            }
-        }
-
-        return array_values(array_unique($result));
-    }
-
-    /**
-     * @param array<string, mixed> $paths
-     */
-    private function requiredStorageId(array $paths, string $assetFilename): string
-    {
-        $storageId = trim((string) ($paths['storage_id'] ?? ''));
-        if ($storageId === '') {
-            throw new \RuntimeException(sprintf('Asset "%s" is missing canonical paths.storage_id.', $assetFilename));
-        }
-        if (!$this->storageRegistry->has($storageId)) {
-            throw new \RuntimeException(sprintf('Asset "%s" references unknown storage "%s".', $assetFilename, $storageId));
-        }
-
-        return $storageId;
-    }
-
-    /**
-     * @param array<string, mixed> $paths
-     */
-    private function requiredOriginalRelativePath(array $paths, string $assetFilename): string
-    {
-        $original = $this->sanitizeRelativePath((string) ($paths['original_relative'] ?? ''));
-        if ($original === '') {
-            throw new \RuntimeException(sprintf('Asset "%s" is missing canonical paths.original_relative.', $assetFilename));
-        }
-
-        return $original;
     }
 }
