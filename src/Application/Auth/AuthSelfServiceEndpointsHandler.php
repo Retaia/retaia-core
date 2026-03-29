@@ -113,16 +113,27 @@ final class AuthSelfServiceEndpointsHandler
         return new TwoFactorDisableEndpointResult(TwoFactorDisableEndpointResult::STATUS_DISABLED);
     }
 
-    public function regenerateTwoFactorRecoveryCodes(): TwoFactorRecoveryCodesEndpointResult
+    /**
+     * @param array<string, mixed> $payload
+     */
+    public function regenerateTwoFactorRecoveryCodes(array $payload): TwoFactorRecoveryCodesEndpointResult
     {
         $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
         if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
             return new TwoFactorRecoveryCodesEndpointResult(TwoFactorRecoveryCodesEndpointResult::STATUS_UNAUTHORIZED);
         }
 
-        $result = $this->regenerateTwoFactorRecoveryCodesHandler->handle((string) $authenticatedUser->id());
+        $otpCode = trim((string) ($payload['otp_code'] ?? ''));
+        if ($otpCode === '') {
+            return new TwoFactorRecoveryCodesEndpointResult(TwoFactorRecoveryCodesEndpointResult::STATUS_VALIDATION_FAILED);
+        }
+
+        $result = $this->regenerateTwoFactorRecoveryCodesHandler->handle((string) $authenticatedUser->id(), $otpCode);
         if ($result->status() === RegenerateTwoFactorRecoveryCodesResult::STATUS_NOT_ENABLED) {
             return new TwoFactorRecoveryCodesEndpointResult(TwoFactorRecoveryCodesEndpointResult::STATUS_NOT_ENABLED);
+        }
+        if ($result->status() === RegenerateTwoFactorRecoveryCodesResult::STATUS_INVALID_CODE) {
+            return new TwoFactorRecoveryCodesEndpointResult(TwoFactorRecoveryCodesEndpointResult::STATUS_INVALID_CODE);
         }
 
         return new TwoFactorRecoveryCodesEndpointResult(

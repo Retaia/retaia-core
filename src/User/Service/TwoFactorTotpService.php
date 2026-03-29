@@ -107,6 +107,23 @@ final class TwoFactorTotpService
     /**
      * @param array<string, mixed> $state
      */
+    public function verifyEnabledOtp(array &$state, string $otpCode): bool
+    {
+        if (!(bool) ($state['enabled'] ?? false)) {
+            throw new \RuntimeException('MFA_NOT_ENABLED');
+        }
+
+        $secret = $this->resolveSecretFromState($state, 'secret_encrypted', 'secret');
+        if ($secret === '') {
+            return false;
+        }
+
+        return $this->isValidOtp($secret, $otpCode);
+    }
+
+    /**
+     * @param array<string, mixed> $state
+     */
     public function hasPendingSetup(array $state): bool
     {
         return is_string($state['pending_secret_encrypted'] ?? null) && $state['pending_secret_encrypted'] !== ''

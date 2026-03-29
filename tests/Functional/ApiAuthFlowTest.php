@@ -812,10 +812,83 @@ final class ApiAuthFlowTest extends WebTestCase
             'password' => 'Change-me1!',
         ]);
 
-        $client->jsonRequest('POST', '/api/v1/auth/2fa/recovery-codes/regenerate');
+        $client->jsonRequest('POST', '/api/v1/auth/2fa/recovery-codes/regenerate', [
+            'otp_code' => '123456',
+        ]);
         self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
         $payload = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertSame('MFA_NOT_ENABLED', $payload['code'] ?? null);
+    }
+
+    public function testRecoveryCodesRegenerateRequiresFreshOtpAndIsRateLimited(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.542');
+        $this->loginAndAttachBearer($client, [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+        ]);
+
+        $client->jsonRequest('POST', '/api/v1/auth/2fa/setup');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $setupPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        $secret = (string) ($setupPayload['secret'] ?? '');
+        self::assertNotSame('', $secret);
+
+        $client->jsonRequest('POST', '/api/v1/auth/2fa/enable', ['otp_code' => $this->generateOtpCode($secret)]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        $client->jsonRequest('POST', '/api/v1/auth/2fa/recovery-codes/regenerate', []);
+        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
+
+        for ($attempt = 1; $attempt <= 4; ++$attempt) {
+            $client->jsonRequest('POST', '/api/v1/auth/2fa/recovery-codes/regenerate', ['otp_code' => '000000']);
+            self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        }
+
+        $client->jsonRequest('POST', '/api/v1/auth/2fa/recovery-codes/regenerate', ['otp_code' => '000000']);
+        self::assertResponseStatusCodeSame(Response::HTTP_TOO_MANY_REQUESTS);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('TOO_MANY_ATTEMPTS', $payload['code'] ?? null);
+    }
+
+    public function testLoginTwoFactorChallengeIsRateLimited(): void
+    {
+        $client = $this->createIsolatedClient('10.0.0.543');
+        $this->loginAndAttachBearer($client, [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+        ]);
+
+        $client->jsonRequest('POST', '/api/v1/auth/2fa/setup');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $setupPayload = json_decode((string) $client->getResponse()->getContent(), true);
+        $secret = (string) ($setupPayload['secret'] ?? '');
+        self::assertNotSame('', $secret);
+
+        $client->jsonRequest('POST', '/api/v1/auth/2fa/enable', ['otp_code' => $this->generateOtpCode($secret)]);
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+        $client->jsonRequest('POST', '/api/v1/auth/logout');
+        self::assertResponseStatusCodeSame(Response::HTTP_OK);
+
+        for ($attempt = 1; $attempt <= 5; ++$attempt) {
+            $client->jsonRequest('POST', '/api/v1/auth/login', [
+                'email' => 'admin@retaia.local',
+                'password' => 'change-me',
+                'otp_code' => '000000',
+            ]);
+            self::assertResponseStatusCodeSame(Response::HTTP_UNAUTHORIZED);
+        }
+
+        $client->jsonRequest('POST', '/api/v1/auth/login', [
+            'email' => 'admin@retaia.local',
+            'password' => 'change-me',
+            'otp_code' => '000000',
+        ]);
+        self::assertResponseStatusCodeSame(Response::HTTP_TOO_MANY_REQUESTS);
+        $payload = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('TOO_MANY_ATTEMPTS', $payload['code'] ?? null);
     }
 
     public function testTwoFactorLoginAcceptsSlightClockDriftOtpCode(): void

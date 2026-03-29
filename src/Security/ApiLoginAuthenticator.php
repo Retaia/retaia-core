@@ -7,9 +7,11 @@ use App\Domain\AuthClient\ClientKind;
 use App\Entity\User;
 use App\User\Service\TwoFactorService;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\Exception\AuthenticationException;
 use Symfony\Component\Security\Core\Exception\CustomUserMessageAuthenticationException;
@@ -31,6 +33,8 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
         private TranslatorInterface $translator,
         private TwoFactorService $twoFactorService,
         private UserAccessTokenService $userAccessTokenService,
+        #[Autowire(service: 'limiter.auth_2fa_challenge')]
+        private RateLimiterFactory $twoFactorChallengeRateLimiter,
     ) {
     }
 
@@ -89,6 +93,10 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
                     ['code' => 'MFA_REQUIRED', 'message' => $this->translator->trans('auth.error.mfa_required')],
                     Response::HTTP_UNAUTHORIZED
                 );
+            }
+
+            if (!$this->consumeSecondFactorAttemptRateLimit((string) $user->getId(), (string) ($request->getClientIp() ?? 'unknown'))) {
+                return $this->tooManySecondFactorAttemptsResponse();
             }
 
             $secondFactorOk = $otpCode !== ''
@@ -206,5 +214,22 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
     private function hashEmail(string $email): string
     {
         return hash('sha256', mb_strtolower(trim($email)));
+    }
+
+    private function consumeSecondFactorAttemptRateLimit(string $userId, string $remoteAddress): bool
+    {
+        $limit = $this->twoFactorChallengeRateLimiter
+            ->create(hash('sha256', $userId.'|'.$remoteAddress.'|login'))
+            ->consume(1);
+
+        return $limit->isAccepted();
+    }
+
+    private function tooManySecondFactorAttemptsResponse(): JsonResponse
+    {
+        return new JsonResponse(
+            ['code' => 'TOO_MANY_ATTEMPTS', 'message' => $this->translator->trans('auth.error.too_many_2fa_attempts')],
+            Response::HTTP_TOO_MANY_REQUESTS
+        );
     }
 }

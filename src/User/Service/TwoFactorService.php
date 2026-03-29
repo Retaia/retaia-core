@@ -80,6 +80,19 @@ final class TwoFactorService
         return $isValid;
     }
 
+    public function verifyOtp(string $userId, string $otpCode): bool
+    {
+        $state = $this->state($userId);
+        $before = $state;
+        $isValid = $this->totpService->verifyEnabledOtp($state, $otpCode);
+
+        if ($state !== $before) {
+            $this->saveState($userId, $state);
+        }
+
+        return $isValid;
+    }
+
     public function consumeRecoveryCode(string $userId, string $recoveryCode): bool
     {
         $state = $this->state($userId);
