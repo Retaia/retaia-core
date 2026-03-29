@@ -65,6 +65,10 @@ final class AuthController
         private RateLimiterFactory $refreshRateLimiter,
         #[Autowire(service: 'limiter.client_token_mint')]
         private RateLimiterFactory $clientTokenMintRateLimiter,
+        #[Autowire(service: 'limiter.auth_2fa_challenge')]
+        private RateLimiterFactory $twoFactorChallengeRateLimiter,
+        #[Autowire(service: 'limiter.auth_2fa_manage')]
+        private RateLimiterFactory $twoFactorManageRateLimiter,
         private EntityManagerInterface $entityManager,
         private LoggerInterface $logger,
     ) {
@@ -224,15 +228,18 @@ final class AuthController
     }
 
     #[Route('/2fa/setup', name: 'api_auth_2fa_setup', methods: ['POST'])]
-    public function twoFactorSetup(): JsonResponse
+    public function twoFactorSetup(Request $request): JsonResponse
     {
-        $result = $this->authSelfServiceEndpointsHandler->twoFactorSetup();
-        if ($result->status() === TwoFactorSetupEndpointResult::STATUS_UNAUTHORIZED) {
-            return new JsonResponse(
-                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
-                Response::HTTP_UNAUTHORIZED
-            );
+        $session = $this->requireCurrentSession($request);
+        if (!is_array($session)) {
+            return $this->unauthorizedResponse();
         }
+        $throttled = $this->consumeTwoFactorManageRateLimit((string) $session['user_id'], 'setup', (string) ($request->getClientIp() ?? 'unknown'));
+        if ($throttled instanceof JsonResponse) {
+            return $throttled;
+        }
+
+        $result = $this->authSelfServiceEndpointsHandler->twoFactorSetup();
         if ($result->status() === TwoFactorSetupEndpointResult::STATUS_ALREADY_ENABLED) {
             return new JsonResponse(
                 ['code' => 'MFA_ALREADY_ENABLED', 'message' => $this->translator->trans('auth.error.mfa_already_enabled')],
@@ -246,13 +253,16 @@ final class AuthController
     #[Route('/2fa/enable', name: 'api_auth_2fa_enable', methods: ['POST'])]
     public function twoFactorEnable(Request $request): JsonResponse
     {
-        $result = $this->authSelfServiceEndpointsHandler->twoFactorEnable($this->payload($request));
-        if ($result->status() === TwoFactorEnableEndpointResult::STATUS_UNAUTHORIZED) {
-            return new JsonResponse(
-                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
-                Response::HTTP_UNAUTHORIZED
-            );
+        $session = $this->requireCurrentSession($request);
+        if (!is_array($session)) {
+            return $this->unauthorizedResponse();
         }
+        $throttled = $this->consumeTwoFactorManageRateLimit((string) $session['user_id'], 'enable', (string) ($request->getClientIp() ?? 'unknown'));
+        if ($throttled instanceof JsonResponse) {
+            return $throttled;
+        }
+
+        $result = $this->authSelfServiceEndpointsHandler->twoFactorEnable($this->payload($request));
         if ($result->status() === TwoFactorEnableEndpointResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.otp_code_required')],
@@ -287,13 +297,16 @@ final class AuthController
     #[Route('/2fa/disable', name: 'api_auth_2fa_disable', methods: ['POST'])]
     public function twoFactorDisable(Request $request): JsonResponse
     {
-        $result = $this->authSelfServiceEndpointsHandler->twoFactorDisable($this->payload($request));
-        if ($result->status() === TwoFactorDisableEndpointResult::STATUS_UNAUTHORIZED) {
-            return new JsonResponse(
-                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
-                Response::HTTP_UNAUTHORIZED
-            );
+        $session = $this->requireCurrentSession($request);
+        if (!is_array($session)) {
+            return $this->unauthorizedResponse();
         }
+        $throttled = $this->consumeTwoFactorManageRateLimit((string) $session['user_id'], 'disable', (string) ($request->getClientIp() ?? 'unknown'));
+        if ($throttled instanceof JsonResponse) {
+            return $throttled;
+        }
+
+        $result = $this->authSelfServiceEndpointsHandler->twoFactorDisable($this->payload($request));
         if ($result->status() === TwoFactorDisableEndpointResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.otp_code_required')],
@@ -317,19 +330,34 @@ final class AuthController
     }
 
     #[Route('/2fa/recovery-codes/regenerate', name: 'api_auth_2fa_recovery_codes_regenerate', methods: ['POST'])]
-    public function regenerateTwoFactorRecoveryCodes(): JsonResponse
+    public function regenerateTwoFactorRecoveryCodes(Request $request): JsonResponse
     {
-        $result = $this->authSelfServiceEndpointsHandler->regenerateTwoFactorRecoveryCodes();
-        if ($result->status() === TwoFactorRecoveryCodesEndpointResult::STATUS_UNAUTHORIZED) {
+        $session = $this->requireCurrentSession($request);
+        if (!is_array($session)) {
+            return $this->unauthorizedResponse();
+        }
+        $throttled = $this->consumeTwoFactorManageRateLimit((string) $session['user_id'], 'recovery-regenerate', (string) ($request->getClientIp() ?? 'unknown'));
+        if ($throttled instanceof JsonResponse) {
+            return $throttled;
+        }
+
+        $result = $this->authSelfServiceEndpointsHandler->regenerateTwoFactorRecoveryCodes($this->payload($request));
+        if ($result->status() === TwoFactorRecoveryCodesEndpointResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse(
-                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
-                Response::HTTP_UNAUTHORIZED
+                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.otp_code_required')],
+                Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
         if ($result->status() === TwoFactorRecoveryCodesEndpointResult::STATUS_NOT_ENABLED) {
             return new JsonResponse(
                 ['code' => 'MFA_NOT_ENABLED', 'message' => $this->translator->trans('auth.error.mfa_not_enabled')],
                 Response::HTTP_CONFLICT
+            );
+        }
+        if ($result->status() === TwoFactorRecoveryCodesEndpointResult::STATUS_INVALID_CODE) {
+            return new JsonResponse(
+                ['code' => 'INVALID_2FA_CODE', 'message' => $this->translator->trans('auth.error.invalid_2fa_code')],
+                Response::HTTP_BAD_REQUEST
             );
         }
 
@@ -842,6 +870,31 @@ final class AuthController
             [
                 'code' => 'TOO_MANY_ATTEMPTS',
                 'message' => $this->translator->trans('auth.error.too_many_client_token_requests'),
+                'retry_in_seconds' => $retryInSeconds,
+            ],
+            Response::HTTP_TOO_MANY_REQUESTS
+        );
+    }
+
+    private function consumeTwoFactorManageRateLimit(string $userId, string $action, string $remoteAddress): ?JsonResponse
+    {
+        $limit = $this->twoFactorManageRateLimiter
+            ->create(hash('sha256', $userId.'|'.$action.'|'.$remoteAddress))
+            ->consume(1);
+        if ($limit->isAccepted()) {
+            return null;
+        }
+
+        $retryAfter = $limit->getRetryAfter();
+        $retryInSeconds = max(
+            1,
+            $retryAfter instanceof \DateTimeImmutable ? $retryAfter->getTimestamp() - time() : 1
+        );
+
+        return new JsonResponse(
+            [
+                'code' => 'TOO_MANY_ATTEMPTS',
+                'message' => $this->translator->trans('auth.error.too_many_2fa_attempts'),
                 'retry_in_seconds' => $retryInSeconds,
             ],
             Response::HTTP_TOO_MANY_REQUESTS

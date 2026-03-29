@@ -6,9 +6,11 @@ use App\Application\Auth\ResolveAuthenticatedUserHandler;
 use App\Application\Auth\ResolveAuthenticatedUserResult;
 use App\Application\AuthClient\CompleteDeviceApprovalHandler;
 use App\Application\AuthClient\CompleteDeviceApprovalResult;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
@@ -21,6 +23,8 @@ final class DeviceController
         private ResolveAuthenticatedUserHandler $resolveAuthenticatedUserHandler,
         private CompleteDeviceApprovalHandler $completeDeviceApprovalHandler,
         private TranslatorInterface $translator,
+        #[Autowire(service: 'limiter.auth_2fa_challenge')]
+        private RateLimiterFactory $twoFactorChallengeRateLimiter,
     ) {
     }
 
@@ -56,10 +60,21 @@ final class DeviceController
             );
         }
 
+        $otpCode = trim((string) ($payload['otp_code'] ?? ''));
+        $limit = $this->twoFactorChallengeRateLimiter
+            ->create(hash('sha256', (string) $authenticatedUser->id().'|'.(string) ($request->getClientIp() ?? 'unknown').'|device-approve'))
+            ->consume(1);
+        if (!$limit->isAccepted()) {
+            return new JsonResponse(
+                ['code' => 'TOO_MANY_ATTEMPTS', 'message' => $this->translator->trans('auth.error.too_many_2fa_attempts')],
+                Response::HTTP_TOO_MANY_REQUESTS
+            );
+        }
+
         $result = $this->completeDeviceApprovalHandler->handle(
             (string) $authenticatedUser->id(),
             $userCode,
-            trim((string) ($payload['otp_code'] ?? ''))
+            $otpCode
         );
         if ($result->status() === CompleteDeviceApprovalResult::STATUS_VALIDATION_FAILED_OTP_REQUIRED) {
             return new JsonResponse(

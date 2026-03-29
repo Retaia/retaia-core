@@ -6,6 +6,7 @@ final class RegenerateTwoFactorRecoveryCodesResult
 {
     public const STATUS_REGENERATED = 'REGENERATED';
     public const STATUS_NOT_ENABLED = 'NOT_ENABLED';
+    public const STATUS_INVALID_CODE = 'INVALID_CODE';
 
     /**
      * @param list<string> $codes

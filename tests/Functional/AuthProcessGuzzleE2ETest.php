@@ -992,7 +992,9 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
             self::assertSame(401, $reuseRecovery['status']);
             self::assertSame('INVALID_2FA_CODE', $reuseRecovery['json']['code'] ?? null);
 
-            $regenerated = $this->requestJson($client, 'POST', '/api/v1/auth/2fa/recovery-codes/regenerate', null, [
+            $regenerated = $this->requestJson($client, 'POST', '/api/v1/auth/2fa/recovery-codes/regenerate', [
+                'otp_code' => $this->generateOtpCode($secret),
+            ], [
                 'Authorization' => 'Bearer '.$postRecoveryBearer,
             ]);
             self::assertSame(200, $regenerated['status']);

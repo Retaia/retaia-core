@@ -11,6 +11,7 @@ auth:
     too_many_password_reset_requests: "Trop de demandes de réinitialisation de mot de passe"
     too_many_verification_requests: "Trop de demandes de vérification email"
     too_many_refresh_requests: "Trop de demandes de rafraîchissement de session"
+    too_many_2fa_attempts: "Trop de tentatives 2FA"
     token_required: "token est requis"
     refresh_token_required: "refresh_token est requis"
     admin_role_required: "Rôle administrateur requis"

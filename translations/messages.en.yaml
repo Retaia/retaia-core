@@ -11,6 +11,7 @@ auth:
     too_many_password_reset_requests: "Too many password reset requests"
     too_many_verification_requests: "Too many verification requests"
     too_many_refresh_requests: "Too many refresh requests"
+    too_many_2fa_attempts: "Too many 2FA attempts"
     token_required: "token is required"
     refresh_token_required: "refresh_token is required"
     admin_role_required: "Admin role required"
