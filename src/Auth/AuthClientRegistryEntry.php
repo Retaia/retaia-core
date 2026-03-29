@@ -2,17 +2,30 @@
 
 namespace App\Auth;
 
+use Doctrine\ORM\Mapping as ORM;
+
+#[ORM\Entity]
+#[ORM\Table(name: 'auth_client_registry')]
 final class AuthClientRegistryEntry
 {
     public function __construct(
-        public readonly string $clientId,
-        public readonly string $clientKind,
-        public readonly ?string $secretKey,
-        public readonly ?string $clientLabel,
-        public readonly ?string $openPgpPublicKey,
-        public readonly ?string $openPgpFingerprint,
-        public readonly ?string $registeredAt,
-        public readonly ?string $rotatedAt,
+        #[ORM\Id]
+        #[ORM\Column(name: 'client_id', type: 'string', length: 64)]
+        public string $clientId,
+        #[ORM\Column(name: 'client_kind', type: 'string', length: 32)]
+        public string $clientKind,
+        #[ORM\Column(name: 'secret_key', type: 'string', length: 128, nullable: true)]
+        public ?string $secretKey,
+        #[ORM\Column(name: 'client_label', type: 'string', length: 255, nullable: true)]
+        public ?string $clientLabel,
+        #[ORM\Column(name: 'openpgp_public_key', type: 'text', nullable: true)]
+        public ?string $openPgpPublicKey,
+        #[ORM\Column(name: 'openpgp_fingerprint', type: 'string', length: 40, nullable: true)]
+        public ?string $openPgpFingerprint,
+        #[ORM\Column(name: 'registered_at', type: 'string', length: 32, nullable: true)]
+        public ?string $registeredAt,
+        #[ORM\Column(name: 'rotated_at', type: 'string', length: 32, nullable: true)]
+        public ?string $rotatedAt,
     ) {
     }
 
@@ -39,21 +52,15 @@ final class AuthClientRegistryEntry
         );
     }
 
-    /**
-     * @return array<string, string|null>
-     */
-    public function toRow(): array
+    public function syncFrom(self $entry): void
     {
-        return [
-            'client_id' => $this->clientId,
-            'client_kind' => $this->clientKind,
-            'secret_key' => $this->secretKey,
-            'client_label' => $this->clientLabel,
-            'openpgp_public_key' => $this->openPgpPublicKey,
-            'openpgp_fingerprint' => $this->openPgpFingerprint,
-            'registered_at' => $this->registeredAt,
-            'rotated_at' => $this->rotatedAt,
-        ];
+        $this->clientKind = $entry->clientKind;
+        $this->secretKey = $entry->secretKey;
+        $this->clientLabel = $entry->clientLabel;
+        $this->openPgpPublicKey = $entry->openPgpPublicKey;
+        $this->openPgpFingerprint = $entry->openPgpFingerprint;
+        $this->registeredAt = $entry->registeredAt;
+        $this->rotatedAt = $entry->rotatedAt;
     }
 
     private static function nullableString(mixed $value): ?string

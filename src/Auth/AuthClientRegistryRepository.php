@@ -3,86 +3,85 @@
 namespace App\Auth;
 
 use App\Domain\AuthClient\ClientKind;
-use Doctrine\DBAL\Connection;
+use Doctrine\ORM\EntityManagerInterface;
 
 final class AuthClientRegistryRepository implements AuthClientRegistryRepositoryInterface
 {
     public function __construct(
-        private Connection $connection,
+        private EntityManagerInterface $entityManager,
     ) {
     }
 
     public function findByClientId(string $clientId): ?AuthClientRegistryEntry
     {
         $this->ensureDefaults();
+        $entry = $this->entityManager->find(AuthClientRegistryEntry::class, $clientId);
+        if ($entry instanceof AuthClientRegistryEntry) {
+            $this->entityManager->refresh($entry);
+        }
 
-        $row = $this->connection->fetchAssociative(
-            'SELECT client_id, client_kind, secret_key, client_label, openpgp_public_key, openpgp_fingerprint, registered_at, rotated_at
-             FROM auth_client_registry
-             WHERE client_id = :clientId
-             LIMIT 1',
-            ['clientId' => $clientId]
-        );
-
-        return is_array($row) ? AuthClientRegistryEntry::fromArray($row) : null;
+        return $entry instanceof AuthClientRegistryEntry ? $entry : null;
     }
 
     public function findAll(): array
     {
         $this->ensureDefaults();
-        $rows = $this->connection->fetchAllAssociative(
-            'SELECT client_id, client_kind, secret_key, client_label, openpgp_public_key, openpgp_fingerprint, registered_at, rotated_at
-             FROM auth_client_registry'
-        );
 
-        $entries = [];
-        foreach ($rows as $row) {
-            $entry = AuthClientRegistryEntry::fromArray($row);
-            if ($entry !== null) {
-                $entries[] = $entry;
-            }
-        }
+        /** @var list<AuthClientRegistryEntry> $entries */
+        $entries = $this->entityManager->createQueryBuilder()
+            ->select('c')
+            ->from(AuthClientRegistryEntry::class, 'c')
+            ->getQuery()
+            ->getResult();
 
         return $entries;
     }
 
     public function save(AuthClientRegistryEntry $entry): void
     {
-        $data = $entry->toRow();
-        if ($this->findByClientId($entry->clientId) !== null) {
-            $this->connection->update('auth_client_registry', $data, ['client_id' => $entry->clientId]);
+        $existing = $this->entityManager->find(AuthClientRegistryEntry::class, $entry->clientId);
+        if ($existing instanceof AuthClientRegistryEntry) {
+            $existing->syncFrom($entry);
+            $this->entityManager->flush();
+
             return;
         }
 
-        $this->connection->insert('auth_client_registry', $data);
+        $this->entityManager->persist($entry);
+        $this->entityManager->flush();
     }
 
     private function ensureDefaults(): void
     {
-        $count = (int) $this->connection->fetchOne('SELECT COUNT(*) FROM auth_client_registry');
+        $count = (int) $this->entityManager->createQueryBuilder()
+            ->select('COUNT(c.clientId)')
+            ->from(AuthClientRegistryEntry::class, 'c')
+            ->getQuery()
+            ->getSingleScalarResult();
         if ($count > 0) {
             return;
         }
 
-        $this->connection->insert('auth_client_registry', [
-            'client_id' => 'agent-default',
-            'client_kind' => ClientKind::AGENT,
-            'secret_key' => 'agent-secret',
-            'client_label' => null,
-            'openpgp_public_key' => null,
-            'openpgp_fingerprint' => null,
-            'registered_at' => null,
-            'rotated_at' => null,
-        ]);
-        $this->connection->insert('auth_client_registry', [
-            'client_id' => 'mcp-default',
-            'client_kind' => ClientKind::MCP,
-            'secret_key' => 'mcp-secret',
-            'client_label' => null,
-            'openpgp_public_key' => null,
-            'openpgp_fingerprint' => null,
-            'registered_at' => null,
-            'rotated_at' => null,
-        ]);
+        $this->entityManager->persist(new AuthClientRegistryEntry(
+            'agent-default',
+            ClientKind::AGENT,
+            'agent-secret',
+            null,
+            null,
+            null,
+            null,
+            null,
+        ));
+        $this->entityManager->persist(new AuthClientRegistryEntry(
+            'mcp-default',
+            ClientKind::MCP,
+            'mcp-secret',
+            null,
+            null,
+            null,
+            null,
+            null,
+        ));
+        $this->entityManager->flush();
     }
 }

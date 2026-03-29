@@ -300,9 +300,6 @@ These are the files that should change first if the codebase moves to an ORM-fir
 
 #### Auth sessions and technical auth state
 
-- [`src/Auth/AuthClientRegistryEntry.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthClientRegistryEntry.php)
-- [`src/Auth/AuthClientRegistryRepository.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Auth/AuthClientRegistryRepository.php)
-
 #### Derived storage and upload state
 
 - [`src/Derived/DerivedFile.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Derived/DerivedFile.php)

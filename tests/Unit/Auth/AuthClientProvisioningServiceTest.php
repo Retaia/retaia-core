@@ -4,12 +4,13 @@ namespace App\Tests\Unit\Auth;
 
 use App\Auth\AuthClientRegistryRepository;
 use App\Auth\AuthClientProvisioningService;
-use Doctrine\DBAL\Connection;
-use Doctrine\DBAL\DriverManager;
+use App\Tests\Support\AuthClientRegistryEntityManagerTrait;
 use PHPUnit\Framework\TestCase;
 
 final class AuthClientProvisioningServiceTest extends TestCase
 {
+    use AuthClientRegistryEntityManagerTrait;
+
     public function testProvisionClientReturnsNullForUnsupportedKind(): void
     {
         $service = $this->service();
@@ -57,14 +58,6 @@ final class AuthClientProvisioningServiceTest extends TestCase
 
     private function repository(): AuthClientRegistryRepository
     {
-        return new AuthClientRegistryRepository($this->connection());
-    }
-
-    private function connection(): Connection
-    {
-        $connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]);
-        $connection->executeStatement('CREATE TABLE auth_client_registry (client_id VARCHAR(64) PRIMARY KEY NOT NULL, client_kind VARCHAR(32) NOT NULL, secret_key VARCHAR(128) DEFAULT NULL, client_label VARCHAR(255) DEFAULT NULL, openpgp_public_key CLOB DEFAULT NULL, openpgp_fingerprint VARCHAR(40) DEFAULT NULL, registered_at VARCHAR(32) DEFAULT NULL, rotated_at VARCHAR(32) DEFAULT NULL)');
-
-        return $connection;
+        return new AuthClientRegistryRepository($this->authClientRegistryEntityManager());
     }
 }
