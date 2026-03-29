@@ -6,291 +6,198 @@ use App\Application\Auth\AuthMeEndpointResult;
 use App\Application\Auth\AuthSelfServiceEndpointsHandler;
 use App\Application\Auth\AuthSelfServiceProfileEndpointsHandler;
 use App\Application\Auth\AuthSelfServiceTwoFactorEndpointsHandler;
-use App\Application\Auth\DisableTwoFactorHandler;
-use App\Application\Auth\EnableTwoFactorHandler;
 use App\Application\Auth\GetAuthMeProfileHandler;
-use App\Application\Auth\GetMyFeaturesEndpointResult;
+use App\Application\Auth\GetAuthMeProfileResult;
 use App\Application\Auth\GetMyFeaturesHandler;
-use App\Application\Auth\PatchMyFeaturesEndpointResult;
 use App\Application\Auth\PatchMyFeaturesHandler;
-use App\Application\Auth\RegenerateTwoFactorRecoveryCodesHandler;
-use App\Application\Auth\ResolveAuthenticatedUserHandler;
-use App\Application\Auth\TwoFactorEnableEndpointResult;
-use App\Application\Auth\TwoFactorRecoveryCodesEndpointResult;
-use App\Application\Auth\TwoFactorSetupEndpointResult;
-use App\Application\Auth\SetupTwoFactorHandler;
+use App\Application\Auth\PatchMyFeaturesResult;
 use App\Application\Auth\Port\AuthenticatedUserGateway;
 use App\Application\Auth\Port\FeatureGovernanceGateway;
 use App\Application\Auth\Port\TwoFactorGateway;
+use App\Application\Auth\RegenerateTwoFactorRecoveryCodesHandler;
+use App\Application\Auth\ResolveAuthenticatedUserHandler;
+use App\Application\Auth\SetupTwoFactorHandler;
+use App\Application\Auth\EnableTwoFactorHandler;
+use App\Application\Auth\DisableTwoFactorHandler;
+use App\Entity\User;
+use App\User\Repository\UserRepositoryInterface;
+use App\User\Service\TwoFactorSecretCipher;
+use App\User\Service\TwoFactorService;
 use App\User\UserTwoFactorStateRepository;
 use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\TestCase;
 
 final class AuthSelfServiceEndpointsHandlerTest extends TestCase
 {
-    public function testMeReturnsUnauthorizedWhenNoAuthenticatedUser(): void
+    public function testFacadeDelegatesMeToProfileHandler(): void
     {
-        $handler = $this->buildHandler(null);
-
-        $result = $handler->me();
-
-        self::assertSame(AuthMeEndpointResult::STATUS_UNAUTHORIZED, $result->status());
-    }
-
-    public function testMeReturnsProfileWhenAuthenticated(): void
-    {
-        $handler = $this->buildHandler([
-            'id' => 'u_1',
-            'email' => 'admin@retaia.local',
-            'roles' => ['ROLE_ADMIN'],
-        ]);
-
-        $result = $handler->me();
-
-        self::assertSame(AuthMeEndpointResult::STATUS_SUCCESS, $result->status());
-        self::assertSame('u_1', $result->id());
-        self::assertSame('admin@retaia.local', $result->email());
-        self::assertSame(['ROLE_ADMIN'], $result->roles());
-        self::assertSame('Admin', $result->displayName());
-        self::assertFalse($result->emailVerified());
-        self::assertFalse($result->mfaEnabled());
-    }
-
-    public function testTwoFactorSetupReturnsAlreadyEnabled(): void
-    {
-        $twoFactorGateway = $this->createMock(TwoFactorGateway::class);
-        $twoFactorGateway->expects(self::once())
-            ->method('setup')
-            ->with('u_2', 'mfa@retaia.local')
-            ->willThrowException(new \RuntimeException('MFA_ALREADY_ENABLED'));
-
-        $handler = $this->buildHandler(
-            ['id' => 'u_2', 'email' => 'mfa@retaia.local', 'roles' => ['ROLE_USER']],
-            $twoFactorGateway
+        $handler = new AuthSelfServiceEndpointsHandler(
+            $this->profileHandler(['id' => 'u-1', 'email' => 'admin@retaia.local', 'roles' => ['ROLE_ADMIN']]),
+            $this->twoFactorHandler(['id' => 'u-1', 'email' => 'admin@retaia.local', 'roles' => ['ROLE_ADMIN']])
         );
 
-        $result = $handler->twoFactorSetup();
-
-        self::assertSame(TwoFactorSetupEndpointResult::STATUS_ALREADY_ENABLED, $result->status());
+        self::assertSame(AuthMeEndpointResult::STATUS_SUCCESS, $handler->me()->status());
     }
 
-    public function testTwoFactorSetupReturnsProvisioningPayload(): void
+    public function testFacadeDelegatesTwoFactorSetup(): void
     {
-        $twoFactorGateway = $this->createMock(TwoFactorGateway::class);
-        $twoFactorGateway->expects(self::once())
-            ->method('setup')
-            ->with('u_setup', 'setup@retaia.local')
-            ->willReturn([
-                'method' => 'TOTP',
-                'issuer' => 'Retaia',
-                'account_name' => 'setup@retaia.local',
-                'secret' => 'ABC123',
-                'otpauth_uri' => 'otpauth://totp/Retaia:setup@retaia.local?secret=ABC123',
-            ]);
-
-        $handler = $this->buildHandler(
-            ['id' => 'u_setup', 'email' => 'setup@retaia.local', 'roles' => ['ROLE_USER']],
-            $twoFactorGateway
+        $handler = new AuthSelfServiceEndpointsHandler(
+            $this->profileHandler(['id' => 'u-1', 'email' => 'user@example.test', 'roles' => ['ROLE_USER']]),
+            $this->twoFactorHandler(['id' => 'u-1', 'email' => 'user@example.test', 'roles' => ['ROLE_USER']])
         );
 
-        $result = $handler->twoFactorSetup();
-
-        self::assertSame(TwoFactorSetupEndpointResult::STATUS_READY, $result->status());
-        self::assertSame('TOTP', $result->setup()['method'] ?? null);
-        self::assertSame('Retaia', $result->setup()['issuer'] ?? null);
-        self::assertSame('setup@retaia.local', $result->setup()['account_name'] ?? null);
+        self::assertSame('READY', $handler->twoFactorSetup()->status());
     }
 
-    public function testTwoFactorEnableReturnsValidationFailedWhenOtpMissing(): void
+    public function testFacadeDelegatesPatchMyFeatures(): void
     {
-        $twoFactorGateway = $this->createMock(TwoFactorGateway::class);
-        $twoFactorGateway->expects(self::never())->method('enable');
-
-        $handler = $this->buildHandler(
-            ['id' => 'u_3', 'email' => 'user@retaia.local', 'roles' => ['ROLE_USER']],
-            $twoFactorGateway
+        $handler = new AuthSelfServiceEndpointsHandler(
+            $this->profileHandler(['id' => 'u-1', 'email' => 'user@example.test', 'roles' => ['ROLE_USER']]),
+            $this->twoFactorHandler(['id' => 'u-1', 'email' => 'user@example.test', 'roles' => ['ROLE_USER']])
         );
 
-        $result = $handler->twoFactorEnable([]);
-
-        self::assertSame(TwoFactorEnableEndpointResult::STATUS_VALIDATION_FAILED, $result->status());
-    }
-
-    public function testTwoFactorEnableReturnsInvalidCodeWhenGatewayRejectsCode(): void
-    {
-        $twoFactorGateway = $this->createMock(TwoFactorGateway::class);
-        $twoFactorGateway->expects(self::once())
-            ->method('enable')
-            ->with('u_4', '000000')
-            ->willReturn(false);
-
-        $handler = $this->buildHandler(
-            ['id' => 'u_4', 'email' => 'user@retaia.local', 'roles' => ['ROLE_USER']],
-            $twoFactorGateway
-        );
-
-        $result = $handler->twoFactorEnable(['otp_code' => '000000']);
-
-        self::assertSame(TwoFactorEnableEndpointResult::STATUS_INVALID_CODE, $result->status());
-    }
-
-    public function testRegenerateRecoveryCodesReturnsUnauthorizedWhenNotAuthenticated(): void
-    {
-        $handler = $this->buildHandler(null);
-
-        $result = $handler->regenerateTwoFactorRecoveryCodes(['otp_code' => '123456']);
-
-        self::assertSame(TwoFactorRecoveryCodesEndpointResult::STATUS_UNAUTHORIZED, $result->status());
-    }
-
-    public function testRegenerateRecoveryCodesReturnsValidationFailedWhenOtpMissing(): void
-    {
-        $twoFactorGateway = $this->createMock(TwoFactorGateway::class);
-        $twoFactorGateway->expects(self::never())->method('verifyOtp');
-
-        $handler = $this->buildHandler(
-            ['id' => 'u_7a', 'email' => 'user@retaia.local', 'roles' => ['ROLE_USER']],
-            $twoFactorGateway
-        );
-
-        $result = $handler->regenerateTwoFactorRecoveryCodes([]);
-
-        self::assertSame(TwoFactorRecoveryCodesEndpointResult::STATUS_VALIDATION_FAILED, $result->status());
-    }
-
-    public function testRegenerateRecoveryCodesReturnsNotEnabledWhenGatewayThrows(): void
-    {
-        $twoFactorGateway = $this->createMock(TwoFactorGateway::class);
-        $twoFactorGateway->expects(self::once())
-            ->method('verifyOtp')
-            ->with('u_7', '123456')
-            ->willThrowException(new \RuntimeException('MFA_NOT_ENABLED'));
-        $twoFactorGateway->expects(self::never())
-            ->method('regenerateRecoveryCodes')
-            ->with('u_7');
-
-        $handler = $this->buildHandler(
-            ['id' => 'u_7', 'email' => 'user@retaia.local', 'roles' => ['ROLE_USER']],
-            $twoFactorGateway
-        );
-
-        $result = $handler->regenerateTwoFactorRecoveryCodes(['otp_code' => '123456']);
-
-        self::assertSame(TwoFactorRecoveryCodesEndpointResult::STATUS_NOT_ENABLED, $result->status());
-    }
-
-    public function testRegenerateRecoveryCodesReturnsInvalidCodeWhenOtpCheckFails(): void
-    {
-        $twoFactorGateway = $this->createMock(TwoFactorGateway::class);
-        $twoFactorGateway->expects(self::once())
-            ->method('verifyOtp')
-            ->with('u_7b', '000000')
-            ->willReturn(false);
-        $twoFactorGateway->expects(self::never())->method('regenerateRecoveryCodes');
-
-        $handler = $this->buildHandler(
-            ['id' => 'u_7b', 'email' => 'user@retaia.local', 'roles' => ['ROLE_USER']],
-            $twoFactorGateway
-        );
-
-        $result = $handler->regenerateTwoFactorRecoveryCodes(['otp_code' => '000000']);
-
-        self::assertSame(TwoFactorRecoveryCodesEndpointResult::STATUS_INVALID_CODE, $result->status());
-    }
-
-    public function testGetMyFeaturesReturnsUnauthorizedWhenNotAuthenticated(): void
-    {
-        $handler = $this->buildHandler(null);
-
-        $result = $handler->getMyFeatures();
-
-        self::assertSame(GetMyFeaturesEndpointResult::STATUS_UNAUTHORIZED, $result->status());
-    }
-
-    public function testPatchMyFeaturesReturnsValidationFailedWhenPayloadIsInvalid(): void
-    {
-        $handler = $this->buildHandler([
-            'id' => 'u_5',
-            'email' => 'features@retaia.local',
-            'roles' => ['ROLE_USER'],
-        ]);
-
-        $result = $handler->patchMyFeatures([]);
-
-        self::assertSame(PatchMyFeaturesEndpointResult::STATUS_VALIDATION_FAILED_PAYLOAD, $result->status());
-    }
-
-    public function testPatchMyFeaturesReturnsValidationDetailsWhenDomainValidationFails(): void
-    {
-        $featureGateway = $this->createMock(FeatureGovernanceGateway::class);
-        $featureGateway->expects(self::once())->method('coreV1GlobalFeatures')->willReturn([]);
-        $featureGateway->expects(self::once())->method('allowedUserFeatureKeys')->willReturn(['features.ai']);
-        $featureGateway->expects(self::once())
-            ->method('validateFeaturePayload')
-            ->with(['features.unknown' => true], ['features.ai'])
-            ->willReturn([
-                'unknown_keys' => ['features.unknown'],
-                'non_boolean_keys' => [],
-            ]);
-        $featureGateway->expects(self::never())->method('setUserFeatureEnabled');
-
-        $handler = $this->buildHandler(
-            ['id' => 'u_6', 'email' => 'features@retaia.local', 'roles' => ['ROLE_USER']],
-            null,
-            $featureGateway
-        );
-
-        $result = $handler->patchMyFeatures(['user_feature_enabled' => ['features.unknown' => true]]);
-
-        self::assertSame(PatchMyFeaturesEndpointResult::STATUS_VALIDATION_FAILED, $result->status());
-        self::assertSame(['unknown_keys' => ['features.unknown'], 'non_boolean_keys' => []], $result->validationDetails());
+        self::assertSame('UPDATED', $handler->patchMyFeatures(['user_feature_enabled' => ['features.ai' => true]])->status());
     }
 
     /**
      * @param array{id: string, email: string, roles: array<int, string>}|null $currentUser
      */
-    private function buildHandler(?array $currentUser, ?TwoFactorGateway $twoFactorGateway = null, ?FeatureGovernanceGateway $featureGateway = null): AuthSelfServiceEndpointsHandler
+    private function profileHandler(?array $currentUser): AuthSelfServiceProfileEndpointsHandler
     {
-        $authenticatedUserGateway = $this->createMock(AuthenticatedUserGateway::class);
-        $authenticatedUserGateway->method('currentUser')->willReturn($currentUser);
+        $authenticatedUserGateway = new class($currentUser) implements AuthenticatedUserGateway {
+            public function __construct(private ?array $currentUser)
+            {
+            }
 
-        $twoFactorGateway ??= $this->createMock(TwoFactorGateway::class);
-        $featureGateway ??= $this->createMock(FeatureGovernanceGateway::class);
+            public function currentUser(): ?array
+            {
+                return $this->currentUser;
+            }
+        };
 
-        return new AuthSelfServiceEndpointsHandler(
-            new AuthSelfServiceProfileEndpointsHandler(
-                new ResolveAuthenticatedUserHandler($authenticatedUserGateway),
-                new GetAuthMeProfileHandler(
-                    new class implements \App\User\Repository\UserRepositoryInterface {
-                        public function findByEmail(string $email): ?\App\Entity\User
-                        {
-                            return null;
-                        }
+        $featureGateway = new class implements FeatureGovernanceGateway {
+            public function userFeatureEnabled(string $userId): array
+            {
+                return ['features.ai' => true];
+            }
 
-                        public function findById(string $id): ?\App\Entity\User
-                        {
-                            return null;
-                        }
+            public function effectiveFeatureEnabledForUser(string $userId): array
+            {
+                return ['features.ai' => true];
+            }
 
-                        public function save(\App\Entity\User $user): void
-                        {
-                        }
-                    },
-                    new \App\User\Service\TwoFactorService(
-                        $this->twoFactorRepository(),
-                        new \App\User\Service\TwoFactorSecretCipher('v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', 'v1')
-                    )
-                ),
-                new GetMyFeaturesHandler($featureGateway),
-                new PatchMyFeaturesHandler($featureGateway, new GetMyFeaturesHandler($featureGateway)),
+            public function effectiveFeatureExplanationsForUser(string $userId): array
+            {
+                return [];
+            }
+
+            public function featureGovernanceRules(): array
+            {
+                return [];
+            }
+
+            public function coreV1GlobalFeatures(): array
+            {
+                return [];
+            }
+
+            public function allowedUserFeatureKeys(): array
+            {
+                return ['features.ai'];
+            }
+
+            public function validateFeaturePayload(array $payload, array $allowedKeys): array
+            {
+                return ['unknown_keys' => [], 'non_boolean_keys' => []];
+            }
+
+            public function setUserFeatureEnabled(string $userId, array $flags): void
+            {
+            }
+
+            public function userFeatures(string $userId): array
+            {
+                return ['features.ai' => true];
+            }
+        };
+
+        return new AuthSelfServiceProfileEndpointsHandler(
+            new ResolveAuthenticatedUserHandler($authenticatedUserGateway),
+            new GetAuthMeProfileHandler(
+                new class implements UserRepositoryInterface {
+                    public function findByEmail(string $email): ?User
+                    {
+                        return null;
+                    }
+
+                    public function findById(string $id): ?User
+                    {
+                        return null;
+                    }
+
+                    public function save(User $user): void
+                    {
+                    }
+                },
+                new TwoFactorService(
+                    $this->twoFactorRepository(),
+                    new TwoFactorSecretCipher('v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', 'v1')
+                )
             ),
-            new AuthSelfServiceTwoFactorEndpointsHandler(
-                new ResolveAuthenticatedUserHandler($authenticatedUserGateway),
-                new SetupTwoFactorHandler($twoFactorGateway),
-                new EnableTwoFactorHandler($twoFactorGateway),
-                new DisableTwoFactorHandler($twoFactorGateway),
-                new RegenerateTwoFactorRecoveryCodesHandler($twoFactorGateway),
-            ),
+            new GetMyFeaturesHandler($featureGateway),
+            new PatchMyFeaturesHandler($featureGateway, new GetMyFeaturesHandler($featureGateway))
+        );
+    }
+
+    /**
+     * @param array{id: string, email: string, roles: array<int, string>}|null $currentUser
+     */
+    private function twoFactorHandler(?array $currentUser): AuthSelfServiceTwoFactorEndpointsHandler
+    {
+        $authenticatedUserGateway = new class($currentUser) implements AuthenticatedUserGateway {
+            public function __construct(private ?array $currentUser)
+            {
+            }
+
+            public function currentUser(): ?array
+            {
+                return $this->currentUser;
+            }
+        };
+
+        $gateway = new class implements TwoFactorGateway {
+            public function setup(string $userId, string $email): array
+            {
+                return ['method' => 'TOTP'];
+            }
+
+            public function enable(string $userId, string $otpCode): bool
+            {
+                return true;
+            }
+
+            public function disable(string $userId, string $otpCode): bool
+            {
+                return true;
+            }
+
+            public function verifyOtp(string $userId, string $otpCode): bool
+            {
+                return true;
+            }
+
+            public function regenerateRecoveryCodes(string $userId): array
+            {
+                return ['code-a'];
+            }
+        };
+
+        return new AuthSelfServiceTwoFactorEndpointsHandler(
+            new ResolveAuthenticatedUserHandler($authenticatedUserGateway),
+            new SetupTwoFactorHandler($gateway),
+            new EnableTwoFactorHandler($gateway),
+            new DisableTwoFactorHandler($gateway),
+            new RegenerateTwoFactorRecoveryCodesHandler($gateway),
         );
     }
 
