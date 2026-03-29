@@ -2,50 +2,69 @@
 
 namespace App\Auth;
 
-use Doctrine\DBAL\Connection;
+use Doctrine\ORM\EntityManagerInterface;
 
 final class AuthDeviceFlowRepository implements AuthDeviceFlowRepositoryInterface
 {
     public function __construct(
-        private Connection $connection,
+        private EntityManagerInterface $entityManager,
     ) {
     }
 
     public function findByDeviceCode(string $deviceCode): ?AuthDeviceFlow
     {
-        $row = $this->connection->fetchAssociative(
-            'SELECT device_code, user_code, client_kind, status, created_at, expires_at, interval_seconds, last_polled_at, approved_client_id, approved_secret_key
-             FROM auth_device_flow WHERE device_code = :deviceCode LIMIT 1',
-            ['deviceCode' => $deviceCode]
-        );
+        $flow = $this->entityManager->find(AuthDeviceFlow::class, $deviceCode);
+        if ($flow instanceof AuthDeviceFlow) {
+            $this->entityManager->refresh($flow);
+        }
 
-        return is_array($row) ? AuthDeviceFlow::fromArray($row) : null;
+        return $flow instanceof AuthDeviceFlow ? $flow : null;
     }
 
     public function findByUserCode(string $userCode): ?AuthDeviceFlow
     {
-        $row = $this->connection->fetchAssociative(
-            'SELECT device_code, user_code, client_kind, status, created_at, expires_at, interval_seconds, last_polled_at, approved_client_id, approved_secret_key
-             FROM auth_device_flow WHERE user_code = :userCode LIMIT 1',
-            ['userCode' => strtoupper(trim($userCode))]
-        );
+        $flow = $this->entityManager->createQueryBuilder()
+            ->select('f')
+            ->from(AuthDeviceFlow::class, 'f')
+            ->andWhere('f.userCode = :userCode')
+            ->setParameter('userCode', strtoupper(trim($userCode)))
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
+        if ($flow instanceof AuthDeviceFlow) {
+            $this->entityManager->refresh($flow);
+        }
 
-        return is_array($row) ? AuthDeviceFlow::fromArray($row) : null;
+        return $flow instanceof AuthDeviceFlow ? $flow : null;
     }
 
     public function save(AuthDeviceFlow $flow): void
     {
-        $data = $flow->toRow();
-        if ($this->findByDeviceCode($flow->deviceCode) !== null) {
-            $this->connection->update('auth_device_flow', $data, ['device_code' => $flow->deviceCode]);
+        $existing = $this->entityManager->find(AuthDeviceFlow::class, $flow->deviceCode);
+        if ($existing instanceof AuthDeviceFlow) {
+            $existing->syncFrom($flow);
+            $this->entityManager->flush();
+
             return;
         }
 
-        $this->connection->insert('auth_device_flow', $data);
+        $this->entityManager->persist($flow);
+        $this->entityManager->flush();
     }
 
     public function delete(string $deviceCode): void
     {
-        $this->connection->delete('auth_device_flow', ['device_code' => trim($deviceCode)]);
+        $deviceCode = trim($deviceCode);
+        if ($deviceCode === '') {
+            return;
+        }
+
+        $flow = $this->entityManager->find(AuthDeviceFlow::class, $deviceCode);
+        if (!$flow instanceof AuthDeviceFlow) {
+            return;
+        }
+
+        $this->entityManager->remove($flow);
+        $this->entityManager->flush();
     }
 }
