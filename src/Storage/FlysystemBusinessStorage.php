@@ -2,16 +2,16 @@
 
 namespace App\Storage;
 
-use League\Flysystem\DirectoryAttributes;
-use League\Flysystem\FileAttributes;
 use League\Flysystem\FilesystemOperator;
-use League\Flysystem\StorageAttributes;
 
 final class FlysystemBusinessStorage implements BusinessStorageInterface
 {
     public function __construct(
         private FilesystemOperator $filesystem,
         private BusinessStorageConfig $config,
+        private StoragePathNormalizer $paths = new StoragePathNormalizer(),
+        private FlysystemAtomicWriter $writer = new FlysystemAtomicWriter(new StoragePathNormalizer()),
+        private FlysystemFileCollector $collector = new FlysystemFileCollector(),
     ) {
     }
 
@@ -32,17 +32,17 @@ final class FlysystemBusinessStorage implements BusinessStorageInterface
 
     public function fileExists(string $path): bool
     {
-        return $this->filesystem->fileExists($this->normalizePath($path));
+        return $this->filesystem->fileExists($this->paths->normalize($path));
     }
 
     public function directoryExists(string $path): bool
     {
-        return $this->filesystem->directoryExists($this->normalizePath($path));
+        return $this->filesystem->directoryExists($this->paths->normalize($path));
     }
 
     public function createDirectory(string $path): void
     {
-        $normalized = $this->normalizePath($path);
+        $normalized = $this->paths->normalize($path);
         if ($normalized === '') {
             return;
         }
@@ -52,55 +52,40 @@ final class FlysystemBusinessStorage implements BusinessStorageInterface
 
     public function read(string $path): string
     {
-        return $this->filesystem->read($this->normalizePath($path));
+        return $this->filesystem->read($this->paths->normalize($path));
     }
 
     public function write(string $path, string $contents): void
     {
-        $normalized = $this->normalizePath($path);
-        $this->ensureParentDirectory($normalized);
-        $this->filesystem->write($normalized, $contents);
+        $normalized = $this->paths->normalize($path);
+        $this->writer->write($this->filesystem, $normalized, $contents);
     }
 
     public function writeAtomically(string $path, string $contents): void
     {
-        $normalized = $this->normalizePath($path);
-        $this->ensureParentDirectory($normalized);
-        $tempPath = sprintf('%s.tmp.%s', $normalized, bin2hex(random_bytes(6)));
-        $this->filesystem->write($tempPath, $contents);
-
-        try {
-            if ($this->filesystem->fileExists($normalized)) {
-                $this->filesystem->delete($normalized);
-            }
-            $this->filesystem->move($tempPath, $normalized);
-        } catch (\Throwable $exception) {
-            if ($this->filesystem->fileExists($tempPath)) {
-                $this->filesystem->delete($tempPath);
-            }
-            throw $exception;
-        }
+        $normalized = $this->paths->normalize($path);
+        $this->writer->writeAtomically($this->filesystem, $normalized, $contents);
     }
 
     public function move(string $source, string $destination): void
     {
-        $normalizedSource = $this->normalizePath($source);
-        $normalizedDestination = $this->normalizePath($destination);
-        $this->ensureParentDirectory($normalizedDestination);
+        $normalizedSource = $this->paths->normalize($source);
+        $normalizedDestination = $this->paths->normalize($destination);
+        $this->paths->ensureParentDirectory($normalizedDestination, $this->filesystem->createDirectory(...));
         $this->filesystem->move($normalizedSource, $normalizedDestination);
     }
 
     public function copy(string $source, string $destination): void
     {
-        $normalizedSource = $this->normalizePath($source);
-        $normalizedDestination = $this->normalizePath($destination);
-        $this->ensureParentDirectory($normalizedDestination);
+        $normalizedSource = $this->paths->normalize($source);
+        $normalizedDestination = $this->paths->normalize($destination);
+        $this->paths->ensureParentDirectory($normalizedDestination, $this->filesystem->createDirectory(...));
         $this->filesystem->copy($normalizedSource, $normalizedDestination);
     }
 
     public function deleteFile(string $path): void
     {
-        $normalized = $this->normalizePath($path);
+        $normalized = $this->paths->normalize($path);
         if (!$this->filesystem->fileExists($normalized)) {
             return;
         }
@@ -110,7 +95,7 @@ final class FlysystemBusinessStorage implements BusinessStorageInterface
 
     public function deleteDirectory(string $path): void
     {
-        $normalized = $this->normalizePath($path);
+        $normalized = $this->paths->normalize($path);
         if (!$this->filesystem->directoryExists($normalized)) {
             return;
         }
@@ -120,17 +105,17 @@ final class FlysystemBusinessStorage implements BusinessStorageInterface
 
     public function fileSize(string $path): int
     {
-        return $this->filesystem->fileSize($this->normalizePath($path));
+        return $this->filesystem->fileSize($this->paths->normalize($path));
     }
 
     public function lastModified(string $path): \DateTimeImmutable
     {
-        return new \DateTimeImmutable('@'.$this->filesystem->lastModified($this->normalizePath($path)));
+        return new \DateTimeImmutable('@'.$this->filesystem->lastModified($this->paths->normalize($path)));
     }
 
     public function checksum(string $path, string $algorithm = 'sha256'): ?string
     {
-        $normalized = $this->normalizePath($path);
+        $normalized = $this->paths->normalize($path);
 
         try {
             return $this->filesystem->checksum($normalized, ['checksum_algo' => $algorithm]);
@@ -144,7 +129,7 @@ final class FlysystemBusinessStorage implements BusinessStorageInterface
 
     public function listFiles(string $directory, bool $recursive = false): array
     {
-        $files = $this->collectFiles($this->normalizePath($directory), $recursive);
+        $files = $this->collector->collect($this->filesystem, $this->paths->normalize($directory), $recursive);
 
         usort($files, static fn (BusinessStorageFile $left, BusinessStorageFile $right): int => strcmp($left->path, $right->path));
 
@@ -153,74 +138,13 @@ final class FlysystemBusinessStorage implements BusinessStorageInterface
 
     public function probeWritableDirectory(string $directory): bool
     {
-        $normalizedDirectory = $this->normalizePath($directory);
-        $probe = rtrim($normalizedDirectory, '/').'/.__retaia_probe_'.bin2hex(random_bytes(6));
+        $normalizedDirectory = $this->paths->normalize($directory);
 
-        try {
-            $this->write($probe, 'ok');
-            $this->deleteFile($probe);
-
-            return true;
-        } catch (\Throwable) {
-            return false;
-        }
-    }
-
-    private function ensureParentDirectory(string $path): void
-    {
-        $directory = trim(dirname($path), '.');
-        $directory = $directory === '' ? '' : str_replace('\\', '/', $directory);
-        if ($directory === '') {
-            return;
-        }
-
-        $this->filesystem->createDirectory($directory);
-    }
-
-    /**
-     * @return list<BusinessStorageFile>
-     */
-    private function collectFiles(string $directory, bool $recursive): array
-    {
-        $files = [];
-
-        try {
-            $listing = $this->filesystem->listContents($directory, false);
-        } catch (\Throwable) {
-            return [];
-        }
-
-        try {
-            /** @var StorageAttributes $attributes */
-            foreach ($listing as $attributes) {
-                if ($attributes instanceof FileAttributes) {
-                    $lastModified = $attributes->lastModified();
-                    $files[] = new BusinessStorageFile(
-                        $attributes->path(),
-                        $attributes->fileSize() ?? $this->filesystem->fileSize($attributes->path()),
-                        new \DateTimeImmutable('@'.($lastModified ?? $this->filesystem->lastModified($attributes->path()))),
-                    );
-                    continue;
-                }
-
-                if ($recursive && $attributes instanceof DirectoryAttributes) {
-                    array_push($files, ...$this->collectFiles($attributes->path(), true));
-                }
-            }
-        } catch (\Throwable) {
-            return $files;
-        }
-
-        return $files;
-    }
-
-    private function normalizePath(string $path): string
-    {
-        $normalized = ltrim(str_replace('\\', '/', trim($path)), '/');
-        if ($normalized === '' || str_contains($normalized, "\0") || str_contains($normalized, '../')) {
-            throw new \InvalidArgumentException(sprintf('Unsafe storage path: %s', $path));
-        }
-
-        return $normalized;
+        return $this->writer->probeWritableDirectory(
+            $this->filesystem,
+            $normalizedDirectory,
+            $this->write(...),
+            $this->deleteFile(...)
+        );
     }
 }

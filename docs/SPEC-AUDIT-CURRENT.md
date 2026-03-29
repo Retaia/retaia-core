@@ -46,8 +46,6 @@ The runtime/spec audit is green. The remaining work is structural: large classes
   - still exposes a broad façade over claim, heartbeat, submit, fail, and list/read concerns
 - [`src/Security/ApiLoginAuthenticator`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Security/ApiLoginAuthenticator.php)
   - still mixes credential auth, throttling, MFA challenge branching, and token minting handoff
-- [`src/Storage/FlysystemBusinessStorage`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Storage/FlysystemBusinessStorage.php)
-  - still wraps too many storage concerns in one concrete adapter and may need clearer internal helpers
 - [`src/Api/Service/AgentJobProjectionRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentJobProjectionRepository.php)
   - still deserves narrower projection helpers once job ops reporting grows further
 
@@ -70,7 +68,6 @@ This inventory is about direct class coverage only.
 - [`src/Controller/Api/AuthController`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Controller/Api/AuthController.php)
 - [`src/Controller/Api/OpsController`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Controller/Api/OpsController.php)
 - [`src/Job/Repository/JobRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Job/Repository/JobRepository.php)
-- [`src/Storage/FlysystemBusinessStorage`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Storage/FlysystemBusinessStorage.php)
 - [`src/Controller/DeviceController`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Controller/DeviceController.php)
 - [`src/Infrastructure/Asset/AssetReadGateway`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Infrastructure/Asset/AssetReadGateway.php)
 - [`src/Infrastructure/Asset/AssetWorkflowGateway`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Infrastructure/Asset/AssetWorkflowGateway.php)
