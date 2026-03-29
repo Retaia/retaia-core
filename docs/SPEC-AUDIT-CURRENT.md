@@ -18,8 +18,6 @@ The runtime/spec audit is green. The remaining work is structural: large classes
   - still concentrates login, refresh, logout, password reset, email verification, 2FA, self-service, and MCP-facing auth HTTP wiring
 - [`src/Controller/Api/OpsController`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Controller/Api/OpsController.php)
   - still mixes ingest ops, runtime agent ops, readiness-ish checks, and batch/admin actions
-- [`src/Job/Repository/JobRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Job/Repository/JobRepository.php)
-  - still holds too much persistence and projection logic for claiming, heartbeats, submit/fail paths, and ops/job views
 
 ### Priority 2
 
@@ -234,7 +232,6 @@ These items are not active runtime/spec regressions. They are the next code-qual
   - [`src/Infrastructure/Asset/AssetPatchGateway`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Infrastructure/Asset/AssetPatchGateway.php)
   - [`src/Storage/FlysystemBusinessStorage`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Storage/FlysystemBusinessStorage.php)
   - [`src/Ingest/Service/SidecarFileDetector`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Service/SidecarFileDetector.php)
-  - [`src/Job/Repository/JobRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Job/Repository/JobRepository.php)
 
 ### 7. Prefer immutability in transport and domain helpers
 
