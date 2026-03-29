@@ -9,6 +9,7 @@ use App\Auth\UserAccessTokenService;
 use App\Auth\UserAccessJwtService;
 use App\Auth\UserAuthSessionRepository;
 use App\Auth\UserAuthSessionService;
+use App\Tests\Support\TechnicalAccessTokenEntityManagerTrait;
 use App\Tests\Support\UserAuthSessionEntityManagerTrait;
 use App\Domain\AuthClient\ClientKind;
 use App\Entity\User;
@@ -25,6 +26,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class ApiBearerAuthenticatorTest extends TestCase
 {
+    use TechnicalAccessTokenEntityManagerTrait;
     use UserAuthSessionEntityManagerTrait;
 
     public function testSupportsSkipsPublicApiPathsAndNonApiPaths(): void
@@ -44,7 +46,7 @@ final class ApiBearerAuthenticatorTest extends TestCase
         $connection = $this->connection();
         $repository = new UserAuthSessionRepository($this->userAuthSessionEntityManager());
         $userTokens = new UserAccessTokenService(new UserAuthSessionService($repository), new UserAccessJwtService('test-secret', 3600));
-        $authenticator = $this->authenticator($userTokens, new ClientAccessTokenResolver(new TechnicalAccessTokenRepository($connection)));
+        $authenticator = $this->authenticator($userTokens, new ClientAccessTokenResolver(new TechnicalAccessTokenRepository($this->technicalAccessTokenEntityManager())));
         $user = new User('user-1', 'user@example.test', 'hash');
 
         $issued = $userTokens->issue($user, 'ui-web', ClientKind::UI_WEB);
@@ -59,8 +61,7 @@ final class ApiBearerAuthenticatorTest extends TestCase
 
     public function testAuthenticateBuildsPassportForClientToken(): void
     {
-        $connection = $this->connection();
-        $tokenRepository = new TechnicalAccessTokenRepository($connection);
+        $tokenRepository = new TechnicalAccessTokenRepository($this->technicalAccessTokenEntityManager());
         $tokenRepository->save(new TechnicalAccessTokenRecord('agent-client', 'client-token', ClientKind::AGENT, 1_700_000_000));
 
         $authenticator = $this->authenticator(
@@ -122,14 +123,12 @@ final class ApiBearerAuthenticatorTest extends TestCase
         ?ClientAccessTokenResolver $clientResolver = null,
         ?TranslatorInterface $translator = null,
     ): ApiBearerAuthenticator {
-        $connection = $this->connection();
-
         return new ApiBearerAuthenticator(
             $userTokens ?? new UserAccessTokenService(
                 new UserAuthSessionService(new UserAuthSessionRepository($this->userAuthSessionEntityManager())),
                 new UserAccessJwtService('test-secret', 3600)
             ),
-            $clientResolver ?? new ClientAccessTokenResolver(new TechnicalAccessTokenRepository($connection)),
+            $clientResolver ?? new ClientAccessTokenResolver(new TechnicalAccessTokenRepository($this->technicalAccessTokenEntityManager())),
             $translator ?? $this->createStub(TranslatorInterface::class),
         );
     }
@@ -140,8 +139,6 @@ final class ApiBearerAuthenticatorTest extends TestCase
         $connection->executeStatement('CREATE TABLE user_auth_session (session_id VARCHAR(32) PRIMARY KEY NOT NULL, access_token CLOB NOT NULL, refresh_token VARCHAR(255) NOT NULL, access_expires_at INTEGER NOT NULL, refresh_expires_at INTEGER NOT NULL, user_id VARCHAR(32) NOT NULL, email VARCHAR(180) NOT NULL, client_id VARCHAR(64) NOT NULL, client_kind VARCHAR(32) NOT NULL, created_at INTEGER NOT NULL, last_used_at INTEGER NOT NULL)');
         $connection->executeStatement('CREATE UNIQUE INDEX uniq_user_auth_session_refresh_token ON user_auth_session (refresh_token)');
         $connection->executeStatement('CREATE INDEX idx_user_auth_session_user_id ON user_auth_session (user_id)');
-        $connection->executeStatement('CREATE TABLE auth_client_access_token (client_id VARCHAR(64) PRIMARY KEY NOT NULL, access_token CLOB NOT NULL, client_kind VARCHAR(32) NOT NULL, issued_at INTEGER NOT NULL)');
-        $connection->executeStatement('CREATE UNIQUE INDEX uniq_auth_client_access_token_token ON auth_client_access_token (access_token)');
 
         return $connection;
     }

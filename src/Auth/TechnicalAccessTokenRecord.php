@@ -2,13 +2,23 @@
 
 namespace App\Auth;
 
+use Doctrine\ORM\Mapping as ORM;
+
+#[ORM\Entity]
+#[ORM\Table(name: 'auth_client_access_token')]
+#[ORM\UniqueConstraint(name: 'uniq_auth_client_access_token_token', columns: ['access_token'])]
 final class TechnicalAccessTokenRecord
 {
     public function __construct(
-        public readonly string $clientId,
-        public readonly string $accessToken,
-        public readonly string $clientKind,
-        public readonly int $issuedAt,
+        #[ORM\Id]
+        #[ORM\Column(name: 'client_id', type: 'string', length: 64)]
+        public string $clientId,
+        #[ORM\Column(name: 'access_token', type: 'text')]
+        public string $accessToken,
+        #[ORM\Column(name: 'client_kind', type: 'string', length: 32)]
+        public string $clientKind,
+        #[ORM\Column(name: 'issued_at', type: 'bigint')]
+        public int $issuedAt,
     ) {
     }
 
@@ -27,16 +37,10 @@ final class TechnicalAccessTokenRecord
         return new self($clientId, $accessToken, $clientKind, (int) ($row['issued_at'] ?? time()));
     }
 
-    /**
-     * @return array<string, scalar>
-     */
-    public function toRow(): array
+    public function syncFrom(self $record): void
     {
-        return [
-            'client_id' => $this->clientId,
-            'access_token' => $this->accessToken,
-            'client_kind' => $this->clientKind,
-            'issued_at' => $this->issuedAt,
-        ];
+        $this->accessToken = $record->accessToken;
+        $this->clientKind = $record->clientKind;
+        $this->issuedAt = $record->issuedAt;
     }
 }
