@@ -3,19 +3,19 @@
 namespace App\Tests\Unit\Controller;
 
 use App\Controller\Api\AuthApiErrorResponder;
-use App\Controller\Api\AuthController;
+use App\Controller\Api\AuthSessionController;
 use App\Controller\Api\AuthSessionHttpResponder;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
-final class AuthControllerTest extends TestCase
+final class AuthSessionControllerTest extends TestCase
 {
     use ControllerInstantiationTrait;
 
     public function testLoginThrowsLogicException(): void
     {
-        $controller = $this->controller(AuthController::class, []);
+        $controller = $this->controller(AuthSessionController::class, []);
 
         $this->expectException(\LogicException::class);
         $controller->login();
@@ -23,7 +23,7 @@ final class AuthControllerTest extends TestCase
 
     public function testLogoutRejectsMissingBearerToken(): void
     {
-        $controller = $this->controller(AuthController::class, [
+        $controller = $this->controller(AuthSessionController::class, [
             'sessionResponder' => $this->sessionResponder(),
         ]);
 
@@ -32,7 +32,7 @@ final class AuthControllerTest extends TestCase
 
     public function testRefreshRejectsMissingToken(): void
     {
-        $controller = $this->controller(AuthController::class, [
+        $controller = $this->controller(AuthSessionController::class, [
             'sessionResponder' => $this->sessionResponder(),
         ]);
 
@@ -43,15 +43,6 @@ final class AuthControllerTest extends TestCase
             'code' => 'VALIDATION_FAILED',
             'message' => 'auth.error.refresh_token_required',
         ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
-    }
-
-    public function testTwoFactorSetupRejectsMissingBearerToken(): void
-    {
-        $controller = $this->controller(AuthController::class, [
-            'errors' => $this->errorResponder(),
-        ]);
-
-        self::assertSame(401, $controller->twoFactorSetup(Request::create('/api/v1/auth/2fa/setup', 'POST'))->getStatusCode());
     }
 
     private function errorResponder(): AuthApiErrorResponder
