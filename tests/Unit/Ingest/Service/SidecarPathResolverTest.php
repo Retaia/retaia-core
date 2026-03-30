@@ -7,14 +7,32 @@ use PHPUnit\Framework\TestCase;
 
 final class SidecarPathResolverTest extends TestCase
 {
-    public function testNormalizeAndBasicPathHelpers(): void
+    public function testNormalizePath(): void
     {
         $resolver = new SidecarPathResolver();
 
         self::assertSame('INBOX/clip.mp4', $resolver->normalizePath('/INBOX\\clip.mp4'));
+    }
+
+    public function testIsInboxPath(): void
+    {
+        $resolver = new SidecarPathResolver();
+
         self::assertTrue($resolver->isInboxPath('INBOX/clip.mp4'));
         self::assertFalse($resolver->isInboxPath('ARCHIVE/clip.mp4'));
+    }
+
+    public function testExtension(): void
+    {
+        $resolver = new SidecarPathResolver();
+
         self::assertSame('mp4', $resolver->extension('INBOX/clip.mp4'));
+    }
+
+    public function testBasename(): void
+    {
+        $resolver = new SidecarPathResolver();
+
         self::assertSame('clip', $resolver->basename('INBOX/clip.mp4'));
     }
 
