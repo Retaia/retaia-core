@@ -22,8 +22,22 @@ final class StoragePathNormalizerTest extends TestCase
 
     public function testNormalizeRejectsUnsafeParentTraversalPath(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
-        $this->normalizer->normalize('../etc/passwd');
+        $unsafePaths = [
+            '../etc/passwd',
+            'foo/../bar',
+            '../../etc/passwd',
+            '..\\windows\\system32',
+            'dir/%2e%2e/secret',
+        ];
+
+        foreach ($unsafePaths as $path) {
+            try {
+                $this->normalizer->normalize($path);
+                self::fail(sprintf('Expected \InvalidArgumentException for unsafe path "%s".', $path));
+            } catch (\InvalidArgumentException $e) {
+                // Expected; continue to next path.
+            }
+        }
     }
 
     public function testNormalizeRejectsEmptyPath(): void
