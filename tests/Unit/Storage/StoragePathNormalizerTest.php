@@ -14,18 +14,26 @@ final class StoragePathNormalizerTest extends TestCase
         self::assertSame('INBOX/clip.mp4', $normalizer->normalize('/INBOX\\clip.mp4'));
     }
 
-    public function testNormalizeRejectsUnsafePaths(): void
+    public function testNormalizeRejectsUnsafeParentTraversalPath(): void
     {
         $normalizer = new StoragePathNormalizer();
 
         $this->expectException(\InvalidArgumentException::class);
         $normalizer->normalize('../etc/passwd');
+    }
 
+    public function testNormalizeRejectsEmptyPath(): void
+    {
         $normalizer = new StoragePathNormalizer();
+
         $this->expectException(\InvalidArgumentException::class);
         $normalizer->normalize('');
+    }
 
+    public function testNormalizeRejectsPathWithNullByte(): void
+    {
         $normalizer = new StoragePathNormalizer();
+
         $this->expectException(\InvalidArgumentException::class);
         $normalizer->normalize("foo\0bar");
     }
