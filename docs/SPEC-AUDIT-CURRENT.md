@@ -14,8 +14,6 @@ The runtime/spec audit is green. The remaining work is structural: large classes
 
 ### Priority 1
 
-- [`src/Controller/Api/AuthController`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Controller/Api/AuthController.php)
-  - still concentrates login, refresh, logout, password reset, email verification, 2FA, self-service, and MCP-facing auth HTTP wiring
 - [`src/Controller/Api/OpsController`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Controller/Api/OpsController.php)
   - still mixes ingest ops, runtime agent ops, readiness-ish checks, and batch/admin actions
 
