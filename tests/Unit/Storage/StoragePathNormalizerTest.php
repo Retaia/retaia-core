@@ -20,6 +20,14 @@ final class StoragePathNormalizerTest extends TestCase
 
         $this->expectException(\InvalidArgumentException::class);
         $normalizer->normalize('../etc/passwd');
+
+        $normalizer = new StoragePathNormalizer();
+        $this->expectException(\InvalidArgumentException::class);
+        $normalizer->normalize('');
+
+        $normalizer = new StoragePathNormalizer();
+        $this->expectException(\InvalidArgumentException::class);
+        $normalizer->normalize("foo\0bar");
     }
 
     public function testEnsureParentDirectoryCreatesOnlyConcreteParent(): void
