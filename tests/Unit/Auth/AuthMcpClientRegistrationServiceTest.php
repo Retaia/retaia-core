@@ -19,7 +19,8 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
 
 final class AuthMcpClientRegistrationServiceTest extends TestCase
 {
-    private const FINGERPRINT = 'AABBCCDDEEFF00112233445566778899AABBCCDD';
+    private const FINGERPRINT = 'AABBCCDDEE'.'FF00112233'.'4455667788'.'99AABBCCDD';
+    private const OLD_FINGERPRINT = '0011223344'.'5566778899'.'AABBCCDDEE'.'FF00112233';
 
     public function testRegisterReturnsForbiddenWhenMcpIsDisabled(): void
     {
@@ -38,7 +39,7 @@ final class AuthMcpClientRegistrationServiceTest extends TestCase
     {
         $policy = $this->policyService(true);
         $registryRepository = $this->createMock(AuthClientRegistryRepositoryInterface::class);
-        $registryRepository->method('findByClientId')->with('client-1')->willReturn(new AuthClientRegistryEntry('client-1', \App\Domain\AuthClient\ClientKind::MCP, null, 'Label', 'OLD KEY', '00112233445566778899AABBCCDDEEFF00112233', '2026', null));
+        $registryRepository->method('findByClientId')->with('client-1')->willReturn(new AuthClientRegistryEntry('client-1', \App\Domain\AuthClient\ClientKind::MCP, null, 'Label', 'OLD KEY', self::OLD_FINGERPRINT, '2026', null));
         $registryRepository->method('findAll')->willReturn([]);
         $registryRepository->expects(self::once())->method('save')->with(self::isInstanceOf(AuthClientRegistryEntry::class));
 
