@@ -7,43 +7,42 @@ use PHPUnit\Framework\TestCase;
 
 final class StoragePathNormalizerTest extends TestCase
 {
+    private StoragePathNormalizer $normalizer;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->normalizer = new StoragePathNormalizer();
+    }
+
     public function testNormalizeAcceptsSafeRelativePaths(): void
     {
-        $normalizer = new StoragePathNormalizer();
-
-        self::assertSame('INBOX/clip.mp4', $normalizer->normalize('/INBOX\\clip.mp4'));
+        self::assertSame('INBOX/clip.mp4', $this->normalizer->normalize('/INBOX\\clip.mp4'));
     }
 
     public function testNormalizeRejectsUnsafeParentTraversalPath(): void
     {
-        $normalizer = new StoragePathNormalizer();
-
         $this->expectException(\InvalidArgumentException::class);
-        $normalizer->normalize('../etc/passwd');
+        $this->normalizer->normalize('../etc/passwd');
     }
 
     public function testNormalizeRejectsEmptyPath(): void
     {
-        $normalizer = new StoragePathNormalizer();
-
         $this->expectException(\InvalidArgumentException::class);
-        $normalizer->normalize('');
+        $this->normalizer->normalize('');
     }
 
     public function testNormalizeRejectsPathWithNullByte(): void
     {
-        $normalizer = new StoragePathNormalizer();
-
         $this->expectException(\InvalidArgumentException::class);
-        $normalizer->normalize("foo\0bar");
+        $this->normalizer->normalize("foo\0bar");
     }
 
     public function testEnsureParentDirectoryCreatesOnlyConcreteParent(): void
     {
-        $normalizer = new StoragePathNormalizer();
         $created = [];
 
-        $normalizer->ensureParentDirectory('ARCHIVE/2026/clip.mp4', static function (string $path) use (&$created): void {
+        $this->normalizer->ensureParentDirectory('ARCHIVE/2026/clip.mp4', static function (string $path) use (&$created): void {
             $created[] = $path;
         });
 
