@@ -37,6 +37,7 @@ final class JobSourceProjectorTest extends TestCase
         $projector = new JobSourceProjector($registry);
 
         $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('storage_id');
         $projector->sourceFromAssetFields(['paths' => ['original_relative' => 'INBOX/clip.mp4']], 'clip.mp4');
     }
 
@@ -48,6 +49,7 @@ final class JobSourceProjectorTest extends TestCase
         $projector = new JobSourceProjector($registry);
 
         $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageMatches('/unknown-storage/');
         $projector->sourceFromAssetFields([
             'paths' => [
                 'storage_id' => 'unknown-storage',
