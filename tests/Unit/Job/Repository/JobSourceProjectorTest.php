@@ -37,4 +37,20 @@ final class JobSourceProjectorTest extends TestCase
         $this->expectException(\RuntimeException::class);
         $projector->sourceFromAssetFields(['paths' => ['original_relative' => 'INBOX/clip.mp4']], 'clip.mp4');
     }
+
+    public function testSourceFromAssetFieldsRejectsUnknownStorageId(): void
+    {
+        $registry = $this->createMock(BusinessStorageRegistryInterface::class);
+        $registry->method('has')->with('unknown-storage')->willReturn(false);
+
+        $projector = new JobSourceProjector($registry);
+
+        $this->expectException(\RuntimeException::class);
+        $projector->sourceFromAssetFields([
+            'paths' => [
+                'storage_id' => 'unknown-storage',
+                'original_relative' => 'INBOX/clip.mp4',
+            ],
+        ], 'clip.mp4');
+    }
 }
