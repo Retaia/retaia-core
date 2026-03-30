@@ -2,8 +2,12 @@
 
 namespace App\Tests\Unit\Controller;
 
+use App\Application\Auth\Port\AdminActorGateway;
+use App\Application\Auth\ResolveAdminActorHandler;
+use App\Controller\Api\OpsAdminAccessGuard;
 use App\Controller\Api\OpsReadinessController;
 use PHPUnit\Framework\TestCase;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class OpsReadinessControllerTest extends TestCase
 {
@@ -12,14 +16,29 @@ final class OpsReadinessControllerTest extends TestCase
     public function testReadinessReturnsForbiddenWhenActorIsNotAdmin(): void
     {
         $controller = $this->controller(OpsReadinessController::class, [
-            'adminAccessGuard' => new class {
-                public function requireAdmin(): \Symfony\Component\HttpFoundation\JsonResponse
-                {
-                    return new \Symfony\Component\HttpFoundation\JsonResponse(['code' => 'FORBIDDEN_ACTOR'], 403);
-                }
-            },
+            'adminAccessGuard' => $this->forbiddenAdminGuard(),
         ]);
 
         self::assertSame(403, $controller->readiness()->getStatusCode());
+    }
+
+    private function forbiddenAdminGuard(): OpsAdminAccessGuard
+    {
+        $gateway = new class implements AdminActorGateway {
+            public function isAdmin(): bool
+            {
+                return false;
+            }
+
+            public function actorId(): ?string
+            {
+                return null;
+            }
+        };
+
+        $translator = $this->createStub(TranslatorInterface::class);
+        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
+
+        return new OpsAdminAccessGuard(new ResolveAdminActorHandler($gateway), $translator);
     }
 }
