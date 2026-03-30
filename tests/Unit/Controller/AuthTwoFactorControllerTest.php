@@ -25,9 +25,7 @@ final class AuthTwoFactorControllerTest extends TestCase
 
     private function currentSessionResolver(): AuthCurrentSessionResolver
     {
-        $reflection = new \ReflectionClass(AuthCurrentSessionResolver::class);
-
-        return $reflection->newInstanceWithoutConstructor();
+        return $this->createMock(AuthCurrentSessionResolver::class);
     }
 
     private function createTranslatorStub(): TranslatorInterface
