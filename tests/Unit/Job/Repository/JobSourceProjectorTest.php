@@ -36,9 +36,15 @@ final class JobSourceProjectorTest extends TestCase
             ->method('has');
         $projector = new JobSourceProjector($registry);
 
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('storage_id');
-        $projector->sourceFromAssetFields(['paths' => ['original_relative' => 'INBOX/clip.mp4']], 'clip.mp4');
+        try {
+            $projector->sourceFromAssetFields(
+                ['paths' => ['original_relative' => 'INBOX/clip.mp4']],
+                'clip.mp4'
+            );
+            self::fail('Expected RuntimeException due to missing storage_id.');
+        } catch (\RuntimeException $e) {
+            self::assertStringContainsString('storage_id', $e->getMessage());
+        }
     }
 
     public function testSourceFromAssetFieldsRejectsUnknownStorageId(): void
