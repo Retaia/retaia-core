@@ -48,6 +48,7 @@ final class JobSourceProjectorTest extends TestCase
         $projector = new JobSourceProjector($registry);
 
         $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageMatches('/unknown-storage/');
         $projector->sourceFromAssetFields([
             'paths' => [
                 'storage_id' => 'unknown-storage',
