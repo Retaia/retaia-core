@@ -32,6 +32,8 @@ final class JobSourceProjectorTest extends TestCase
     public function testSourceFromAssetFieldsRejectsMissingStorage(): void
     {
         $registry = $this->createMock(BusinessStorageRegistryInterface::class);
+        $registry->expects($this->never())
+            ->method('has');
         $projector = new JobSourceProjector($registry);
 
         $this->expectException(\RuntimeException::class);
