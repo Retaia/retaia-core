@@ -30,11 +30,16 @@ final class AuthTwoFactorControllerTest extends TestCase
         return $reflection->newInstanceWithoutConstructor();
     }
 
-    private function translator(): TranslatorInterface
+    private function createTranslatorStub(): TranslatorInterface
     {
         $translator = $this->createStub(TranslatorInterface::class);
         $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
 
         return $translator;
+    }
+
+    private function translator(): TranslatorInterface
+    {
+        return $this->createTranslatorStub();
     }
 }
