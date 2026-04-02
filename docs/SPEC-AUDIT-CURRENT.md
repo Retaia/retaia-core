@@ -14,22 +14,51 @@ The runtime/spec audit is green. The remaining work is structural: large classes
 
 ### Priority 1
 
-- [`src/Application/Job/SubmitJobHandler`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Application/Job/SubmitJobHandler.php)
-  - still combines job-type validation, permission checks, asset mutations, derived persistence, and state transitions
 - [`src/Storage/BusinessStorageRegistryFactory`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Storage/BusinessStorageRegistryFactory.php)
   - still mixes env parsing, validation, backend selection, and per-driver construction
+  - next seams:
+    - `BusinessStorageEnvConfigReader` for env parsing and normalization
+    - `BusinessStorageDefinitionValidator` for required values and coercion
+    - per-driver builders behind a narrower factory map
 - [`src/Controller/Api/AssetController`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Controller/Api/AssetController.php)
   - still concentrates a wide asset HTTP surface that could be split by read, patch, workflow, and derived concerns
+  - next seams:
+    - read controller for `list`/`getOne`
+    - mutation controller for `patch`
+    - workflow controller for `reopen`/`reprocess`
+    - shared request parsing helpers moved out of the controller
 - [`src/Application/Asset/ListAssetsHandler`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Application/Asset/ListAssetsHandler.php)
   - still mixes cursor validation, filter normalization, sort validation, and gateway orchestration
-- [`src/Workflow/Service/BatchWorkflowService`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Workflow/Service/BatchWorkflowService.php)
-  - improved already, but still carries too much orchestration around batch apply/cancel/purge/report flows
-- [`src/Lock/Repository/OperationLockRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Lock/Repository/OperationLockRepository.php)
-  - still mixes lock lifecycle persistence with query helpers and stale cleanup semantics
-- [`src/Ingest/Repository/IngestDiagnosticsRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Repository/IngestDiagnosticsRepository.php)
-  - still handles multiple diagnostic concerns in one repository and deserves narrower persistence seams
+  - next seams:
+    - `ListAssetsQueryNormalizer` for filters and sort validation
+    - `AssetListCursorCodec` for context hash, encode/decode, and offset rules
+    - handler kept as orchestration only
 
 ### Priority 2
+
+- [`src/Workflow/Service/BatchWorkflowService`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Workflow/Service/BatchWorkflowService.php)
+  - improved already, but still carries orchestration for move preview/apply, decision preview/apply, and purge/report flows
+  - next seams:
+    - move coordinator
+    - decision coordinator
+    - purge coordinator
+- [`src/Lock/Repository/OperationLockRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Lock/Repository/OperationLockRepository.php)
+  - still mixes lock lifecycle persistence with query helpers and stale cleanup semantics
+  - next seams:
+    - active lock writer
+    - stale lock cleanup/query projector
+- [`src/Ingest/Repository/IngestDiagnosticsRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Repository/IngestDiagnosticsRepository.php)
+  - still handles unmatched-sidecar writes, counters, latest snapshot, and filtered listing in one class
+  - next seams:
+    - unmatched-sidecar writer
+    - diagnostics summary projector
+    - unmatched-sidecar listing projector
+- [`src/Security/ApiLoginAuthenticator`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Security/ApiLoginAuthenticator.php)
+  - still mixes credential auth, throttling, MFA challenge branching, and token minting handoff
+  - next seams:
+    - credential payload extractor
+    - MFA challenge responder
+    - second-factor throttling guard
 
 ### Priority 3
 
