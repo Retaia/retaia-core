@@ -22,8 +22,22 @@ final class StoragePathNormalizerTest extends TestCase
 
     public function testNormalizeRejectsUnsafeParentTraversalPath(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
-        $this->normalizer->normalize('../etc/passwd');
+        $unsafePaths = [
+            '../etc/passwd',
+            'foo/../bar',
+            '../../etc/passwd',
+            '..\\windows\\system32',
+            'dir/%2e%2e/secret',
+        ];
+
+        foreach ($unsafePaths as $path) {
+            try {
+                $this->normalizer->normalize($path);
+                self::fail(sprintf('Expected \InvalidArgumentException for unsafe path "%s".', $path));
+            } catch (\InvalidArgumentException $e) {
+                self::assertTrue(true);
+            }
+        }
     }
 
     public function testNormalizeRejectsEmptyPath(): void
@@ -47,5 +61,47 @@ final class StoragePathNormalizerTest extends TestCase
         });
 
         self::assertSame(['ARCHIVE/2026'], $created);
+    }
+
+    public function testEnsureParentDirectoryForRootFileDoesNotInvokeCallback(): void
+    {
+        $created = [];
+
+        $this->normalizer->ensureParentDirectory('clip.mp4', static function (string $path) use (&$created): void {
+            $created[] = $path;
+        });
+
+        self::assertSame([], $created);
+    }
+
+    public function testEnsureParentDirectoryForDeeplyNestedPathCreatesOnlyImmediateParent(): void
+    {
+        $created = [];
+
+        $this->normalizer->ensureParentDirectory('ARCHIVE/2026/01/02/clip.mp4', static function (string $path) use (&$created): void {
+            $created[] = $path;
+        });
+
+        self::assertSame(['ARCHIVE/2026/01/02'], $created);
+    }
+
+    public function testEnsureParentDirectoryUsesNormalizedPath(): void
+    {
+        $created = [];
+
+        $this->normalizer->ensureParentDirectory('/ARCHIVE\\2026/clip.mp4', static function (string $path) use (&$created): void {
+            $created[] = $path;
+        });
+
+        self::assertSame(['ARCHIVE/2026'], $created);
+    }
+
+    public function testEnsureParentDirectoryPropagatesCallbackException(): void
+    {
+        $this->expectException(\RuntimeException::class);
+
+        $this->normalizer->ensureParentDirectory('ARCHIVE/2026/clip.mp4', static function (string $path): void {
+            throw new \RuntimeException('Directory creation failed');
+        });
     }
 }
