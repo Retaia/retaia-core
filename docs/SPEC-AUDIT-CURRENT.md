@@ -121,6 +121,23 @@ These items are not active runtime/spec regressions. They are the next code-qual
   - implementation detail
 - Use that boundary to keep refactors aggressive internally without accidental contract drift.
 
+### 9. Keep API error envelopes centralized
+
+- `code` / `message` JSON error payload generation is now centralized through `src/Controller/Api/ApiErrorResponseFactory.php`.
+- Keep controllers and responders on this single generator for error envelopes instead of building ad hoc `JsonResponse` payloads inline.
+- When adding a new API error response:
+  - prefer `ApiErrorResponderTrait` for controller-local errors
+  - or delegate through a domain responder such as `AuthApiErrorResponder`
+
+### 10. Decide JSON success response boundary explicitly
+
+- The codebase still does not use a single generic JSON serialization layer for success payloads.
+- Current direction is now:
+  - centralized error-envelope generation
+  - domain-specific responders where response mapping is complex
+  - direct `JsonResponse` for simple success payloads
+- Keep this boundary explicit and avoid introducing a global serializer abstraction unless payload complexity genuinely requires it.
+
 ## Persistence Architecture Rule
 
 Target direction: maximize Doctrine ORM usage and reduce DBAL/manual persistence to the smallest possible surface.
