@@ -86,6 +86,13 @@ Docs Swagger:
 https://api.retaia.test/api/v1/docs
 ```
 
+Web Debug Toolbar / Profiler Symfony en dev:
+
+```text
+https://api.retaia.test/_wdt/
+https://api.retaia.test/_profiler/
+```
+
 Pour le detail des commandes dev Docker, voir `docs/DOCKER-DEVELOPMENT.md`.
 
 Alternative non-Docker (optionnelle):
