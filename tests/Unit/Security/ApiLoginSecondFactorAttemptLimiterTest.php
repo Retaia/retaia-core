@@ -26,6 +26,12 @@ final class ApiLoginSecondFactorAttemptLimiterTest extends TestCase
 
         self::assertTrue($limiter->consume('u-1', '127.0.0.1'));
         self::assertFalse($limiter->consume('u-1', '127.0.0.1'));
-        self::assertSame(429, $limiter->tooManyAttemptsResponse()->getStatusCode());
+        $response = $limiter->tooManyAttemptsResponse();
+
+        self::assertSame(429, $response->getStatusCode());
+        self::assertSame([
+            'code' => 'TOO_MANY_ATTEMPTS',
+            'message' => 'auth.error.too_many_2fa_attempts',
+        ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
     }
 }

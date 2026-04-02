@@ -22,9 +22,10 @@ final class OpsAdminAccessGuard
             return null;
         }
 
-        return new JsonResponse([
-            'code' => 'FORBIDDEN_ACTOR',
-            'message' => $this->translator->trans('auth.error.forbidden_actor'),
-        ], Response::HTTP_FORBIDDEN);
+        return ApiErrorResponseFactory::create(
+            'FORBIDDEN_ACTOR',
+            $this->translator->trans('auth.error.forbidden_actor'),
+            Response::HTTP_FORBIDDEN
+        );
     }
 }

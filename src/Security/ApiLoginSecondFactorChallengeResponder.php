@@ -2,6 +2,7 @@
 
 namespace App\Security;
 
+use App\Controller\Api\ApiErrorResponseFactory;
 use App\Entity\User;
 use App\User\Service\TwoFactorService;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -30,8 +31,9 @@ final class ApiLoginSecondFactorChallengeResponder
         $recoveryCode = $secondFactor['recovery_code'];
 
         if ($otpCode === '' && $recoveryCode === '') {
-            return new JsonResponse(
-                ['code' => 'MFA_REQUIRED', 'message' => $this->translator->trans('auth.error.mfa_required')],
+            return ApiErrorResponseFactory::create(
+                'MFA_REQUIRED',
+                $this->translator->trans('auth.error.mfa_required'),
                 Response::HTTP_UNAUTHORIZED
             );
         }
@@ -48,8 +50,9 @@ final class ApiLoginSecondFactorChallengeResponder
             return null;
         }
 
-        return new JsonResponse(
-            ['code' => 'INVALID_2FA_CODE', 'message' => $this->translator->trans('auth.error.invalid_2fa_code')],
+        return ApiErrorResponseFactory::create(
+            'INVALID_2FA_CODE',
+            $this->translator->trans('auth.error.invalid_2fa_code'),
             Response::HTTP_UNAUTHORIZED
         );
     }
