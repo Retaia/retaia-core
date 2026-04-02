@@ -14,13 +14,6 @@ The runtime/spec audit is green. The remaining work is structural: large classes
 
 ### Priority 1
 
-- [`src/Controller/Api/AssetController`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Controller/Api/AssetController.php)
-  - still concentrates a wide asset HTTP surface that could be split by read, patch, workflow, and derived concerns
-  - next seams:
-    - read controller for `list`/`getOne`
-    - mutation controller for `patch`
-    - workflow controller for `reopen`/`reprocess`
-    - shared request parsing helpers moved out of the controller
 - [`src/Application/Asset/ListAssetsHandler`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Application/Asset/ListAssetsHandler.php)
   - still mixes cursor validation, filter normalization, sort validation, and gateway orchestration
   - next seams:
@@ -94,7 +87,6 @@ Status:
 Files currently using reflection in tests:
 - [`tests/Unit/Application/ApplicationResultObjectsSmokeTest.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/tests/Unit/Application/ApplicationResultObjectsSmokeTest.php)
 - [`tests/Unit/Controller/AgentControllerTest.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/tests/Unit/Controller/AgentControllerTest.php)
-- [`tests/Unit/Controller/AssetControllerTest.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/tests/Unit/Controller/AssetControllerTest.php)
 - [`tests/Unit/Controller/AuthCurrentSessionResolverTest.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/tests/Unit/Controller/AuthCurrentSessionResolverTest.php)
 - [`tests/Unit/Controller/ControllerInstantiationTrait.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/tests/Unit/Controller/ControllerInstantiationTrait.php)
 - [`tests/Unit/Controller/DeviceControllerTest.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/tests/Unit/Controller/DeviceControllerTest.php)
