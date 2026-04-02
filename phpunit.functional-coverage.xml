@@ -11,6 +11,7 @@
     <php>
         <ini name="display_errors" value="1" />
         <ini name="error_reporting" value="-1" />
+        <ini name="xdebug.mode" value="off" />
         <server name="APP_ENV" value="test" force="true" />
         <server name="SHELL_VERBOSITY" value="-1" />
     </php>
@@ -36,6 +37,8 @@
             <function>trigger_deprecation</function>
         </deprecationTrigger>
     </source>
+
+    <coverage includeUncoveredFiles="false"/>
 
     <extensions>
     </extensions>
