@@ -2,7 +2,6 @@
 
 namespace App\Auth;
 
-use App\Domain\AuthClient\ClientKind;
 use Doctrine\ORM\EntityManagerInterface;
 
 final class AuthClientRegistryRepository implements AuthClientRegistryRepositoryInterface
@@ -14,7 +13,6 @@ final class AuthClientRegistryRepository implements AuthClientRegistryRepository
 
     public function findByClientId(string $clientId): ?AuthClientRegistryEntry
     {
-        $this->ensureDefaults();
         $entry = $this->entityManager->find(AuthClientRegistryEntry::class, $clientId);
         if ($entry instanceof AuthClientRegistryEntry) {
             $this->entityManager->refresh($entry);
@@ -25,8 +23,6 @@ final class AuthClientRegistryRepository implements AuthClientRegistryRepository
 
     public function findAll(): array
     {
-        $this->ensureDefaults();
-
         /** @var list<AuthClientRegistryEntry> $entries */
         $entries = $this->entityManager->createQueryBuilder()
             ->select('c')
@@ -48,40 +44,6 @@ final class AuthClientRegistryRepository implements AuthClientRegistryRepository
         }
 
         $this->entityManager->persist($entry);
-        $this->entityManager->flush();
-    }
-
-    private function ensureDefaults(): void
-    {
-        $count = (int) $this->entityManager->createQueryBuilder()
-            ->select('COUNT(c.clientId)')
-            ->from(AuthClientRegistryEntry::class, 'c')
-            ->getQuery()
-            ->getSingleScalarResult();
-        if ($count > 0) {
-            return;
-        }
-
-        $this->entityManager->persist(new AuthClientRegistryEntry(
-            'agent-default',
-            ClientKind::AGENT,
-            'agent-secret',
-            null,
-            null,
-            null,
-            null,
-            null,
-        ));
-        $this->entityManager->persist(new AuthClientRegistryEntry(
-            'mcp-default',
-            ClientKind::MCP,
-            'mcp-secret',
-            null,
-            null,
-            null,
-            null,
-            null,
-        ));
         $this->entityManager->flush();
     }
 }

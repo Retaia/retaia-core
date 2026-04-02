@@ -11,14 +11,12 @@ final class AuthClientRegistryRepositoryTest extends TestCase
 {
     use AuthClientRegistryEntityManagerTrait;
 
-    public function testDefaultsAreSeededAndCustomEntryCanBeSaved(): void
+    public function testRepositoryStartsEmptyAndCustomEntryCanBeSaved(): void
     {
         $repository = new AuthClientRegistryRepository($this->authClientRegistryEntityManager());
 
-        $default = $repository->findByClientId('agent-default');
-        self::assertNotNull($default);
-        self::assertSame('AGENT', $default->clientKind);
-        self::assertSame('agent-secret', $default->secretKey);
+        self::assertNull($repository->findByClientId('agent-default'));
+        self::assertSame([], $repository->findAll());
 
         $repository->save(new AuthClientRegistryEntry(
             'agent-123',

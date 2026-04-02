@@ -29,7 +29,6 @@ CREATE TABLE app_user (
 )
 SQL);
         $this->addSql('CREATE UNIQUE INDEX uniq_app_user_email ON app_user (email)');
-        $this->addSql("INSERT INTO app_user (id, email, password_hash, roles, email_verified, created_at, updated_at) VALUES ('bootstrapadmin0001', 'admin@retaia.local', '$2y$12$6AGCXyao1Z/Rc2ippIQ8xOhoWwyKr1TaReDVu/jayjEclIawUJjUm', '[\"ROLE_ADMIN\"]', TRUE, NOW(), NOW())");
 
         $this->addSql(<<<'SQL'
 CREATE TABLE password_reset_token (
@@ -73,7 +72,6 @@ CREATE TABLE asset (
     PRIMARY KEY(uuid)
 )
 SQL);
-        $this->addSql('CREATE UNIQUE INDEX uniq_asset_uuid ON asset (uuid)');
 
         $this->addSql(<<<'SQL'
 CREATE TABLE processing_job (
@@ -363,8 +361,6 @@ CREATE TABLE auth_client_registry (
     PRIMARY KEY(client_id)
 )
 SQL);
-        $this->addSql("INSERT INTO auth_client_registry (client_id, client_kind, secret_key, client_label, openpgp_public_key, openpgp_fingerprint, registered_at, rotated_at) VALUES ('agent-default', 'AGENT', 'agent-secret', NULL, NULL, NULL, NULL, NULL)");
-        $this->addSql("INSERT INTO auth_client_registry (client_id, client_kind, secret_key, client_label, openpgp_public_key, openpgp_fingerprint, registered_at, rotated_at) VALUES ('mcp-default', 'MCP', 'mcp-secret', NULL, NULL, NULL, NULL, NULL)");
 
         $this->addSql(<<<'SQL'
 CREATE TABLE auth_client_access_token (
