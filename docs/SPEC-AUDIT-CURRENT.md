@@ -18,9 +18,6 @@ The runtime/spec audit is green. The remaining work is structural: large classes
 
 ### Priority 2
 
-- [`src/Api/Service/AgentRuntimeRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentRuntimeRepository.php)
-  - runtime writer and read projection seams are extracted
-  - remaining debt is façade breadth only unless agent runtime reporting grows again
 - [`src/Storage/BusinessStorageRegistryFactory`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Storage/BusinessStorageRegistryFactory.php)
   - env parsing and per-driver builders are extracted
   - remaining debt is optional only:
