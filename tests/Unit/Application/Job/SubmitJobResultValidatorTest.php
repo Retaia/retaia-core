@@ -1,0 +1,64 @@
+<?php
+
+namespace App\Tests\Unit\Application\Job;
+
+use App\Application\Job\SubmitJobResultValidator;
+use PHPUnit\Framework\TestCase;
+
+final class SubmitJobResultValidatorTest extends TestCase
+{
+    private SubmitJobResultValidator $validator;
+
+    protected function setUp(): void
+    {
+        $this->validator = new SubmitJobResultValidator();
+    }
+
+    public function testAllowsFactsPatchForExtractFacts(): void
+    {
+        self::assertTrue($this->validator->isAllowedForJobType('extract_facts', [
+            'facts_patch' => ['duration_ms' => 123],
+            'warnings' => ['minor'],
+            'metrics' => ['elapsed_ms' => 10],
+        ]));
+    }
+
+    public function testRejectsTranscriptPatchOutsideTranscribeAudio(): void
+    {
+        self::assertFalse($this->validator->isAllowedForJobType('extract_facts', [
+            'transcript_patch' => ['status' => 'DONE'],
+        ]));
+    }
+
+    public function testAllowsTranscriptPatchForTranscribeAudio(): void
+    {
+        self::assertTrue($this->validator->isAllowedForJobType('transcribe_audio', [
+            'transcript_patch' => [
+                'status' => 'DONE',
+                'text' => 'hello',
+                'text_preview' => 'hello',
+                'language' => 'en',
+                'updated_at' => '2026-04-02T10:00:00+00:00',
+            ],
+        ]));
+    }
+
+    public function testRejectsEncodedDerivedPayloadWithUnknownKind(): void
+    {
+        self::assertFalse($this->validator->isAllowedForJobType('generate_preview', [
+            'derived_patch' => [
+                'derived_manifest' => [
+                    ['kind' => 'bad-kind', 'ref' => 'preview.mp4'],
+                ],
+            ],
+        ]));
+    }
+
+    public function testRejectsInvalidWarningsShape(): void
+    {
+        self::assertFalse($this->validator->isAllowedForJobType('generate_preview', [
+            'derived_patch' => ['derived_manifest' => []],
+            'warnings' => ['ok', 42],
+        ]));
+    }
+}

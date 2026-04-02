@@ -8,8 +8,11 @@ use App\Asset\Service\AssetStateMachine;
 use App\Application\Job\CheckSuggestTagsSubmitScopeHandler;
 use App\Application\Job\Port\JobGateway;
 use App\Application\Job\ResolveJobLockConflictCodeHandler;
+use App\Application\Job\SubmitJobAssetMutator;
+use App\Application\Job\SubmitJobDerivedPersister;
 use App\Application\Job\SubmitJobHandler;
 use App\Application\Job\SubmitJobResult;
+use App\Application\Job\SubmitJobResultValidator;
 use App\Derived\DerivedFileRepositoryInterface;
 use App\Entity\Asset;
 use App\Job\Job;
@@ -29,14 +32,7 @@ final class SubmitJobHandlerTest extends TestCase
         );
         $gateway->expects(self::never())->method('submit');
 
-        $handler = new SubmitJobHandler(
-            $gateway,
-            $assets,
-            $derivedFiles,
-            $stateMachine,
-            new CheckSuggestTagsSubmitScopeHandler(true),
-            new ResolveJobLockConflictCodeHandler($gateway)
-        );
+        $handler = $this->buildHandler($gateway, $assets, $derivedFiles, $stateMachine);
 
         $result = $handler->handle('job-1', 'agent-1', 't', 1, 'suggest_tags', ['ok' => true], ['ROLE_AGENT']);
 
@@ -58,14 +54,7 @@ final class SubmitJobHandlerTest extends TestCase
         );
         $gateway->expects(self::exactly(2))->method('submit')->with('job-1', 'agent-1', 'wrong-token', 1, ['facts_patch' => ['duration_ms' => 42]])->willReturn(null);
 
-        $handler = new SubmitJobHandler(
-            $gateway,
-            $assets,
-            $derivedFiles,
-            $stateMachine,
-            new CheckSuggestTagsSubmitScopeHandler(true),
-            new ResolveJobLockConflictCodeHandler($gateway)
-        );
+        $handler = $this->buildHandler($gateway, $assets, $derivedFiles, $stateMachine);
 
         self::assertSame(SubmitJobResult::STATUS_STALE_LOCK_TOKEN, $handler->handle('job-1', 'agent-1', 'wrong-token', 1, 'extract_facts', ['facts_patch' => ['duration_ms' => 42]], ['ROLE_AGENT'])->status());
         self::assertSame(SubmitJobResult::STATUS_LOCK_INVALID, $handler->handle('job-1', 'agent-1', 'wrong-token', 1, 'extract_facts', ['facts_patch' => ['duration_ms' => 42]], ['ROLE_AGENT'])->status());
@@ -85,14 +74,7 @@ final class SubmitJobHandlerTest extends TestCase
         );
         $gateway->expects(self::once())->method('submit')->with('job-1', 'agent-1', 'token', 1, ['facts_patch' => ['duration_ms' => 42]])->willReturn($job);
 
-        $handler = new SubmitJobHandler(
-            $gateway,
-            $assets,
-            $derivedFiles,
-            $stateMachine,
-            new CheckSuggestTagsSubmitScopeHandler(true),
-            new ResolveJobLockConflictCodeHandler($gateway)
-        );
+        $handler = $this->buildHandler($gateway, $assets, $derivedFiles, $stateMachine);
 
         $result = $handler->handle('job-1', 'agent-1', 'token', 1, 'extract_facts', ['facts_patch' => ['duration_ms' => 42]], ['ROLE_SUGGESTIONS_WRITE']);
 
@@ -141,14 +123,7 @@ final class SubmitJobHandlerTest extends TestCase
         );
         $gateway->expects(self::never())->method('submit');
 
-        $handler = new SubmitJobHandler(
-            $gateway,
-            $assets,
-            $derivedFiles,
-            $stateMachine,
-            new CheckSuggestTagsSubmitScopeHandler(true),
-            new ResolveJobLockConflictCodeHandler($gateway)
-        );
+        $handler = $this->buildHandler($gateway, $assets, $derivedFiles, $stateMachine);
 
         $result = $handler->handle('job-1', 'agent-1', 'token', 1, 'generate_preview', [
             'derived_patch' => ['derived_manifest' => [['kind' => 'unknown', 'ref' => 'x']]],
@@ -181,14 +156,7 @@ final class SubmitJobHandlerTest extends TestCase
                 && (bool) ($fields['facts_done'] ?? false);
         }));
 
-        $handler = new SubmitJobHandler(
-            $gateway,
-            $assets,
-            $derivedFiles,
-            $stateMachine,
-            new CheckSuggestTagsSubmitScopeHandler(true),
-            new ResolveJobLockConflictCodeHandler($gateway)
-        );
+        $handler = $this->buildHandler($gateway, $assets, $derivedFiles, $stateMachine);
 
         $result = $handler->handle('job-1', 'agent-1', 'token', 1, 'extract_facts', ['facts_patch' => ['duration_ms' => 1200]], ['ROLE_AGENT']);
 
@@ -235,14 +203,7 @@ final class SubmitJobHandlerTest extends TestCase
                 && !isset($fields['derived']['derived_manifest']);
         }));
 
-        $handler = new SubmitJobHandler(
-            $gateway,
-            $assets,
-            $derivedFiles,
-            $stateMachine,
-            new CheckSuggestTagsSubmitScopeHandler(true),
-            new ResolveJobLockConflictCodeHandler($gateway)
-        );
+        $handler = $this->buildHandler($gateway, $assets, $derivedFiles, $stateMachine);
 
         $result = $handler->handle('job-1', 'agent-1', 'token', 1, 'generate_thumbnails', [
             'derived_patch' => [
@@ -268,17 +229,25 @@ final class SubmitJobHandlerTest extends TestCase
         $gateway->expects(self::once())->method('find')->with('job-1')->willReturn($claimedJob);
         $gateway->expects(self::never())->method('submit');
 
-        $handler = new SubmitJobHandler(
-            $gateway,
-            $assets,
-            $derivedFiles,
-            $stateMachine,
-            new CheckSuggestTagsSubmitScopeHandler(true),
-            new ResolveJobLockConflictCodeHandler($gateway)
-        );
+        $handler = $this->buildHandler($gateway, $assets, $derivedFiles, $stateMachine);
 
         $result = $handler->handle('job-1', 'agent-1', 'token', 1, $jobType, $resultPayload, $actorRoles);
 
         self::assertSame(SubmitJobResult::STATUS_VALIDATION_FAILED, $result->status());
+    }
+
+    private function buildHandler(
+        JobGateway $gateway,
+        AssetRepositoryInterface $assets,
+        DerivedFileRepositoryInterface $derivedFiles,
+        AssetStateMachine $stateMachine,
+    ): SubmitJobHandler {
+        return new SubmitJobHandler(
+            $gateway,
+            new SubmitJobAssetMutator($assets, $stateMachine, new SubmitJobDerivedPersister($derivedFiles)),
+            new SubmitJobResultValidator(),
+            new CheckSuggestTagsSubmitScopeHandler(true),
+            new ResolveJobLockConflictCodeHandler($gateway)
+        );
     }
 }
