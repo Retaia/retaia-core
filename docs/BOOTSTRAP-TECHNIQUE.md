@@ -54,9 +54,21 @@ Mettre en place un socle exécutable pour démarrer l’implémentation :
   - table locks opérationnels : `asset_operation_lock`
   - migration lock : `migrations/Version20260210174000.php`
 
-- utilisateur initial (créé par migration) :
-  - email : `admin@retaia.local`
-  - password : `change-me`
+- bootstrap auth explicite :
+  - la migration ne crée plus aucun compte ni secret par défaut
+  - en production, les users initiaux et les clients techniques initiaux sont créés uniquement via commande
+  - lancer `php bin/console app:bootstrap:initial-auth` sur une base vide pour créer :
+    - un admin initial
+    - `agent-default`
+    - `mcp-default`
+  - sans options, le mot de passe admin et les secrets clients sont générés puis affichés une seule fois
+  - options utiles :
+    - `--admin-email=admin@retaia.local`
+    - `--admin-password=...`
+    - `--agent-secret=...`
+    - `--mcp-secret=...`
+    - `--reset-admin-password`
+    - `--rotate-existing-secrets`
 
 ## Lancer les tests
 
@@ -125,7 +137,7 @@ APP_STORAGE_NAS_MAIN_WATCH_DIRECTORY=INBOX
 - Le poller ingest ignore les symlinks et les chemins non sûrs.
 - Le poller ingest reste tolérant aux races de scan (fichier renommé/supprimé pendant scan) et aux sous-dossiers non lisibles.
 - Le move outbox gère les collisions massives de nom sans écrasement (suffixes déterministes par asset).
-- Changer les secrets et mots de passe par défaut avant tout usage réel.
+- Ne jamais embarquer de secrets ou de mots de passe bootstrap dans les migrations.
 
 ## Changelog runtime v1 (normalisation HTTP)
 
