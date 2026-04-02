@@ -9,7 +9,6 @@ use App\Tests\Support\FunctionalSchemaTrait;
 use Doctrine\DBAL\Connection;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
 use OTPHP\TOTP;
-use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -696,19 +695,8 @@ final class ApiAuthFlowTest extends WebTestCase
         $this->ensureAuthClientTables($connection);
         $this->ensureUserAuthSessionTable($connection);
         $this->ensureUserTwoFactorStateTable($connection);
-        $connection->executeStatement('DELETE FROM auth_client_access_token');
-        $connection->executeStatement('DELETE FROM auth_device_flow');
-        $connection->executeStatement('DELETE FROM auth_mcp_challenge');
-        $connection->executeStatement('DELETE FROM user_auth_session');
-        $connection->executeStatement('DELETE FROM user_two_factor_state');
         $this->ensureAgentRuntimeTable($connection);
         $this->ensureAgentSignatureTables($connection);
-        $connection->executeStatement('DELETE FROM agent_runtime');
-        $connection->executeStatement('DELETE FROM agent_public_key');
-        $connection->executeStatement('DELETE FROM agent_signature_nonce');
-        /** @var CacheItemPoolInterface $cache */
-        $cache = static::getContainer()->get('cache.app');
-        $cache->clear();
 
         return $client;
     }

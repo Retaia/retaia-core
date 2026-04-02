@@ -16,7 +16,6 @@ use GuzzleHttp\Psr7\Response as Psr7Response;
 use GuzzleHttp\Psr7\Utils;
 use Hautelook\AliceBundle\PhpUnit\RecreateDatabaseTrait;
 use OTPHP\TOTP;
-use Psr\Cache\CacheItemPoolInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
@@ -36,20 +35,11 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
         self::ensureKernelShutdown();
         static::bootKernel();
 
-        /** @var CacheItemPoolInterface $cache */
-        $cache = static::getContainer()->get('cache.app');
-        $cache->clear();
-
         /** @var Connection $connection */
         $connection = static::getContainer()->get(Connection::class);
         $this->ensureAuthClientTables($connection);
         $this->ensureUserAuthSessionTable($connection);
         $this->ensureUserTwoFactorStateTable($connection);
-        $connection->executeStatement('DELETE FROM auth_client_access_token');
-        $connection->executeStatement('DELETE FROM auth_device_flow');
-        $connection->executeStatement('DELETE FROM auth_mcp_challenge');
-        $connection->executeStatement('DELETE FROM user_auth_session');
-        $connection->executeStatement('DELETE FROM user_two_factor_state');
     }
 
     public function testSpecLoginMeLogoutBearerProcess(): void
@@ -342,13 +332,6 @@ final class AuthProcessGuzzleE2ETest extends WebTestCase
         $this->ensureAuthClientTables($connection);
         $this->ensureUserAuthSessionTable($connection);
         $this->ensureUserTwoFactorStateTable($connection);
-        $connection->executeStatement('DELETE FROM auth_client_access_token');
-        $connection->executeStatement('DELETE FROM auth_device_flow');
-        $connection->executeStatement('DELETE FROM auth_mcp_challenge');
-        $connection->executeStatement('DELETE FROM user_two_factor_state');
-        /** @var CacheItemPoolInterface $cache */
-        $cache = static::getContainer()->get('cache.app');
-        $cache->clear();
 
         /** @var HttpKernelInterface $httpKernel */
         $httpKernel = static::getContainer()->get(HttpKernelInterface::class);

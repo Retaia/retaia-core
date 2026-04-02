@@ -447,17 +447,6 @@ final class JobApiTest extends WebTestCase
         $this->ensureUserAuthSessionTable($connection);
         $this->ensureUserTwoFactorStateTable($connection);
         $this->ensureAgentSignatureTables($connection);
-        $connection->executeStatement('DELETE FROM auth_client_access_token');
-        $connection->executeStatement('DELETE FROM auth_device_flow');
-        $connection->executeStatement('DELETE FROM auth_mcp_challenge');
-        $connection->executeStatement('DELETE FROM user_auth_session');
-        $connection->executeStatement('DELETE FROM user_two_factor_state');
-        $connection->executeStatement('DELETE FROM agent_public_key');
-        $connection->executeStatement('DELETE FROM agent_signature_nonce');
-        $cache = self::getContainer()->get('cache.app');
-        if (method_exists($cache, 'clear')) {
-            $cache->clear();
-        }
 
         return $client;
     }
