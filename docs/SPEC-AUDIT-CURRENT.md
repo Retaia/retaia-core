@@ -14,12 +14,12 @@ The runtime/spec audit is green. The remaining work is structural: large classes
 
 ### Priority 1
 
-- [`src/Ingest/Repository/IngestDiagnosticsRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Repository/IngestDiagnosticsRepository.php)
-  - still handles unmatched-sidecar writes, counters, latest snapshot, and filtered listing in one class
+- [`src/Security/ApiLoginAuthenticator`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Security/ApiLoginAuthenticator.php)
+  - still mixes credential auth, throttling, MFA challenge branching, and token minting handoff
   - next seams:
-    - unmatched-sidecar writer
-    - diagnostics summary projector
-    - unmatched-sidecar listing projector
+    - credential payload extractor
+    - MFA challenge responder
+    - second-factor throttling guard
 
 ### Priority 2
 
@@ -28,12 +28,6 @@ The runtime/spec audit is green. The remaining work is structural: large classes
   - next seams:
     - narrower builder map per driver
     - optional dedicated validator for driver-specific completeness checks if SMB/local setup grows again
-- [`src/Security/ApiLoginAuthenticator`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Security/ApiLoginAuthenticator.php)
-  - still mixes credential auth, throttling, MFA challenge branching, and token minting handoff
-  - next seams:
-    - credential payload extractor
-    - MFA challenge responder
-    - second-factor throttling guard
 
 ### Priority 3
 
