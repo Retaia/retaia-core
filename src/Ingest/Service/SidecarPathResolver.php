@@ -6,7 +6,10 @@ final class SidecarPathResolver
 {
     public function normalizePath(string $path): string
     {
-        return ltrim(str_replace('\\', '/', trim($path)), '/');
+        $normalized = str_replace('\\', '/', trim($path));
+        $normalized = preg_replace('#/+#', '/', $normalized) ?? $normalized;
+
+        return ltrim($normalized, '/');
     }
 
     public function isInboxPath(string $path): bool
