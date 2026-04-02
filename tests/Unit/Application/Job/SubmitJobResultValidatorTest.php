@@ -23,6 +23,16 @@ final class SubmitJobResultValidatorTest extends TestCase
         ]));
     }
 
+    public function testRejectsFactsPatchWithUnknownField(): void
+    {
+        self::assertFalse($this->validator->isAllowedForJobType('extract_facts', [
+            'facts_patch' => [
+                'duration_ms' => 123,
+                'unknown_field' => 42,
+            ],
+        ]));
+    }
+
     public function testRejectsTranscriptPatchOutsideTranscribeAudio(): void
     {
         self::assertFalse($this->validator->isAllowedForJobType('extract_facts', [
@@ -43,12 +53,83 @@ final class SubmitJobResultValidatorTest extends TestCase
         ]));
     }
 
+    public function testRejectsTranscriptPatchWithInvalidStatus(): void
+    {
+        self::assertFalse($this->validator->isAllowedForJobType('transcribe_audio', [
+            'transcript_patch' => [
+                'status' => 'INVALID',
+            ],
+        ]));
+    }
+
     public function testRejectsEncodedDerivedPayloadWithUnknownKind(): void
     {
         self::assertFalse($this->validator->isAllowedForJobType('generate_preview', [
             'derived_patch' => [
                 'derived_manifest' => [
                     ['kind' => 'bad-kind', 'ref' => 'preview.mp4'],
+                ],
+            ],
+        ]));
+    }
+
+    public function testRejectsDerivedPayloadWithEmptyOrNonStringRef(): void
+    {
+        self::assertFalse($this->validator->isAllowedForJobType('generate_preview', [
+            'derived_patch' => [
+                'derived_manifest' => [
+                    ['kind' => 'video', 'ref' => ''],
+                ],
+            ],
+        ]));
+
+        self::assertFalse($this->validator->isAllowedForJobType('generate_preview', [
+            'derived_patch' => [
+                'derived_manifest' => [
+                    ['kind' => 'video', 'ref' => null],
+                ],
+            ],
+        ]));
+    }
+
+    public function testRejectsDerivedPayloadWithNonIntegerSizeBytes(): void
+    {
+        self::assertFalse($this->validator->isAllowedForJobType('generate_preview', [
+            'derived_patch' => [
+                'derived_manifest' => [
+                    [
+                        'kind' => 'video',
+                        'ref' => 'preview.mp4',
+                        'size_bytes' => '100',
+                    ],
+                ],
+            ],
+        ]));
+
+        self::assertFalse($this->validator->isAllowedForJobType('generate_preview', [
+            'derived_patch' => [
+                'derived_manifest' => [
+                    [
+                        'kind' => 'video',
+                        'ref' => 'preview.mp4',
+                        'size_bytes' => 1.23,
+                    ],
+                ],
+            ],
+        ]));
+    }
+
+    public function testRejectsDerivedPayloadWithNonStringSha256(): void
+    {
+        self::assertFalse($this->validator->isAllowedForJobType('generate_preview', [
+            'derived_patch' => [
+                'derived_manifest' => [
+                    [
+                        'kind' => 'video',
+                        'ref' => 'preview.mp4',
+                        'size_bytes' => 100,
+                        'sha256' => 12345,
+                    ],
                 ],
             ],
         ]));
