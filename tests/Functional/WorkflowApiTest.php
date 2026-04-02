@@ -757,7 +757,6 @@ final class WorkflowApiTest extends WebTestCase
     {
         $client = static::createClient();
         $client->disableReboot();
-        static::getContainer()->get('cache.app')->clear();
         $this->ensureWorkflowSchema();
         $this->resetTwoFactorState($email);
 

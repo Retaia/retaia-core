@@ -22,6 +22,9 @@ final class OpenApiContractTest extends WebTestCase
     use ApiAuthClientTrait;
     use FunctionalSchemaTrait;
 
+    /** @var array<string, mixed>|null */
+    private static ?array $openApiCache = null;
+
     public function testCriticalEndpointsDeclareIdempotencyHeaderInOpenApi(): void
     {
         $openApi = $this->openApi();
@@ -601,10 +604,15 @@ final class OpenApiContractTest extends WebTestCase
      */
     private function openApi(): array
     {
+        if (is_array(self::$openApiCache)) {
+            return self::$openApiCache;
+        }
+
         /** @var array<string, mixed> $parsed */
         $parsed = Yaml::parseFile(dirname(__DIR__, 2).'/specs/api/openapi/v1.yaml');
+        self::$openApiCache = $parsed;
 
-        return $parsed;
+        return self::$openApiCache;
     }
 
     /**

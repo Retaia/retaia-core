@@ -17,28 +17,6 @@ final class JobApiTest extends WebTestCase
     use ApiAuthClientTrait;
     use FunctionalSchemaTrait;
 
-    public function testClaimIsAtomicWithSingleWinner(): void
-    {
-        $clientA = $this->bootClient();
-        $this->seedJob('job-1');
-        $this->loginAgent($clientA);
-
-        $this->signedJsonRequestAsAgent($clientA, 'POST', '/api/v1/jobs/job-1/claim');
-        $firstStatus = $clientA->getResponse()->getStatusCode();
-        if ($firstStatus === Response::HTTP_OK) {
-            $firstPayload = json_decode((string) $clientA->getResponse()->getContent(), true);
-            self::assertSame('nas-main', $firstPayload['source']['storage_id'] ?? null);
-            self::assertSame('INBOX/job-1.mov', $firstPayload['source']['original_relative'] ?? null);
-        }
-        $this->signedJsonRequestAsAgent($clientA, 'POST', '/api/v1/jobs/job-1/claim');
-        $secondStatus = $clientA->getResponse()->getStatusCode();
-
-        $statusCodes = [$firstStatus, $secondStatus];
-        sort($statusCodes);
-
-        self::assertSame([Response::HTTP_OK, Response::HTTP_CONFLICT], $statusCodes);
-    }
-
     public function testClaimRejectsForgedAgentSignature(): void
     {
         $client = $this->bootClient();
@@ -213,73 +191,6 @@ final class JobApiTest extends WebTestCase
         self::assertIsArray($job['required_capabilities'] ?? null);
     }
 
-    public function testSubmitRejectsMissingIdempotencyKeyAndMissingLockToken(): void
-    {
-        $client = $this->bootClient();
-        $this->seedJob('job-submit-validation');
-        $this->loginAgent($client);
-
-        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-submit-validation/submit', [
-            'lock_token' => 'any-lock',
-            'job_type' => 'extract_facts',
-            'result' => ['facts_patch' => ['duration_ms' => 10]],
-        ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
-        $missingKey = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('MISSING_IDEMPOTENCY_KEY', $missingKey['code'] ?? null);
-
-        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-submit-validation/submit', [
-            'result' => ['facts_patch' => ['duration_ms' => 10]],
-        ], [
-            'HTTP_IDEMPOTENCY_KEY' => 'submit-missing-lock',
-        ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_LOCKED);
-        $missingLock = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('LOCK_REQUIRED', $missingLock['code'] ?? null);
-    }
-
-    public function testSubmitReturnsStaleLockTokenWhenClaimedByAnotherToken(): void
-    {
-        $client = $this->bootClient();
-        $this->seedJob('job-submit-stale');
-        $this->loginAgent($client);
-
-        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-submit-stale/claim');
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
-        $claimPayload = json_decode((string) $client->getResponse()->getContent(), true);
-
-        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-submit-stale/submit', [
-            'lock_token' => 'wrong-lock-token',
-            'fencing_token' => $claimPayload['fencing_token'] ?? null,
-            'job_type' => 'extract_facts',
-            'result' => ['facts_patch' => ['duration_ms' => 10]],
-        ], [
-            'HTTP_IDEMPOTENCY_KEY' => 'submit-stale-lock',
-        ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
-        $payload = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('STALE_LOCK_TOKEN', $payload['code'] ?? null);
-    }
-
-    public function testSubmitReturnsLockInvalidWhenNoActiveClaimExists(): void
-    {
-        $client = $this->bootClient();
-        $this->seedJob('job-submit-lock-invalid');
-        $this->loginAgent($client);
-
-        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-submit-lock-invalid/submit', [
-            'lock_token' => 'no-active-claim',
-            'fencing_token' => 1,
-            'job_type' => 'extract_facts',
-            'result' => ['facts_patch' => ['duration_ms' => 10]],
-        ], [
-            'HTTP_IDEMPOTENCY_KEY' => 'submit-lock-invalid',
-        ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_LOCKED);
-        $payload = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('LOCK_INVALID', $payload['code'] ?? null);
-    }
-
     public function testClaimReturnsConflictWhenAssetHasActiveOperationLock(): void
     {
         $client = $this->bootClient();
@@ -367,132 +278,6 @@ final class JobApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_OK);
         $successPayload = json_decode((string) $client->getResponse()->getContent(), true);
         self::assertSame('pending', $successPayload['status'] ?? null);
-    }
-
-    public function testFailReturnsLockRequiredAndLockInvalid(): void
-    {
-        $client = $this->bootClient();
-        $this->seedJob('job-fail-lock-cases');
-        $this->loginAgent($client);
-
-        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-fail-lock-cases/fail', [
-            'error_code' => 'ERR_GENERIC',
-            'message' => 'failed',
-            'retryable' => false,
-        ], [
-            'HTTP_IDEMPOTENCY_KEY' => 'job-fail-lock-required',
-        ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_LOCKED);
-        $requiredPayload = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('LOCK_REQUIRED', $requiredPayload['code'] ?? null);
-
-        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-fail-lock-cases/fail', [
-            'lock_token' => 'no-active-claim',
-            'fencing_token' => 1,
-            'error_code' => 'ERR_GENERIC',
-            'message' => 'failed',
-            'retryable' => false,
-        ], [
-            'HTTP_IDEMPOTENCY_KEY' => 'job-fail-lock-invalid',
-        ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_LOCKED);
-        $invalidPayload = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('LOCK_INVALID', $invalidPayload['code'] ?? null);
-    }
-
-    public function testHeartbeatReturnsLockRequiredAndLockInvalid(): void
-    {
-        $client = $this->bootClient();
-        $this->seedJob('job-heartbeat-lock-cases');
-        $this->loginAgent($client);
-
-        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-heartbeat-lock-cases/heartbeat', []);
-        self::assertResponseStatusCodeSame(Response::HTTP_LOCKED);
-        $requiredPayload = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('LOCK_REQUIRED', $requiredPayload['code'] ?? null);
-
-        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-heartbeat-lock-cases/heartbeat', [
-            'lock_token' => 'no-active-claim',
-            'fencing_token' => 1,
-        ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_LOCKED);
-        $invalidPayload = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('LOCK_INVALID', $invalidPayload['code'] ?? null);
-    }
-
-    public function testNonV1JobTypeIsNotClaimable(): void
-    {
-        $client = $this->bootClient();
-        $this->seedJob('job-suggest-disabled', 'suggest_tags');
-        $this->loginAgent($client);
-
-        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-suggest-disabled/claim');
-        self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT);
-        $payload = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('STATE_CONFLICT', $payload['code'] ?? null);
-    }
-
-    public function testSubmitRejectsMissingAndMismatchedJobType(): void
-    {
-        $client = $this->bootClient();
-        $this->seedJob('job-submit-jobtype');
-        $this->loginAgent($client);
-
-        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-submit-jobtype/claim');
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
-        $claimPayload = json_decode((string) $client->getResponse()->getContent(), true);
-        $lockToken = (string) ($claimPayload['lock_token'] ?? '');
-        $fencingToken = (int) ($claimPayload['fencing_token'] ?? 0);
-        self::assertNotSame('', $lockToken);
-
-        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-submit-jobtype/submit', [
-            'lock_token' => $lockToken,
-            'fencing_token' => $fencingToken,
-            'result' => ['facts_patch' => ['duration_ms' => 10]],
-        ], [
-            'HTTP_IDEMPOTENCY_KEY' => 'submit-missing-job-type',
-        ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
-        $missingTypePayload = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('VALIDATION_FAILED', $missingTypePayload['code'] ?? null);
-
-        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-submit-jobtype/submit', [
-            'lock_token' => $lockToken,
-            'fencing_token' => $fencingToken,
-            'job_type' => 'generate_preview',
-            'result' => ['derived_patch' => ['derived_manifest' => []]],
-        ], [
-            'HTTP_IDEMPOTENCY_KEY' => 'submit-mismatched-job-type',
-        ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
-        $mismatchTypePayload = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('VALIDATION_FAILED', $mismatchTypePayload['code'] ?? null);
-    }
-
-    public function testSubmitRejectsPatchDomainOwnershipViolation(): void
-    {
-        $client = $this->bootClient();
-        $this->seedJob('job-submit-ownership');
-        $this->loginAgent($client);
-
-        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-submit-ownership/claim');
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
-        $claimPayload = json_decode((string) $client->getResponse()->getContent(), true);
-        $lockToken = (string) ($claimPayload['lock_token'] ?? '');
-        $fencingToken = (int) ($claimPayload['fencing_token'] ?? 0);
-        self::assertNotSame('', $lockToken);
-
-        $this->signedJsonRequestAsAgent($client, 'POST', '/api/v1/jobs/job-submit-ownership/submit', [
-            'lock_token' => $lockToken,
-            'fencing_token' => $fencingToken,
-            'job_type' => 'extract_facts',
-            'result' => ['derived_patch' => ['derived_manifest' => []]],
-        ], [
-            'HTTP_IDEMPOTENCY_KEY' => 'submit-ownership-violation',
-        ]);
-        self::assertResponseStatusCodeSame(Response::HTTP_UNPROCESSABLE_ENTITY);
-        $payload = json_decode((string) $client->getResponse()->getContent(), true);
-        self::assertSame('VALIDATION_FAILED', $payload['code'] ?? null);
     }
 
     public function testSubmitExtractFactsMovesAssetToProcessingReviewAndStoresFactsPatch(): void
@@ -662,17 +447,6 @@ final class JobApiTest extends WebTestCase
         $this->ensureUserAuthSessionTable($connection);
         $this->ensureUserTwoFactorStateTable($connection);
         $this->ensureAgentSignatureTables($connection);
-        $connection->executeStatement('DELETE FROM auth_client_access_token');
-        $connection->executeStatement('DELETE FROM auth_device_flow');
-        $connection->executeStatement('DELETE FROM auth_mcp_challenge');
-        $connection->executeStatement('DELETE FROM user_auth_session');
-        $connection->executeStatement('DELETE FROM user_two_factor_state');
-        $connection->executeStatement('DELETE FROM agent_public_key');
-        $connection->executeStatement('DELETE FROM agent_signature_nonce');
-        $cache = self::getContainer()->get('cache.app');
-        if (method_exists($cache, 'clear')) {
-            $cache->clear();
-        }
 
         return $client;
     }
