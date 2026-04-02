@@ -44,9 +44,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
             'last_seen_at' => '2026-02-10 12:01:00',
         ]);
 
-        $application = new Application(static::$kernel);
-        $command = $application->find('app:ingest:enqueue-stable');
-        $tester = new CommandTester($command);
+        $tester = $this->createCommandTester();
         $tester->execute(['--limit' => 10]);
         self::assertStringContainsString('Queued 3 stable file(s). Missing: 0. Unmatched sidecars: 0.', $tester->getDisplay());
 
@@ -97,9 +95,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
             'last_seen_at' => '2026-02-10 12:01:00',
         ]);
 
-        $application = new Application(static::$kernel);
-        $command = $application->find('app:ingest:enqueue-stable');
-        $tester = new CommandTester($command);
+        $tester = $this->createCommandTester();
         $tester->execute(['--limit' => 10]);
         self::assertStringContainsString('Missing: 1. Unmatched sidecars: 0.', $tester->getDisplay());
 
@@ -136,9 +132,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
             'last_seen_at' => '2026-02-10 12:01:00',
         ]);
 
-        $application = new Application(static::$kernel);
-        $command = $application->find('app:ingest:enqueue-stable');
-        $tester = new CommandTester($command);
+        $tester = $this->createCommandTester();
         $tester->execute(['--limit' => 10]);
         self::assertStringContainsString('Queued 3 stable file(s). Missing: 0. Unmatched sidecars: 0.', $tester->getDisplay());
 
@@ -180,9 +174,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
             ]);
         }
 
-        $application = new Application(static::$kernel);
-        $command = $application->find('app:ingest:enqueue-stable');
-        $tester = new CommandTester($command);
+        $tester = $this->createCommandTester();
         $tester->execute(['--limit' => 20]);
 
         $jobCount = (int) $connection->fetchOne('SELECT COUNT(*) FROM processing_job');
@@ -246,9 +238,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
             ]);
         }
 
-        $application = new Application(static::$kernel);
-        $command = $application->find('app:ingest:enqueue-stable');
-        $tester = new CommandTester($command);
+        $tester = $this->createCommandTester();
         $tester->execute(['--limit' => 20]);
 
         $jobCount = (int) $connection->fetchOne('SELECT COUNT(*) FROM processing_job');
@@ -312,9 +302,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
             ]);
         }
 
-        $application = new Application(static::$kernel);
-        $command = $application->find('app:ingest:enqueue-stable');
-        $tester = new CommandTester($command);
+        $tester = $this->createCommandTester();
         $tester->execute(['--limit' => 20]);
 
         $jobCount = (int) $connection->fetchOne('SELECT COUNT(*) FROM processing_job');
@@ -416,9 +404,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
             ]);
         }
 
-        $application = new Application(static::$kernel);
-        $command = $application->find('app:ingest:enqueue-stable');
-        $tester = new CommandTester($command);
+        $tester = $this->createCommandTester();
         $tester->execute(['--limit' => 20]);
 
         /** @var EntityManagerInterface $entityManager */
@@ -469,9 +455,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
             'last_seen_at' => '2026-02-10 12:01:00',
         ]);
 
-        $application = new Application(static::$kernel);
-        $command = $application->find('app:ingest:enqueue-stable');
-        $tester = new CommandTester($command);
+        $tester = $this->createCommandTester();
         $tester->execute(['--limit' => 20]);
 
         /** @var EntityManagerInterface $entityManager */
@@ -516,9 +500,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
             ]);
         }
 
-        $application = new Application(static::$kernel);
-        $command = $application->find('app:ingest:enqueue-stable');
-        $tester = new CommandTester($command);
+        $tester = $this->createCommandTester();
         $tester->execute(['--limit' => 20]);
 
         /** @var EntityManagerInterface $entityManager */
@@ -575,9 +557,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
             ]);
         }
 
-        $application = new Application(static::$kernel);
-        $command = $application->find('app:ingest:enqueue-stable');
-        $tester = new CommandTester($command);
+        $tester = $this->createCommandTester();
         $tester->execute(['--limit' => 20]);
 
         /** @var EntityManagerInterface $entityManager */
@@ -651,9 +631,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
             ]);
         }
 
-        $application = new Application(static::$kernel);
-        $command = $application->find('app:ingest:enqueue-stable');
-        $tester = new CommandTester($command);
+        $tester = $this->createCommandTester();
         $tester->execute(['--limit' => 20]);
 
         $videoAssetUuid = $this->assetUuidFromPath('INBOX/clip.mov');
@@ -700,9 +678,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
             'last_seen_at' => '2026-02-10 12:01:00',
         ]);
 
-        $application = new Application(static::$kernel);
-        $command = $application->find('app:ingest:enqueue-stable');
-        $tester = new CommandTester($command);
+        $tester = $this->createCommandTester();
         $tester->execute(['--limit' => 10]);
 
         self::assertStringContainsString('Queued 0 stable file(s). Missing: 0. Unmatched sidecars: 1.', $tester->getDisplay());
@@ -783,9 +759,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         $entityManager->flush();
         $entityManager->clear();
 
-        $application = new Application(static::$kernel);
-        $command = $application->find('app:ingest:enqueue-stable');
-        $tester = new CommandTester($command);
+        $tester = $this->createCommandTester();
         $tester->execute(['--limit' => 20]);
 
         /** @var EntityManagerInterface $entityManager */
@@ -875,9 +849,7 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
         $entityManager->flush();
         $entityManager->clear();
 
-        $application = new Application(static::$kernel);
-        $command = $application->find('app:ingest:enqueue-stable');
-        $tester = new CommandTester($command);
+        $tester = $this->createCommandTester();
         $tester->execute(['--limit' => 20]);
 
         /** @var EntityManagerInterface $entityManager */
@@ -983,9 +955,15 @@ final class IngestEnqueueStableCommandTest extends KernelTestCase
             ]);
         }
 
+        $tester = $this->createCommandTester();
+        $tester->execute(['--limit' => $limit]);
+    }
+
+    private function createCommandTester(): CommandTester
+    {
         $application = new Application(static::$kernel);
         $command = $application->find('app:ingest:enqueue-stable');
-        $tester = new CommandTester($command);
-        $tester->execute(['--limit' => $limit]);
+
+        return new CommandTester($command);
     }
 }
