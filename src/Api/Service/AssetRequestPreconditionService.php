@@ -4,6 +4,7 @@ namespace App\Api\Service;
 
 use App\Asset\AssetRevisionTag;
 use App\Asset\Repository\AssetRepositoryInterface;
+use App\Controller\Api\ApiErrorResponseFactory;
 use App\Entity\Asset;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -28,30 +29,26 @@ final class AssetRequestPreconditionService
         $currentRevisionEtag = AssetRevisionTag::fromAsset($asset);
         $ifMatch = trim((string) $request->headers->get('If-Match', ''));
         if ($ifMatch === '') {
-            return new JsonResponse(
+            return ApiErrorResponseFactory::create(
+                'PRECONDITION_REQUIRED',
+                $this->translator->trans('asset.error.precondition_required'),
+                Response::HTTP_PRECONDITION_REQUIRED,
                 [
-                    'code' => 'PRECONDITION_REQUIRED',
-                    'message' => $this->translator->trans('asset.error.precondition_required'),
-                    'details' => [
-                        'current_revision_etag' => $currentRevisionEtag,
-                        'current_state' => $asset->getState()->value,
-                    ],
-                ],
-                Response::HTTP_PRECONDITION_REQUIRED
+                    'current_revision_etag' => $currentRevisionEtag,
+                    'current_state' => $asset->getState()->value,
+                ]
             );
         }
 
         if ($ifMatch !== $currentRevisionEtag) {
-            return new JsonResponse(
+            return ApiErrorResponseFactory::create(
+                'PRECONDITION_FAILED',
+                $this->translator->trans('asset.error.precondition_failed'),
+                Response::HTTP_PRECONDITION_FAILED,
                 [
-                    'code' => 'PRECONDITION_FAILED',
-                    'message' => $this->translator->trans('asset.error.precondition_failed'),
-                    'details' => [
-                        'current_revision_etag' => $currentRevisionEtag,
-                        'current_state' => $asset->getState()->value,
-                    ],
-                ],
-                Response::HTTP_PRECONDITION_FAILED
+                    'current_revision_etag' => $currentRevisionEtag,
+                    'current_state' => $asset->getState()->value,
+                ]
             );
         }
 
