@@ -3,6 +3,7 @@
 namespace App\Security;
 
 use App\Auth\UserAccessTokenService;
+use App\Controller\Api\ApiErrorResponseFactory;
 use App\Domain\AuthClient\ClientKind;
 use App\Entity\User;
 use App\User\Service\TwoFactorService;
@@ -85,8 +86,9 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
                 'reason' => 'invalid_user_type',
             ]);
 
-            return new JsonResponse(
-                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.invalid_credentials')],
+            return ApiErrorResponseFactory::create(
+                'UNAUTHORIZED',
+                $this->translator->trans('auth.error.invalid_credentials'),
                 Response::HTTP_UNAUTHORIZED
             );
         }
@@ -99,8 +101,9 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
         }
 
         if (!$user instanceof User) {
-            return new JsonResponse(
-                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.invalid_credentials')],
+            return ApiErrorResponseFactory::create(
+                'UNAUTHORIZED',
+                $this->translator->trans('auth.error.invalid_credentials'),
                 Response::HTTP_UNAUTHORIZED
             );
         }
@@ -109,8 +112,9 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
         $clientId = $client['client_id'];
         $clientKind = $client['client_kind'];
         if (!ClientKind::isInteractive($clientKind)) {
-            return new JsonResponse(
-                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.client_kind_required')],
+            return ApiErrorResponseFactory::create(
+                'VALIDATION_FAILED',
+                $this->translator->trans('auth.error.client_kind_required'),
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
@@ -135,32 +139,34 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
         $emailHash = $this->requestDataExtractor->emailHash($request);
 
         if ($exception->getMessageKey() === 'VALIDATION_FAILED') {
-            return new JsonResponse(
-                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.email_password_required')],
+            return ApiErrorResponseFactory::create(
+                'VALIDATION_FAILED',
+                $this->translator->trans('auth.error.email_password_required'),
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
 
         if ($exception->getMessageKey() === 'EMAIL_NOT_VERIFIED') {
-            return new JsonResponse(
-                ['code' => 'EMAIL_NOT_VERIFIED', 'message' => $this->translator->trans('auth.error.email_not_verified')],
+            return ApiErrorResponseFactory::create(
+                'EMAIL_NOT_VERIFIED',
+                $this->translator->trans('auth.error.email_not_verified'),
                 Response::HTTP_FORBIDDEN
             );
         }
 
         if ($exception instanceof TooManyLoginAttemptsAuthenticationException) {
             $minutes = $exception->getMessageData()['%minutes%'] ?? null;
-            $response = ['code' => 'TOO_MANY_ATTEMPTS', 'message' => $this->translator->trans('auth.error.too_many_login_attempts')];
-            if (is_int($minutes) && $minutes > 0) {
-                $response['retry_in_minutes'] = $minutes;
-            }
-
             $this->logger->warning('auth.login.throttled', [
                 'email_hash' => $emailHash,
                 'retry_in_minutes' => is_int($minutes) ? $minutes : null,
             ]);
 
-            return new JsonResponse($response, Response::HTTP_TOO_MANY_REQUESTS);
+            return ApiErrorResponseFactory::createWithFields(
+                'TOO_MANY_ATTEMPTS',
+                $this->translator->trans('auth.error.too_many_login_attempts'),
+                Response::HTTP_TOO_MANY_REQUESTS,
+                is_int($minutes) && $minutes > 0 ? ['retry_in_minutes' => $minutes] : []
+            );
         }
 
         $this->logger->info('auth.login.failed', [
@@ -168,16 +174,18 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
             'email_hash' => $emailHash,
         ]);
 
-        return new JsonResponse(
-            ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.invalid_credentials')],
+        return ApiErrorResponseFactory::create(
+            'UNAUTHORIZED',
+            $this->translator->trans('auth.error.invalid_credentials'),
             Response::HTTP_UNAUTHORIZED
         );
     }
 
     public function start(Request $request, ?AuthenticationException $authException = null): Response
     {
-        return new JsonResponse(
-            ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
+        return ApiErrorResponseFactory::create(
+            'UNAUTHORIZED',
+            $this->translator->trans('auth.error.authentication_required'),
             Response::HTTP_UNAUTHORIZED
         );
     }

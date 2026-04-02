@@ -2,6 +2,7 @@
 
 namespace App\Security;
 
+use App\Controller\Api\ApiErrorResponseFactory;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
@@ -28,8 +29,9 @@ final class ApiLoginSecondFactorAttemptLimiter
 
     public function tooManyAttemptsResponse(): JsonResponse
     {
-        return new JsonResponse(
-            ['code' => 'TOO_MANY_ATTEMPTS', 'message' => $this->translator->trans('auth.error.too_many_2fa_attempts')],
+        return ApiErrorResponseFactory::create(
+            'TOO_MANY_ATTEMPTS',
+            $this->translator->trans('auth.error.too_many_2fa_attempts'),
             Response::HTTP_TOO_MANY_REQUESTS
         );
     }

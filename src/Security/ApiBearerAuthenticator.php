@@ -4,6 +4,7 @@ namespace App\Security;
 
 use App\Auth\ClientAccessTokenResolver;
 use App\Auth\UserAccessTokenService;
+use App\Controller\Api\ApiErrorResponseFactory;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -87,8 +88,9 @@ final class ApiBearerAuthenticator extends AbstractAuthenticator
 
     public function onAuthenticationFailure(Request $request, AuthenticationException $exception): ?Response
     {
-        return new JsonResponse(
-            ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
+        return ApiErrorResponseFactory::create(
+            'UNAUTHORIZED',
+            $this->translator->trans('auth.error.authentication_required'),
             Response::HTTP_UNAUTHORIZED
         );
     }

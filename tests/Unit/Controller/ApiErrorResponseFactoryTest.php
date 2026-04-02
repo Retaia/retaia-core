@@ -24,4 +24,24 @@ final class ApiErrorResponseFactoryTest extends TestCase
             (string) $response->getContent(),
         );
     }
+
+    public function testCreateWithFieldsAppendsTopLevelFields(): void
+    {
+        $response = ApiErrorResponseFactory::createWithFields(
+            'TOO_MANY_ATTEMPTS',
+            'slow down',
+            Response::HTTP_TOO_MANY_REQUESTS,
+            ['retry_in_seconds' => 17]
+        );
+
+        self::assertSame(Response::HTTP_TOO_MANY_REQUESTS, $response->getStatusCode());
+        self::assertJsonStringEqualsJsonString(
+            json_encode([
+                'code' => 'TOO_MANY_ATTEMPTS',
+                'message' => 'slow down',
+                'retry_in_seconds' => 17,
+            ], JSON_THROW_ON_ERROR),
+            (string) $response->getContent(),
+        );
+    }
 }

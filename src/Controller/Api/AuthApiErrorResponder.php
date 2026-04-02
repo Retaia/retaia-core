@@ -106,19 +106,21 @@ final class AuthApiErrorResponder
 
     public function tooManyAttempts(string $messageKey, int $retryInSeconds): JsonResponse
     {
-        return new JsonResponse([
-            'code' => 'TOO_MANY_ATTEMPTS',
-            'message' => $this->translator->trans($messageKey),
-            'retry_in_seconds' => $retryInSeconds,
-        ], Response::HTTP_TOO_MANY_REQUESTS);
+        return ApiErrorResponseFactory::createWithFields(
+            'TOO_MANY_ATTEMPTS',
+            $this->translator->trans($messageKey),
+            Response::HTTP_TOO_MANY_REQUESTS,
+            ['retry_in_seconds' => $retryInSeconds]
+        );
     }
 
     public function slowDown(int $retryInSeconds): JsonResponse
     {
-        return new JsonResponse([
-            'code' => 'SLOW_DOWN',
-            'message' => $this->translator->trans('auth.error.slow_down'),
-            'retry_in_seconds' => $retryInSeconds,
-        ], Response::HTTP_TOO_MANY_REQUESTS);
+        return ApiErrorResponseFactory::createWithFields(
+            'SLOW_DOWN',
+            $this->translator->trans('auth.error.slow_down'),
+            Response::HTTP_TOO_MANY_REQUESTS,
+            ['retry_in_seconds' => $retryInSeconds]
+        );
     }
 }
