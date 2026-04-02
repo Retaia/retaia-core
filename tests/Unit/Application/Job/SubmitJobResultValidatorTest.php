@@ -43,6 +43,15 @@ final class SubmitJobResultValidatorTest extends TestCase
         ]));
     }
 
+    public function testRejectsTranscriptPatchWithInvalidStatus(): void
+    {
+        self::assertFalse($this->validator->isAllowedForJobType('transcribe_audio', [
+            'transcript_patch' => [
+                'status' => 'INVALID',
+            ],
+        ]));
+    }
+
     public function testRejectsEncodedDerivedPayloadWithUnknownKind(): void
     {
         self::assertFalse($this->validator->isAllowedForJobType('generate_preview', [
