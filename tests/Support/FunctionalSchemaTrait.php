@@ -158,8 +158,7 @@ trait FunctionalSchemaTrait
             CHECK (
                 status = 'claimed'
                 OR (
-                    claimed_at IS NULL
-                    AND lock_token IS NULL
+                    lock_token IS NULL
                     AND fencing_token IS NULL
                     AND locked_until IS NULL
                 )

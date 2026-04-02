@@ -35,8 +35,7 @@ final class Version20260403113000 extends AbstractMigration
         $this->addSql("ALTER TABLE processing_job ADD CONSTRAINT chk_processing_job_non_claimed_lock_fields CHECK (
             status = 'claimed'
             OR (
-                claimed_at IS NULL
-                AND lock_token IS NULL
+                lock_token IS NULL
                 AND fencing_token IS NULL
                 AND locked_until IS NULL
             )
