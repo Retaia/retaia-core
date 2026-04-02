@@ -11,6 +11,21 @@ use PHPUnit\Framework\TestCase;
 
 final class OpsReadinessReportBuilderTest extends TestCase
 {
+    /**
+     * @param array<string,mixed> $payload
+     * @return array<string,mixed>
+     */
+    private function getCheckByName(array $payload, string $name): array
+    {
+        foreach ($payload['checks'] as $check) {
+            if (isset($check['name']) && $check['name'] === $name) {
+                return $check;
+            }
+        }
+
+        throw new \InvalidArgumentException(sprintf('Check with name "%s" not found.', $name));
+    }
+
     public function testBuildReturnsOkWhenDatabaseAndStorageChecksPass(): void
     {
         $connection = $this->createMock(Connection::class);
@@ -28,9 +43,9 @@ final class OpsReadinessReportBuilderTest extends TestCase
 
         self::assertSame('ok', $payload['status']);
         self::assertFalse($payload['self_healing']['active']);
-        self::assertSame('ok', $payload['checks'][0]['status']);
-        self::assertSame('ok', $payload['checks'][1]['status']);
-        self::assertSame('ok', $payload['checks'][2]['status']);
+        self::assertSame('ok', $this->getCheckByName($payload, 'database')['status']);
+        self::assertSame('ok', $this->getCheckByName($payload, 'storage-directory-exists')['status']);
+        self::assertSame('ok', $this->getCheckByName($payload, 'storage-writable')['status']);
     }
 
     public function testBuildReturnsDegradedWhenDirectoryIsMissing(): void
@@ -50,7 +65,7 @@ final class OpsReadinessReportBuilderTest extends TestCase
 
         self::assertSame('degraded', $payload['status']);
         self::assertTrue($payload['self_healing']['active']);
-        self::assertSame('fail', $payload['checks'][1]['status']);
+        self::assertSame('fail', $this->getCheckByName($payload, 'storage-directory-exists')['status']);
     }
 
     public function testBuildReturnsDownWhenDatabaseCheckFails(): void
@@ -64,7 +79,7 @@ final class OpsReadinessReportBuilderTest extends TestCase
         $payload = (new OpsReadinessReportBuilder($connection, $registry))->build();
 
         self::assertSame('down', $payload['status']);
-        self::assertSame('fail', $payload['checks'][0]['status']);
+        self::assertSame('fail', $this->getCheckByName($payload, 'database')['status']);
         self::assertFalse($payload['self_healing']['active']);
     }
 
@@ -84,7 +99,7 @@ final class OpsReadinessReportBuilderTest extends TestCase
         $payload = (new OpsReadinessReportBuilder($connection, $registry))->build();
 
         self::assertSame('down', $payload['status']);
-        self::assertSame('fail', $payload['checks'][2]['status']);
+        self::assertSame('fail', $this->getCheckByName($payload, 'storage-writable')['status']);
         self::assertFalse($payload['self_healing']['active']);
     }
 }
