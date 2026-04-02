@@ -21,7 +21,7 @@ final class AssetHttpResponder
         if ($result->status() === AssetEndpointResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse([
                 'code' => 'VALIDATION_FAILED',
-                'message' => 'invalid assets list query parameters',
+                'message' => $this->translator->trans('asset.error.invalid_list_query'),
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
@@ -56,7 +56,7 @@ final class AssetHttpResponder
         if ($result->status() === AssetEndpointResult::STATUS_VALIDATION_FAILED) {
             return new JsonResponse([
                 'code' => 'VALIDATION_FAILED',
-                'message' => 'invalid asset patch payload',
+                'message' => $this->translator->trans('asset.error.invalid_patch_payload'),
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
         if ($result->status() === AssetEndpointResult::STATUS_PURGED_READ_ONLY) {

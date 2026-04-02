@@ -9,6 +9,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[Route('/api/v1/ops')]
 final class OpsLocksController
@@ -19,6 +20,7 @@ final class OpsLocksController
     public function __construct(
         private OpsAdminAccessGuard $adminAccessGuard,
         private OperationLockRepository $locks,
+        private TranslatorInterface $translator,
     ) {
     }
 
@@ -59,7 +61,7 @@ final class OpsLocksController
         if (array_key_exists('stale_lock_minutes', $payload)) {
             $raw = $payload['stale_lock_minutes'];
             if (!is_int($raw) || $raw < 1) {
-                return $this->errorResponse('VALIDATION_FAILED', 'stale_lock_minutes must be an integer >= 1', Response::HTTP_BAD_REQUEST);
+                return $this->errorResponse('VALIDATION_FAILED', $this->translator->trans('ops.error.stale_lock_minutes_invalid'), Response::HTTP_BAD_REQUEST);
             }
 
             $staleLockMinutes = $raw;
@@ -69,7 +71,7 @@ final class OpsLocksController
         if (array_key_exists('dry_run', $payload)) {
             $raw = $payload['dry_run'];
             if (!is_bool($raw)) {
-                return $this->errorResponse('VALIDATION_FAILED', 'dry_run must be a boolean', Response::HTTP_BAD_REQUEST);
+                return $this->errorResponse('VALIDATION_FAILED', $this->translator->trans('ops.error.dry_run_boolean'), Response::HTTP_BAD_REQUEST);
             }
 
             $dryRun = $raw;

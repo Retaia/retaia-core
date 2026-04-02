@@ -6,11 +6,13 @@ use Doctrine\DBAL\Connection;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class IdempotencyService
 {
     public function __construct(
         private Connection $connection,
+        private TranslatorInterface $translator,
     ) {
     }
 
@@ -23,7 +25,7 @@ final class IdempotencyService
         if ($key === '') {
             return new JsonResponse([
                 'code' => 'MISSING_IDEMPOTENCY_KEY',
-                'message' => 'Idempotency-Key header is required',
+                'message' => $this->translator->trans('api.error.missing_idempotency_key'),
             ], Response::HTTP_BAD_REQUEST);
         }
 
@@ -47,7 +49,7 @@ final class IdempotencyService
             if (($existing['request_hash'] ?? '') !== $requestHash) {
                 return new JsonResponse([
                     'code' => 'IDEMPOTENCY_CONFLICT',
-                    'message' => 'Idempotency-Key was already used with a different payload',
+                    'message' => $this->translator->trans('api.error.idempotency_conflict'),
                 ], Response::HTTP_CONFLICT);
             }
 

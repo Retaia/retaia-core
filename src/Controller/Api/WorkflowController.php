@@ -41,7 +41,7 @@ final class WorkflowController
         $confirm = (bool) ($payload['confirm'] ?? false);
 
         if ($assetUuids === [] || $confirm !== true) {
-            return $this->errorResponse('VALIDATION_FAILED', 'asset_uuids and confirm=true are required', Response::HTTP_UNPROCESSABLE_ENTITY);
+            return $this->errorResponse('VALIDATION_FAILED', $this->translator->trans('workflow.error.purge_batch_payload_required'), Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         return $this->idempotency->execute($request, $this->actorId(), function () use ($assetUuids): JsonResponse {

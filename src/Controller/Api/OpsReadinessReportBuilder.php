@@ -4,6 +4,7 @@ namespace App\Controller\Api;
 
 use App\Storage\BusinessStorageRegistryInterface;
 use Doctrine\DBAL\Connection;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class OpsReadinessReportBuilder
 {
@@ -12,6 +13,7 @@ final class OpsReadinessReportBuilder
     public function __construct(
         private Connection $connection,
         private BusinessStorageRegistryInterface $storageRegistry,
+        private TranslatorInterface $translator,
     ) {
     }
 
@@ -31,7 +33,9 @@ final class OpsReadinessReportBuilder
         $checks[] = [
             'name' => 'database',
             'status' => $databaseOk ? 'ok' : 'fail',
-            'message' => $databaseOk ? 'Database connectivity check passed.' : 'Database connectivity check failed.',
+            'message' => $databaseOk
+                ? $this->translator->trans('readiness.message.database_ok')
+                : $this->translator->trans('readiness.message.database_fail'),
         ];
 
         $missing = [];
@@ -59,8 +63,8 @@ final class OpsReadinessReportBuilder
             'name' => 'ingest_watch_path',
             'status' => $watchPathOk ? 'ok' : 'fail',
             'message' => $watchPathOk
-                ? 'Ingest watch path structure is present.'
-                : 'Missing ingest directories or resolution failure: '.implode(' | ', $missing),
+                ? $this->translator->trans('readiness.message.watch_path_ok')
+                : $this->translator->trans('readiness.message.watch_path_fail_prefix').implode(' | ', $missing),
         ];
 
         $storageWritableOk = $notWritable === [] && $watchPathOk;
@@ -68,8 +72,8 @@ final class OpsReadinessReportBuilder
             'name' => 'storage_writable',
             'status' => $storageWritableOk ? 'ok' : 'fail',
             'message' => $storageWritableOk
-                ? 'Ingest directories are writable.'
-                : 'Non-writable ingest directories: '.implode(' | ', $notWritable),
+                ? $this->translator->trans('readiness.message.storage_writable_ok')
+                : $this->translator->trans('readiness.message.storage_writable_fail_prefix').implode(' | ', $notWritable),
         ];
 
         $status = 'ok';
