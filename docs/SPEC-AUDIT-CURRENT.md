@@ -14,13 +14,15 @@ The runtime/spec audit is green. The remaining work is structural: large classes
 
 ### Priority 1
 
-- [`src/Storage/BusinessStorageRegistryFactory`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Storage/BusinessStorageRegistryFactory.php)
-  - env parsing/validation is extracted, but the factory still keeps backend selection and per-driver construction
-  - next seams:
-    - narrower builder map per driver
-    - optional dedicated validator for driver-specific completeness checks if SMB/local setup grows again
+- No active Priority 1 structural targets at the current audit depth.
 
 ### Priority 2
+
+- [`src/Storage/BusinessStorageRegistryFactory`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Storage/BusinessStorageRegistryFactory.php)
+  - env parsing and per-driver builders are extracted
+  - remaining debt is optional only:
+    - inject builder map instead of instantiating it lazily if storage drivers grow further
+    - add dedicated driver-specific validator only if SMB/local config surface expands again
 
 
 ### Priority 3
