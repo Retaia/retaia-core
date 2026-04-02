@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Controller;
 
+use App\Application\Auth\TwoFactorDisableEndpointResult;
 use App\Application\Auth\TwoFactorEnableEndpointResult;
 use App\Controller\Api\AuthApiErrorResponder;
 use App\Controller\Api\AuthTwoFactorHttpResponder;
@@ -22,6 +23,19 @@ final class AuthTwoFactorHttpResponderTest extends TestCase
         self::assertSame([
             'mfa_enabled' => true,
             'recovery_codes' => ['one', 'two'],
+        ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
+    }
+
+    public function testDisableReturnsDisabledPayloadOnSuccess(): void
+    {
+        $responder = new AuthTwoFactorHttpResponder(new AuthApiErrorResponder($this->translator()));
+        $response = $responder->disable(new TwoFactorDisableEndpointResult(
+            TwoFactorDisableEndpointResult::STATUS_DISABLED,
+        ));
+
+        self::assertSame(200, $response->getStatusCode());
+        self::assertSame([
+            'mfa_enabled' => false,
         ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
     }
 

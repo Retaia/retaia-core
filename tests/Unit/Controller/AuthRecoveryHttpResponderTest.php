@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Controller;
 
+use App\Application\Auth\RequestEmailVerificationEndpointResult;
 use App\Application\Auth\RequestPasswordResetEndpointResult;
 use App\Application\Auth\ResetPasswordEndpointResult;
 use App\Controller\Api\AuthApiErrorResponder;
@@ -35,6 +36,21 @@ final class AuthRecoveryHttpResponderTest extends TestCase
         self::assertSame([
             'accepted' => true,
             'reset_token' => 'reset-token',
+        ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
+    }
+
+    public function testRequestEmailVerificationAcceptedIncludesToken(): void
+    {
+        $responder = new AuthRecoveryHttpResponder(new AuthApiErrorResponder($this->translator()));
+        $response = $responder->requestEmailVerification(new RequestEmailVerificationEndpointResult(
+            RequestEmailVerificationEndpointResult::STATUS_ACCEPTED,
+            'verify-token'
+        ));
+
+        self::assertSame(202, $response->getStatusCode());
+        self::assertSame([
+            'accepted' => true,
+            'verification_token' => 'verify-token',
         ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
     }
 
