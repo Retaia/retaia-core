@@ -35,7 +35,7 @@ final class StoragePathNormalizerTest extends TestCase
                 $this->normalizer->normalize($path);
                 self::fail(sprintf('Expected \InvalidArgumentException for unsafe path "%s".', $path));
             } catch (\InvalidArgumentException $e) {
-                // Expected; continue to next path.
+                self::assertTrue(true);
             }
         }
     }
