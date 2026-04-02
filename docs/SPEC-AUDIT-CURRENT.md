@@ -27,8 +27,6 @@ The runtime/spec audit is green. The remaining work is structural: large classes
 
 ### Priority 3
 
-- [`src/Api/Service/AgentRuntimeRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentRuntimeRepository.php)
-  - still mixes runtime writes and ops-facing read projection helpers
 - [`src/Application/Job/JobEndpointsHandler`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Application/Job/JobEndpointsHandler.php)
   - still exposes a broad façade over claim, heartbeat, submit, fail, and list/read concerns
 - [`src/Api/Service/AgentJobProjectionRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentJobProjectionRepository.php)
