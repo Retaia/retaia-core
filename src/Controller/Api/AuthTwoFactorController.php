@@ -18,7 +18,7 @@ final class AuthTwoFactorController
         private AuthRateLimitGuard $rateLimitGuard,
         private AuthApiErrorResponder $errors,
         private AuthSelfServiceEndpointsHandler $authSelfServiceEndpointsHandler,
-        private AuthSelfServiceHttpResponder $selfServiceResponder,
+        private AuthTwoFactorHttpResponder $twoFactorResponder,
     ) {
     }
 
@@ -35,7 +35,7 @@ final class AuthTwoFactorController
             return $throttled;
         }
 
-        return $this->selfServiceResponder->twoFactorSetup($this->authSelfServiceEndpointsHandler->twoFactorSetup());
+        return $this->twoFactorResponder->setup($this->authSelfServiceEndpointsHandler->twoFactorSetup());
     }
 
     #[Route('/2fa/enable', name: 'api_auth_2fa_enable', methods: ['POST'])]
@@ -51,7 +51,7 @@ final class AuthTwoFactorController
             return $throttled;
         }
 
-        return $this->selfServiceResponder->twoFactorEnable(
+        return $this->twoFactorResponder->enable(
             $this->authSelfServiceEndpointsHandler->twoFactorEnable($this->payload($request))
         );
     }
@@ -69,7 +69,7 @@ final class AuthTwoFactorController
             return $throttled;
         }
 
-        return $this->selfServiceResponder->twoFactorDisable(
+        return $this->twoFactorResponder->disable(
             $this->authSelfServiceEndpointsHandler->twoFactorDisable($this->payload($request))
         );
     }
@@ -87,7 +87,7 @@ final class AuthTwoFactorController
             return $throttled;
         }
 
-        return $this->selfServiceResponder->regenerateTwoFactorRecoveryCodes(
+        return $this->twoFactorResponder->regenerateRecoveryCodes(
             $this->authSelfServiceEndpointsHandler->regenerateTwoFactorRecoveryCodes($this->payload($request))
         );
     }

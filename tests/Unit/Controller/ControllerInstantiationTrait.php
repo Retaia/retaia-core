@@ -61,11 +61,15 @@ use App\Controller\Api\AgentController;
 use App\Controller\Api\AppController;
 use App\Controller\Api\AuthApiErrorResponder;
 use App\Controller\Api\AuthCurrentSessionResolver;
+use App\Controller\Api\AuthProfileHttpResponder;
 use App\Controller\Api\AuthRateLimitGuard;
-use App\Controller\Api\AuthSelfServiceHttpResponder;
+use App\Controller\Api\AuthRecoveryHttpResponder;
 use App\Controller\Api\AuthSessionController;
 use App\Controller\Api\AuthSessionHttpResponder;
+use App\Controller\Api\AuthTwoFactorHttpResponder;
 use App\Controller\Api\AuthTwoFactorController;
+use App\Controller\Api\AuthProfileController;
+use App\Controller\Api\AuthRecoveryController;
 use App\Controller\Api\JobController;
 use App\Controller\Api\OpsAdminAccessGuard;
 use App\Controller\Api\OpsIngestController;
@@ -118,7 +122,18 @@ trait ControllerInstantiationTrait
                 $this->property($properties, 'rateLimitGuard', $this->defaultAuthRateLimitGuard()),
                 $this->property($properties, 'errors', $this->defaultAuthErrors()),
                 $this->property($properties, 'authSelfServiceEndpointsHandler', $this->defaultAuthSelfServiceEndpointsHandler()),
-                $this->property($properties, 'selfServiceResponder', $this->defaultAuthSelfServiceResponder()),
+                $this->property($properties, 'twoFactorResponder', $this->defaultAuthTwoFactorResponder()),
+            ),
+            AuthProfileController::class => new AuthProfileController(
+                $this->property($properties, 'authSelfServiceEndpointsHandler', $this->defaultAuthSelfServiceEndpointsHandler()),
+                $this->property($properties, 'profileResponder', $this->defaultAuthProfileResponder()),
+            ),
+            AuthRecoveryController::class => new AuthRecoveryController(
+                $this->property($properties, 'requestPasswordResetEndpointHandler', $this->createMock(\App\Application\Auth\RequestPasswordResetEndpointHandler::class)),
+                $this->property($properties, 'resetPasswordEndpointHandler', $this->createMock(\App\Application\Auth\ResetPasswordEndpointHandler::class)),
+                $this->property($properties, 'requestEmailVerificationEndpointHandler', $this->createMock(\App\Application\Auth\RequestEmailVerificationEndpointHandler::class)),
+                $this->property($properties, 'verifyEmailEndpointsHandler', $this->createMock(\App\Application\Auth\VerifyEmailEndpointsHandler::class)),
+                $this->property($properties, 'recoveryResponder', $this->defaultAuthRecoveryResponder()),
             ),
             OpsReadinessController::class => new OpsReadinessController(
                 $this->property($properties, 'adminAccessGuard', $this->defaultForbiddenAdminGuard()),
@@ -176,9 +191,19 @@ trait ControllerInstantiationTrait
         return new AuthSessionHttpResponder($this->defaultAuthErrors());
     }
 
-    private function defaultAuthSelfServiceResponder(): AuthSelfServiceHttpResponder
+    private function defaultAuthTwoFactorResponder(): AuthTwoFactorHttpResponder
     {
-        return new AuthSelfServiceHttpResponder($this->defaultAuthErrors());
+        return new AuthTwoFactorHttpResponder($this->defaultAuthErrors());
+    }
+
+    private function defaultAuthProfileResponder(): AuthProfileHttpResponder
+    {
+        return new AuthProfileHttpResponder($this->defaultAuthErrors());
+    }
+
+    private function defaultAuthRecoveryResponder(): AuthRecoveryHttpResponder
+    {
+        return new AuthRecoveryHttpResponder($this->defaultAuthErrors());
     }
 
     private function defaultNoLimitRateLimiterFactory(): RateLimiterFactory

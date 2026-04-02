@@ -15,20 +15,20 @@ final class AuthProfileController
 
     public function __construct(
         private AuthSelfServiceEndpointsHandler $authSelfServiceEndpointsHandler,
-        private AuthSelfServiceHttpResponder $selfServiceResponder,
+        private AuthProfileHttpResponder $profileResponder,
     ) {
     }
 
     #[Route('/me/features', name: 'api_auth_me_features_get', methods: ['GET'])]
     public function meFeatures(): JsonResponse
     {
-        return $this->selfServiceResponder->meFeatures($this->authSelfServiceEndpointsHandler->getMyFeatures());
+        return $this->profileResponder->meFeatures($this->authSelfServiceEndpointsHandler->getMyFeatures());
     }
 
     #[Route('/me/features', name: 'api_auth_me_features_patch', methods: ['PATCH'])]
     public function patchMeFeatures(Request $request): JsonResponse
     {
-        return $this->selfServiceResponder->meFeatures(
+        return $this->profileResponder->meFeatures(
             $this->authSelfServiceEndpointsHandler->patchMyFeatures($this->payload($request))
         );
     }
