@@ -18,16 +18,7 @@ final class AuthApiErrorResponder
      */
     public function translated(string $code, string $messageKey, int $status, array $details = []): JsonResponse
     {
-        $payload = [
-            'code' => $code,
-            'message' => $this->translator->trans($messageKey),
-        ];
-
-        if ($details !== []) {
-            $payload['details'] = $details;
-        }
-
-        return new JsonResponse($payload, $status);
+        return ApiErrorResponseFactory::create($code, $this->translator->trans($messageKey), $status, $details);
     }
 
     public function unauthorizedAuthenticationRequired(): JsonResponse

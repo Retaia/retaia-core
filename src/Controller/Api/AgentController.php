@@ -15,6 +15,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/api/v1/agents')]
 final class AgentController
 {
+    use ApiErrorResponderTrait;
     use RequestPayloadTrait;
 
     public function __construct(
@@ -35,29 +36,20 @@ final class AgentController
 
         $result = $this->registerAgentEndpointHandler->handle($payload);
         if ($result->status() === RegisterAgentEndpointResult::STATUS_VALIDATION_FAILED) {
-            return new JsonResponse(
-                [
-                    'code' => 'VALIDATION_FAILED',
-                    'message' => $this->translator->trans('agent.error.invalid_registration_payload'),
-                ],
-                Response::HTTP_UNPROCESSABLE_ENTITY
-            );
+            return $this->errorResponse('VALIDATION_FAILED', $this->translator->trans('agent.error.invalid_registration_payload'), Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         if ($result->status() === RegisterAgentEndpointResult::STATUS_UNSUPPORTED_CONTRACT_VERSION) {
-            return new JsonResponse(
+            return $this->errorResponse(
+                'UNSUPPORTED_FEATURE_FLAGS_CONTRACT_VERSION',
+                $this->translator->trans('auth.error.unsupported_feature_flags_contract_version'),
+                Response::HTTP_UPGRADE_REQUIRED,
                 [
-                    'code' => 'UNSUPPORTED_FEATURE_FLAGS_CONTRACT_VERSION',
-                    'message' => $this->translator->trans('auth.error.unsupported_feature_flags_contract_version'),
-                    'details' => [
-                        'accepted_feature_flags_contract_versions' => $result->acceptedFeatureFlagsContractVersions(),
-                    ],
-                ],
-                Response::HTTP_UPGRADE_REQUIRED
+                    'accepted_feature_flags_contract_versions' => $result->acceptedFeatureFlagsContractVersions(),
+                ]
             );
         }
 
         return new JsonResponse($result->payload() ?? [], Response::HTTP_OK);
     }
-
 }

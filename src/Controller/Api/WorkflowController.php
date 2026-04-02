@@ -91,10 +91,7 @@ final class WorkflowController
             return $this->forbiddenActor();
         }
         if ($result->status() === WorkflowEndpointResult::STATUS_NOT_FOUND) {
-            return new JsonResponse([
-                'code' => 'NOT_FOUND',
-                'message' => $this->translator->trans('asset.error.not_found'),
-            ], Response::HTTP_NOT_FOUND);
+            return $this->errorResponse('NOT_FOUND', $this->translator->trans('asset.error.not_found'), Response::HTTP_NOT_FOUND);
         }
 
         return new JsonResponse($result->payload() ?? [], Response::HTTP_OK);
@@ -117,17 +114,11 @@ final class WorkflowController
                 return $this->forbiddenActor();
             }
             if ($result->status() === WorkflowEndpointResult::STATUS_NOT_FOUND) {
-                return new JsonResponse([
-                    'code' => 'NOT_FOUND',
-                    'message' => $this->translator->trans('asset.error.not_found'),
-                ], Response::HTTP_NOT_FOUND);
+                return $this->errorResponse('NOT_FOUND', $this->translator->trans('asset.error.not_found'), Response::HTTP_NOT_FOUND);
             }
 
             if ($result->status() === WorkflowEndpointResult::STATUS_STATE_CONFLICT) {
-                return new JsonResponse([
-                    'code' => 'STATE_CONFLICT',
-                    'message' => $this->translator->trans('asset.error.state_conflict'),
-                ], Response::HTTP_CONFLICT);
+                return $this->errorResponse('STATE_CONFLICT', $this->translator->trans('asset.error.state_conflict'), Response::HTTP_CONFLICT);
             }
 
             return new JsonResponse($result->payload() ?? [], Response::HTTP_OK);
@@ -143,5 +134,4 @@ final class WorkflowController
     {
         return $this->errorResponse('FORBIDDEN_ACTOR', $this->translator->trans('auth.error.forbidden_actor'), Response::HTTP_FORBIDDEN);
     }
-
 }

@@ -19,6 +19,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/api/v1/jobs')]
 final class JobController
 {
+    use ApiErrorResponderTrait;
     use RequestPayloadTrait;
 
     public function __construct(
@@ -62,18 +63,12 @@ final class JobController
                 'agent_id' => $result->actorId() ?? 'anonymous',
             ]);
 
-            return new JsonResponse([
-                'code' => 'STATE_CONFLICT',
-                'message' => 'Job is not claimable',
-            ], Response::HTTP_CONFLICT);
+            return $this->errorResponse('STATE_CONFLICT', 'Job is not claimable', Response::HTTP_CONFLICT);
         }
 
         $job = $result->job();
         if (!$job instanceof Job) {
-            return new JsonResponse([
-                'code' => 'STATE_CONFLICT',
-                'message' => 'Job is not claimable',
-            ], Response::HTTP_CONFLICT);
+            return $this->errorResponse('STATE_CONFLICT', 'Job is not claimable', Response::HTTP_CONFLICT);
         }
         $this->logger->info('jobs.claim.succeeded', $this->jobContext($job));
 
@@ -93,10 +88,7 @@ final class JobController
             return $this->lockRequiredResponse();
         }
         if ($result->status() === JobEndpointResult::STATUS_VALIDATION_FAILED) {
-            return new JsonResponse([
-                'code' => 'VALIDATION_FAILED',
-                'message' => 'fencing_token is required and must be a positive integer',
-            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            return $this->errorResponse('VALIDATION_FAILED', 'fencing_token is required and must be a positive integer', Response::HTTP_UNPROCESSABLE_ENTITY);
         }
         if ($result->status() === JobEndpointResult::STATUS_LOCK_CONFLICT) {
             $conflictCode = $result->conflictCode() ?? 'LOCK_INVALID';
@@ -139,10 +131,7 @@ final class JobController
                 return $this->forbiddenScope();
             }
             if ($submission->status() === JobEndpointResult::STATUS_VALIDATION_FAILED) {
-                return new JsonResponse([
-                    'code' => 'VALIDATION_FAILED',
-                    'message' => 'fencing_token, job_type and result must match the claimed job contract',
-                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+                return $this->errorResponse('VALIDATION_FAILED', 'fencing_token, job_type and result must match the claimed job contract', Response::HTTP_UNPROCESSABLE_ENTITY);
             }
             if ($submission->status() === JobEndpointResult::STATUS_LOCK_CONFLICT) {
                 $conflictCode = $submission->conflictCode() ?? 'LOCK_INVALID';
@@ -179,10 +168,7 @@ final class JobController
                 return $this->lockRequiredResponse();
             }
             if ($failure->status() === JobEndpointResult::STATUS_VALIDATION_FAILED) {
-                return new JsonResponse([
-                    'code' => 'VALIDATION_FAILED',
-                    'message' => 'fencing_token, error_code and message are required',
-                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+                return $this->errorResponse('VALIDATION_FAILED', 'fencing_token, error_code and message are required', Response::HTTP_UNPROCESSABLE_ENTITY);
             }
             if ($failure->status() === JobEndpointResult::STATUS_LOCK_CONFLICT) {
                 $conflictCode = $failure->conflictCode() ?? 'LOCK_INVALID';
@@ -217,18 +203,12 @@ final class JobController
 
     private function forbiddenScope(): JsonResponse
     {
-        return new JsonResponse([
-            'code' => 'FORBIDDEN_SCOPE',
-            'message' => $this->translator->trans('auth.error.forbidden_scope'),
-        ], Response::HTTP_FORBIDDEN);
+        return $this->errorResponse('FORBIDDEN_SCOPE', $this->translator->trans('auth.error.forbidden_scope'), Response::HTTP_FORBIDDEN);
     }
 
     private function lockRequiredResponse(): JsonResponse
     {
-        return new JsonResponse([
-            'code' => 'LOCK_REQUIRED',
-            'message' => 'lock_token is required',
-        ], Response::HTTP_LOCKED);
+        return $this->errorResponse('LOCK_REQUIRED', 'lock_token is required', Response::HTTP_LOCKED);
     }
 
     private function lockConflictResponse(string $conflictCode): JsonResponse
@@ -237,10 +217,7 @@ final class JobController
             ? Response::HTTP_CONFLICT
             : Response::HTTP_LOCKED;
 
-        return new JsonResponse([
-            'code' => $conflictCode,
-            'message' => 'Invalid lock token or expired lock',
-        ], $status);
+        return $this->errorResponse($conflictCode, 'Invalid lock token or expired lock', $status);
     }
 
     /**
