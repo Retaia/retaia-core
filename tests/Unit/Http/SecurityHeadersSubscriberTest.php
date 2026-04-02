@@ -28,6 +28,23 @@ final class SecurityHeadersSubscriberTest extends TestCase
         self::assertFalse($response->headers->has('Access-Control-Expose-Headers'));
     }
 
+    public function testDoesNotAddHeadersForNonApiResponses(): void
+    {
+        $subscriber = new SecurityHeadersSubscriber();
+        $response = new Response();
+        $request = Request::create('/health', 'GET');
+        $event = new ResponseEvent($this->kernelMock(), $request, HttpKernelInterface::MAIN_REQUEST, $response);
+
+        $subscriber->onKernelResponse($event);
+
+        self::assertFalse($response->headers->has('X-Content-Type-Options'));
+        self::assertFalse($response->headers->has('X-Frame-Options'));
+        self::assertFalse($response->headers->has('Referrer-Policy'));
+        self::assertFalse($response->headers->has('Permissions-Policy'));
+        self::assertFalse($response->headers->has('Strict-Transport-Security'));
+        self::assertFalse($response->headers->has('Access-Control-Expose-Headers'));
+    }
+
     public function testAddsHstsWhenRequestIsSecure(): void
     {
         $subscriber = new SecurityHeadersSubscriber();
@@ -54,6 +71,19 @@ final class SecurityHeadersSubscriberTest extends TestCase
             'ETag, X-Debug-Token, X-Debug-Token-Link, X-Previous-Debug-Token',
             $response->headers->get('Access-Control-Expose-Headers')
         );
+    }
+
+    public function testDoesNotExposeProfilerHeadersWhenNotInDebugMode(): void
+    {
+        $subscriber = new SecurityHeadersSubscriber(false);
+        $response = new Response();
+        $response->headers->set('Access-Control-Expose-Headers', 'ETag');
+        $request = Request::create('/api/v1/docs', 'GET');
+        $event = new ResponseEvent($this->kernelMock(), $request, HttpKernelInterface::MAIN_REQUEST, $response);
+
+        $subscriber->onKernelResponse($event);
+
+        self::assertSame('ETag', $response->headers->get('Access-Control-Expose-Headers'));
     }
 
     private function kernelMock(): HttpKernelInterface
