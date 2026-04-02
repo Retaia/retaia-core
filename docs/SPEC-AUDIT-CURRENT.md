@@ -14,11 +14,6 @@ The runtime/spec audit is green. The remaining work is structural: large classes
 
 ### Priority 1
 
-- [`src/Controller/Api/OpsController`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Controller/Api/OpsController.php)
-  - still mixes ingest ops, runtime agent ops, readiness-ish checks, and batch/admin actions
-
-### Priority 2
-
 - [`src/Application/Job/SubmitJobHandler`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Application/Job/SubmitJobHandler.php)
   - still combines job-type validation, permission checks, asset mutations, derived persistence, and state transitions
 - [`src/Storage/BusinessStorageRegistryFactory`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Storage/BusinessStorageRegistryFactory.php)
@@ -33,6 +28,8 @@ The runtime/spec audit is green. The remaining work is structural: large classes
   - still mixes lock lifecycle persistence with query helpers and stale cleanup semantics
 - [`src/Ingest/Repository/IngestDiagnosticsRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Repository/IngestDiagnosticsRepository.php)
   - still handles multiple diagnostic concerns in one repository and deserves narrower persistence seams
+
+### Priority 2
 
 ### Priority 3
 

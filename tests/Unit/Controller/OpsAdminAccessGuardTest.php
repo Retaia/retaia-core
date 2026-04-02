@@ -4,15 +4,13 @@ namespace App\Tests\Unit\Controller;
 
 use App\Application\Auth\Port\AdminActorGateway;
 use App\Application\Auth\ResolveAdminActorHandler;
-use App\Controller\Api\OpsController;
+use App\Controller\Api\OpsAdminAccessGuard;
 use PHPUnit\Framework\TestCase;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
-final class OpsControllerTest extends TestCase
+final class OpsAdminAccessGuardTest extends TestCase
 {
-    use ControllerInstantiationTrait;
-
-    public function testReadinessReturnsForbiddenWhenActorIsNotAdmin(): void
+    public function testRequireAdminReturnsForbiddenResponse(): void
     {
         $gateway = new class implements AdminActorGateway {
             public function isAdmin(): bool
@@ -26,19 +24,13 @@ final class OpsControllerTest extends TestCase
             }
         };
 
-        $controller = $this->controller(OpsController::class, [
-            'resolveAdminActorHandler' => new ResolveAdminActorHandler($gateway),
-            'translator' => $this->translator(),
-        ]);
-
-        self::assertSame(403, $controller->readiness()->getStatusCode());
-    }
-
-    private function translator(): TranslatorInterface
-    {
         $translator = $this->createStub(TranslatorInterface::class);
         $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
 
-        return $translator;
+        $guard = new OpsAdminAccessGuard(new ResolveAdminActorHandler($gateway), $translator);
+        $response = $guard->requireAdmin();
+
+        self::assertSame(403, $response?->getStatusCode());
+        self::assertSame('FORBIDDEN_ACTOR', json_decode((string) $response?->getContent(), true, 512, JSON_THROW_ON_ERROR)['code'] ?? null);
     }
 }
