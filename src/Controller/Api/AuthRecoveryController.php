@@ -21,7 +21,7 @@ final class AuthRecoveryController
         private ResetPasswordEndpointHandler $resetPasswordEndpointHandler,
         private RequestEmailVerificationEndpointHandler $requestEmailVerificationEndpointHandler,
         private VerifyEmailEndpointsHandler $verifyEmailEndpointsHandler,
-        private AuthSelfServiceHttpResponder $selfServiceResponder,
+        private AuthRecoveryHttpResponder $recoveryResponder,
     ) {
     }
 
@@ -33,13 +33,13 @@ final class AuthRecoveryController
             (string) ($request->getClientIp() ?? 'unknown')
         );
 
-        return $this->selfServiceResponder->requestReset($result);
+        return $this->recoveryResponder->requestReset($result);
     }
 
     #[Route('/lost-password/reset', name: 'api_auth_lost_password_reset', methods: ['POST'])]
     public function reset(Request $request): JsonResponse
     {
-        return $this->selfServiceResponder->reset($this->resetPasswordEndpointHandler->handle($this->payload($request)));
+        return $this->recoveryResponder->reset($this->resetPasswordEndpointHandler->handle($this->payload($request)));
     }
 
     #[Route('/verify-email/request', name: 'api_auth_verify_email_request', methods: ['POST'])]
@@ -50,13 +50,13 @@ final class AuthRecoveryController
             (string) ($request->getClientIp() ?? 'unknown')
         );
 
-        return $this->selfServiceResponder->requestEmailVerification($result);
+        return $this->recoveryResponder->requestEmailVerification($result);
     }
 
     #[Route('/verify-email/confirm', name: 'api_auth_verify_email_confirm', methods: ['POST'])]
     public function confirmEmailVerification(Request $request): JsonResponse
     {
-        return $this->selfServiceResponder->confirmEmailVerification(
+        return $this->recoveryResponder->confirmEmailVerification(
             $this->verifyEmailEndpointsHandler->confirm($this->payload($request))
         );
     }
@@ -64,7 +64,7 @@ final class AuthRecoveryController
     #[Route('/verify-email/admin-confirm', name: 'api_auth_verify_email_admin_confirm', methods: ['POST'])]
     public function adminConfirmEmailVerification(Request $request): JsonResponse
     {
-        return $this->selfServiceResponder->adminConfirmEmailVerification(
+        return $this->recoveryResponder->adminConfirmEmailVerification(
             $this->verifyEmailEndpointsHandler->adminConfirm($this->payload($request))
         );
     }

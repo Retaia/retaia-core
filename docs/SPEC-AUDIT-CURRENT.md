@@ -140,6 +140,7 @@ These items are not active runtime/spec regressions. They are the next code-qual
   - domain-specific responders where response mapping is complex
   - direct `JsonResponse` for simple success payloads
 - Keep this boundary explicit and avoid introducing a global serializer abstraction unless payload complexity genuinely requires it.
+- Prefer responder split by HTTP surface when a responder starts mixing unrelated success payload families.
 
 ### 11. Keep API localization coverage explicit
 
