@@ -34,6 +34,7 @@ The runtime/spec audit is green. The remaining work is structural: large classes
 - Treat this list as structural debt only.
 - Do not change OpenAPI or runtime behavior just to shrink classes.
 - Each cleanup should extract a coherent responsibility with its own direct unit coverage.
+- Migration PR titles and migration descriptions should follow Conventional Commit style, for example `refactor(db): ...` or `fix(db): ...`.
 
 ## Missing Direct Tests Inventory
 
