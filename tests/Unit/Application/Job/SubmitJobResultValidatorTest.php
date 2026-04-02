@@ -73,7 +73,7 @@ final class SubmitJobResultValidatorTest extends TestCase
         ]));
     }
 
-    public function testRejectsDerivedPayloadWithEmptyOrNonStringRef(): void
+    public function testRejectsDerivedPayloadWithEmptyRef(): void
     {
         self::assertFalse($this->validator->isAllowedForJobType('generate_preview', [
             'derived_patch' => [
@@ -82,7 +82,10 @@ final class SubmitJobResultValidatorTest extends TestCase
                 ],
             ],
         ]));
+    }
 
+    public function testRejectsDerivedPayloadWithNullRef(): void
+    {
         self::assertFalse($this->validator->isAllowedForJobType('generate_preview', [
             'derived_patch' => [
                 'derived_manifest' => [
@@ -92,7 +95,7 @@ final class SubmitJobResultValidatorTest extends TestCase
         ]));
     }
 
-    public function testRejectsDerivedPayloadWithNonIntegerSizeBytes(): void
+    public function testRejectsDerivedPayloadWithStringSizeBytes(): void
     {
         self::assertFalse($this->validator->isAllowedForJobType('generate_preview', [
             'derived_patch' => [
@@ -105,7 +108,10 @@ final class SubmitJobResultValidatorTest extends TestCase
                 ],
             ],
         ]));
+    }
 
+    public function testRejectsDerivedPayloadWithFloatSizeBytes(): void
+    {
         self::assertFalse($this->validator->isAllowedForJobType('generate_preview', [
             'derived_patch' => [
                 'derived_manifest' => [
