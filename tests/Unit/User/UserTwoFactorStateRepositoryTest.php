@@ -42,7 +42,10 @@ final class UserTwoFactorStateRepositoryTest extends TestCase
     public function testDeleteRemovesState(): void
     {
         $repository = new UserTwoFactorStateRepository($this->connection());
-        $repository->save(UserTwoFactorState::fromStateArray('u-2', ['enabled' => true], null, 42));
+        $repository->save(UserTwoFactorState::fromStateArray('u-2', [
+            'enabled' => true,
+            'secret_encrypted' => 'active-secret',
+        ], null, 42));
 
         $repository->delete('u-2');
 

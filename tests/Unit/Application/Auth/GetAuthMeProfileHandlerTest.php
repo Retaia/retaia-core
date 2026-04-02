@@ -37,7 +37,7 @@ final class GetAuthMeProfileHandlerTest extends TestCase
         $connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]);
         $connection->executeStatement('CREATE TABLE user_two_factor_state (user_id VARCHAR(32) PRIMARY KEY NOT NULL, enabled BOOLEAN NOT NULL, pending_secret_encrypted CLOB DEFAULT NULL, secret_encrypted CLOB DEFAULT NULL, recovery_code_hashes CLOB NOT NULL, legacy_recovery_code_sha256 CLOB NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)');
         $repository = new UserTwoFactorStateRepository($connection);
-        $repository->save(new UserTwoFactorState($enabledUserId, true, null, null, [], [], 1, 1));
+        $repository->save(new UserTwoFactorState($enabledUserId, true, null, 'active-secret', [], [], 1, 1));
 
         return new TwoFactorService(
             $repository,

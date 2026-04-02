@@ -60,12 +60,14 @@ These items are not active runtime/spec regressions. They are the next code-qual
 
 ### 1. Database invariants
 
-- Add stronger database-level guarantees instead of relying only on PHP guards.
-- Prefer `CHECK`, `UNIQUE`, foreign keys, and targeted indexes for:
+- Baseline database invariants are now enforced for:
   - job lease and fencing consistency
-  - derived-file uniqueness and linkage
-  - auth session and refresh-token state
+  - auth session and refresh-token state coherence
   - 2FA persisted state coherence
+  - derived upload state and derived-file size/path sanity
+  - device-flow and MCP challenge state coherence
+- Keep adding DB-level guards when a new persistence state machine appears.
+- Prefer `CHECK`, `UNIQUE`, foreign keys, and targeted indexes instead of PHP-only validation when the invariant belongs to storage.
 
 ### 2. Replace weak arrays with typed models
 
