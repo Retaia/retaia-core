@@ -18,7 +18,7 @@ final class BusinessStorageEnvConfigReaderTest extends TestCase
 
     public function testReadAllReturnsNormalizedLocalConfig(): void
     {
-        $root = '/tmp/retaia-storage-reader-local';
+        $root = 'project-root-local';
         $this->configureBusinessStorages([[
             'id' => 'nas-main',
             'root_path' => 'var/storage/main',
@@ -33,7 +33,7 @@ final class BusinessStorageEnvConfigReaderTest extends TestCase
         self::assertCount(1, $configs);
         self::assertSame('nas-main', $configs[0]->id);
         self::assertSame('local', $configs[0]->driver);
-        self::assertSame($root.'/var/storage/main', $configs[0]->rootPath);
+        self::assertSame($root.DIRECTORY_SEPARATOR.'var/storage/main', $configs[0]->rootPath);
         self::assertSame('INBOX', $configs[0]->watchDirectory);
         self::assertSame(['INBOX', 'ARCHIVE'], $configs[0]->managedDirectories);
         self::assertFalse($configs[0]->ingestEnabled);
@@ -57,7 +57,7 @@ final class BusinessStorageEnvConfigReaderTest extends TestCase
             'smb_version_max' => 'SMB3_11',
         ]], 'nas-smb');
 
-        $reader = new BusinessStorageEnvConfigReader('/tmp/retaia-storage-reader-smb');
+        $reader = new BusinessStorageEnvConfigReader('project-root-smb');
         $configs = $reader->readAll();
 
         self::assertCount(1, $configs);
@@ -75,7 +75,7 @@ final class BusinessStorageEnvConfigReaderTest extends TestCase
 
     public function testResolveDefaultStorageIdRejectsUnknownConfiguredDefault(): void
     {
-        $root = '/tmp/retaia-storage-reader-default';
+        $root = 'project-root-default';
         $this->configureBusinessStorages([[
             'id' => 'nas-main',
             'root_path' => $root,
@@ -101,7 +101,7 @@ final class BusinessStorageEnvConfigReaderTest extends TestCase
         $_SERVER['APP_STORAGE_IDS'] = 'nas-main,nas_main';
         putenv('APP_STORAGE_IDS=nas-main,nas_main');
 
-        $reader = new BusinessStorageEnvConfigReader('/tmp/retaia-storage-reader-duplicate');
+        $reader = new BusinessStorageEnvConfigReader('project-root-duplicate');
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('collide once normalized');

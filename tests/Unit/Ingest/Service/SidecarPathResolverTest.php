@@ -72,7 +72,6 @@ final class SidecarPathResolverTest extends TestCase
 
     public function testSiblingResolutionWithMultipleCandidates(): void
     {
-        $resolver = new SidecarPathResolver();
         $existing = [
             'INBOX/clip.lrf',
             'INBOX/clip.xml',
@@ -80,7 +79,7 @@ final class SidecarPathResolverTest extends TestCase
         ];
         $fileExists = static fn (string $path): bool => in_array($path, $existing, true);
 
-        $candidates = $resolver->findSiblingCandidatesByExtensions(
+        $candidates = $this->resolver->findSiblingCandidatesByExtensions(
             'INBOX/clip.mp4',
             ['lrf', 'xml'],
             $fileExists
@@ -92,7 +91,7 @@ final class SidecarPathResolverTest extends TestCase
             $candidates
         );
 
-        $firstMatch = $resolver->findSiblingByExtensions(
+        $firstMatch = $this->resolver->findSiblingByExtensions(
             'INBOX/clip.mp4',
             ['lrf', 'xml'],
             $fileExists
@@ -102,35 +101,31 @@ final class SidecarPathResolverTest extends TestCase
 
     public function testNormalizeAndHelpersWithEdgeCasePaths(): void
     {
-        $resolver = new SidecarPathResolver();
-
         $path = 'INBOX/Sub Folder/clip .v1 .mp4';
-        $normalized = $resolver->normalizePath('\\INBOX\\\\Sub Folder//clip .v1 .mp4');
+        $normalized = $this->resolver->normalizePath('\\INBOX\\\\Sub Folder//clip .v1 .mp4');
         self::assertSame($path, $normalized);
-        self::assertTrue($resolver->isInboxPath($normalized));
-        self::assertSame('mp4', $resolver->extension($normalized));
-        self::assertSame('clip .v1 ', $resolver->basename($normalized));
+        self::assertTrue($this->resolver->isInboxPath($normalized));
+        self::assertSame('mp4', $this->resolver->extension($normalized));
+        self::assertSame('clip .v1 ', $this->resolver->basename($normalized));
     }
 
     public function testProxyFolderResolutionWhenProxyDoesNotExist(): void
     {
-        $resolver = new SidecarPathResolver();
         $existing = [
             'INBOX/clip.mp4',
         ];
         $fileExists = static fn (string $path): bool => in_array($path, $existing, true);
 
         self::assertFalse(
-            $resolver->isInsideProxyFolder('INBOX/clip.mp4', ['proxy'])
+            $this->resolver->isInsideProxyFolder('INBOX/clip.mp4', ['proxy'])
         );
         self::assertNull(
-            $resolver->findProxyInSiblingProxyFolders('INBOX/clip.mp4', ['proxy'], ['mp4'], $fileExists)
+            $this->resolver->findProxyInSiblingProxyFolders('INBOX/clip.mp4', ['proxy'], ['mp4'], $fileExists)
         );
     }
 
     public function testProxyFolderParentOriginalWhenNoMatchingOriginal(): void
     {
-        $resolver = new SidecarPathResolver();
         $existing = [
             'INBOX/other.mp4',
             'INBOX/proxy/other.mp4',
@@ -138,7 +133,7 @@ final class SidecarPathResolverTest extends TestCase
         $fileExists = static fn (string $path): bool => in_array($path, $existing, true);
 
         self::assertNull(
-            $resolver->findProxyFolderParentOriginal(
+            $this->resolver->findProxyFolderParentOriginal(
                 'INBOX/proxy/clip.mp4',
                 'clip',
                 ['proxy'],

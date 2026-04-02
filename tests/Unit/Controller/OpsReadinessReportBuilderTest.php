@@ -56,7 +56,7 @@ final class OpsReadinessReportBuilderTest extends TestCase
         $storage = $this->createMock(BusinessStorageInterface::class);
         $storage->method('managedDirectories')->willReturn(['INBOX']);
         $storage->method('directoryExists')->with('INBOX')->willReturn(false);
-        $storage->method('probeWritableDirectory')->willReturn(true);
+        $storage->method('probeWritableDirectory')->with('INBOX')->willReturn(true);
 
         $registry = $this->createMock(BusinessStorageRegistryInterface::class);
         $registry->method('all')->willReturn([new BusinessStorageDefinition('nas-main', $storage)]);

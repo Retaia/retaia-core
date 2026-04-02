@@ -20,7 +20,7 @@ final class AuthTwoFactorControllerTest extends TestCase
     public function testSetupRejectsMissingBearerToken(): void
     {
         $controller = $this->controller(AuthTwoFactorController::class, [
-            'errors' => new AuthApiErrorResponder($this->translator()),
+            'errors' => new AuthApiErrorResponder($this->createTranslatorStub()),
             'currentSessionResolver' => $this->currentSessionResolver(),
         ]);
 
@@ -42,8 +42,11 @@ final class AuthTwoFactorControllerTest extends TestCase
             self::assertIsArray($data['error']);
             self::assertArrayHasKey('code', $data['error']);
             self::assertArrayHasKey('message', $data['error']);
+            self::assertSame('UNAUTHORIZED', $data['error']['code']);
+            self::assertSame('auth.error.authentication_required', $data['error']['message']);
         } else {
             self::assertArrayHasKey('message', $data);
+            self::assertSame('auth.error.authentication_required', $data['message']);
         }
     }
 
@@ -63,10 +66,5 @@ final class AuthTwoFactorControllerTest extends TestCase
         $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
 
         return $translator;
-    }
-
-    private function translator(): TranslatorInterface
-    {
-        return $this->createTranslatorStub();
     }
 }
