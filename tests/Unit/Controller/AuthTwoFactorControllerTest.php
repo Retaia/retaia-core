@@ -24,7 +24,27 @@ final class AuthTwoFactorControllerTest extends TestCase
             'currentSessionResolver' => $this->currentSessionResolver(),
         ]);
 
-        self::assertSame(401, $controller->setup(Request::create('/api/v1/auth/2fa/setup', 'POST'))->getStatusCode());
+        $response = $controller->setup(Request::create('/api/v1/auth/2fa/setup', 'POST'));
+
+        self::assertSame(401, $response->getStatusCode());
+
+        $contentType = $response->headers->get('Content-Type');
+        if ($contentType !== null) {
+            self::assertStringContainsStringIgnoringCase('application/json', $contentType);
+        }
+
+        $data = json_decode($response->getContent(), true);
+
+        self::assertIsArray($data);
+        self::assertNotEmpty($data);
+
+        if (array_key_exists('error', $data)) {
+            self::assertIsArray($data['error']);
+            self::assertArrayHasKey('code', $data['error']);
+            self::assertArrayHasKey('message', $data['error']);
+        } else {
+            self::assertArrayHasKey('message', $data);
+        }
     }
 
     private function currentSessionResolver(): AuthCurrentSessionResolver
