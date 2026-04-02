@@ -6,6 +6,7 @@ use App\Application\Auth\ResolveAuthenticatedUserHandler;
 
 final class JobEndpointsHandler
 {
+    private JobEndpointActorContextResolver $actorContextResolver;
     private JobListEndpointHandler $listEndpointHandler;
     private JobClaimEndpointHandler $claimEndpointHandler;
     private JobHeartbeatEndpointHandler $heartbeatEndpointHandler;
@@ -20,14 +21,14 @@ final class JobEndpointsHandler
         private FailJobHandler $failJobHandler,
         private ResolveAuthenticatedUserHandler $resolveAuthenticatedUserHandler,
     ) {
-        $actorContextResolver = new JobEndpointActorContextResolver($this->resolveAuthenticatedUserHandler);
+        $this->actorContextResolver = new JobEndpointActorContextResolver($this->resolveAuthenticatedUserHandler);
         $fencingTokenParser = new JobEndpointFencingTokenParser();
 
-        $this->listEndpointHandler = new JobListEndpointHandler($this->listClaimableJobsHandler, $actorContextResolver);
-        $this->claimEndpointHandler = new JobClaimEndpointHandler($this->claimJobHandler, $actorContextResolver);
-        $this->heartbeatEndpointHandler = new JobHeartbeatEndpointHandler($this->heartbeatJobHandler, $actorContextResolver, $fencingTokenParser);
-        $this->submitEndpointHandler = new JobSubmitEndpointHandler($this->submitJobHandler, $actorContextResolver, $fencingTokenParser);
-        $this->failEndpointHandler = new JobFailEndpointHandler($this->failJobHandler, $actorContextResolver, $fencingTokenParser);
+        $this->listEndpointHandler = new JobListEndpointHandler($this->listClaimableJobsHandler, $this->actorContextResolver);
+        $this->claimEndpointHandler = new JobClaimEndpointHandler($this->claimJobHandler, $this->actorContextResolver);
+        $this->heartbeatEndpointHandler = new JobHeartbeatEndpointHandler($this->heartbeatJobHandler, $this->actorContextResolver, $fencingTokenParser);
+        $this->submitEndpointHandler = new JobSubmitEndpointHandler($this->submitJobHandler, $this->actorContextResolver, $fencingTokenParser);
+        $this->failEndpointHandler = new JobFailEndpointHandler($this->failJobHandler, $this->actorContextResolver, $fencingTokenParser);
     }
 
     public function list(int $limit): JobEndpointResult
@@ -38,6 +39,19 @@ final class JobEndpointsHandler
     public function claim(string $jobId): JobEndpointResult
     {
         return $this->claimEndpointHandler->handle($jobId);
+    }
+
+    public function actorId(): string
+    {
+        return $this->actorContextResolver->actorId();
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function actorRoles(): array
+    {
+        return $this->actorContextResolver->actorRoles();
     }
 
     /**
