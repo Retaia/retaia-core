@@ -15,10 +15,11 @@ final class AgentJobProjectionRepository implements AgentJobProjectionRepository
         private Connection $connection,
     ) {
         $rowMapper = new AgentJobProjectionRowMapper();
+        $queryRunner = new AgentJobProjectionQueryRunner($this->connection);
         $this->agentIdNormalizer = new AgentJobProjectionAgentIdNormalizer();
-        $this->currentProjector = new AgentJobCurrentProjector($this->connection, $rowMapper);
-        $this->successfulProjector = new AgentJobSuccessfulProjector($this->connection, $rowMapper);
-        $this->failedProjector = new AgentJobFailedProjector($this->connection, $rowMapper);
+        $this->currentProjector = new AgentJobCurrentProjector($queryRunner, $rowMapper);
+        $this->successfulProjector = new AgentJobSuccessfulProjector($queryRunner, $rowMapper);
+        $this->failedProjector = new AgentJobFailedProjector($queryRunner, $rowMapper);
     }
 
     public function snapshotsForAgents(array $agentIds): array

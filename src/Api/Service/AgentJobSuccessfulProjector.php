@@ -2,12 +2,10 @@
 
 namespace App\Api\Service;
 
-use Doctrine\DBAL\Connection;
-
 final class AgentJobSuccessfulProjector
 {
     public function __construct(
-        private Connection $connection,
+        private AgentJobProjectionQueryRunner $queryRunner,
         private AgentJobProjectionRowMapper $rowMapper,
     ) {
     }
@@ -18,7 +16,7 @@ final class AgentJobSuccessfulProjector
      */
     public function project(array $agentIds): array
     {
-        $rows = $this->fetchRowsForIds(
+        $rows = $this->queryRunner->fetchRowsForIds(
             'SELECT completed_by AS agent_id, id, job_type, asset_uuid, completed_at
              FROM processing_job
              WHERE status = :status
@@ -45,20 +43,4 @@ final class AgentJobSuccessfulProjector
         return $snapshots;
     }
 
-    /**
-     * @param array<int, string> $agentIds
-     * @param array<string, mixed> $params
-     * @return array<int, array<string, mixed>>
-     */
-    private function fetchRowsForIds(string $sqlTemplate, string $column, array $agentIds, array $params): array
-    {
-        $placeholders = [];
-        foreach ($agentIds as $index => $agentId) {
-            $key = sprintf('%s_%d', $column, $index);
-            $placeholders[] = ':'.$key;
-            $params[$key] = $agentId;
-        }
-
-        return $this->connection->fetchAllAssociative(sprintf($sqlTemplate, implode(', ', $placeholders)), $params);
-    }
 }
