@@ -37,6 +37,8 @@ final class UserTwoFactorStateRepositoryTest extends TestCase
         self::assertSame('active-secret', $stored->secretEncrypted);
         self::assertSame(['$argon2id$foo'], $stored->recoveryCodeHashes);
         self::assertSame(['legacy-hash'], $stored->legacyRecoveryCodeSha256);
+        self::assertSame(10, $stored->createdAt);
+        self::assertSame(20, $stored->updatedAt);
     }
 
     public function testDeleteRemovesState(): void
