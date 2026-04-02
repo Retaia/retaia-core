@@ -9,11 +9,13 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Event\ExceptionEvent;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\HttpKernel\KernelEvents;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class ApiExceptionResponseSubscriber implements EventSubscriberInterface
 {
     public function __construct(
         private LoggerInterface $logger,
+        private TranslatorInterface $translator,
     ) {
     }
 
@@ -79,7 +81,17 @@ final class ApiExceptionResponseSubscriber implements EventSubscriberInterface
 
     private function message(int $status): string
     {
-        return Response::$statusTexts[$status] ?? 'Internal Server Error';
+        return $this->translator->trans(match ($status) {
+            Response::HTTP_BAD_REQUEST => 'http.error.bad_request',
+            Response::HTTP_UNAUTHORIZED => 'http.error.unauthorized',
+            Response::HTTP_FORBIDDEN => 'http.error.forbidden',
+            Response::HTTP_NOT_FOUND => 'http.error.not_found',
+            Response::HTTP_METHOD_NOT_ALLOWED => 'http.error.method_not_allowed',
+            Response::HTTP_CONFLICT => 'http.error.conflict',
+            Response::HTTP_UNPROCESSABLE_ENTITY => 'http.error.validation_failed',
+            Response::HTTP_TOO_MANY_REQUESTS => 'http.error.too_many_requests',
+            default => 'http.error.internal_server_error',
+        });
     }
 
     private function log(\Throwable $throwable, string $method, string $path, int $status, string $code): void

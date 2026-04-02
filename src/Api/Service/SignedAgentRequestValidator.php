@@ -9,6 +9,7 @@ use App\Api\Service\AgentSignature\SignedAgentMessageCanonicalizer;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class SignedAgentRequestValidator
 {
@@ -20,6 +21,7 @@ final class SignedAgentRequestValidator
         private AgentSignatureNonceRepositoryInterface $nonceRepository,
         private SignedAgentMessageCanonicalizer $messageCanonicalizer,
         private AgentRuntimeRepositoryInterface $agentRuntimeRepository,
+        private TranslatorInterface $translator,
     ) {
     }
 
@@ -116,7 +118,7 @@ final class SignedAgentRequestValidator
         return new JsonResponse(
             [
                 'code' => 'UNAUTHORIZED',
-                'message' => 'Signed agent request headers are required',
+                'message' => $this->translator->trans('api.error.signed_agent_headers_required'),
                 'details' => [
                     'invalid_headers' => array_values($invalidHeaders),
                 ],

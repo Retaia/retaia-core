@@ -10,12 +10,13 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Event\ExceptionEvent;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class ApiExceptionResponseSubscriberTest extends TestCase
 {
     public function testIgnoresNonApiPaths(): void
     {
-        $subscriber = new ApiExceptionResponseSubscriber(new NullLogger());
+        $subscriber = new ApiExceptionResponseSubscriber(new NullLogger(), $this->translator());
         $event = new ExceptionEvent(
             $this->kernelMock(),
             Request::create('/health', 'GET'),
@@ -30,7 +31,7 @@ final class ApiExceptionResponseSubscriberTest extends TestCase
 
     public function testReturnsStandardizedResponseForApiRuntimeExceptions(): void
     {
-        $subscriber = new ApiExceptionResponseSubscriber(new NullLogger());
+        $subscriber = new ApiExceptionResponseSubscriber(new NullLogger(), $this->translator());
         $event = new ExceptionEvent(
             $this->kernelMock(),
             Request::create('/api/v1/assets', 'GET'),
@@ -51,7 +52,7 @@ final class ApiExceptionResponseSubscriberTest extends TestCase
 
     public function testReturnsStandardizedResponseForApiHttpExceptions(): void
     {
-        $subscriber = new ApiExceptionResponseSubscriber(new NullLogger());
+        $subscriber = new ApiExceptionResponseSubscriber(new NullLogger(), $this->translator());
         $event = new ExceptionEvent(
             $this->kernelMock(),
             Request::create('/api/v1/does-not-exist', 'GET'),
@@ -78,5 +79,17 @@ final class ApiExceptionResponseSubscriberTest extends TestCase
                 return new Response();
             }
         };
+    }
+
+    private function translator(): TranslatorInterface
+    {
+        $translator = $this->createStub(TranslatorInterface::class);
+        $translator->method('trans')->willReturnCallback(static fn (string $id): string => match ($id) {
+            'http.error.internal_server_error' => 'Internal Server Error',
+            'http.error.not_found' => 'Not Found',
+            default => $id,
+        });
+
+        return $translator;
     }
 }

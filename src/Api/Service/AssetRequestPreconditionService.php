@@ -8,11 +8,13 @@ use App\Entity\Asset;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class AssetRequestPreconditionService
 {
     public function __construct(
         private AssetRepositoryInterface $assets,
+        private TranslatorInterface $translator,
     ) {
     }
 
@@ -29,7 +31,7 @@ final class AssetRequestPreconditionService
             return new JsonResponse(
                 [
                     'code' => 'PRECONDITION_REQUIRED',
-                    'message' => 'Missing If-Match header',
+                    'message' => $this->translator->trans('asset.error.precondition_required'),
                     'details' => [
                         'current_revision_etag' => $currentRevisionEtag,
                         'current_state' => $asset->getState()->value,
@@ -43,7 +45,7 @@ final class AssetRequestPreconditionService
             return new JsonResponse(
                 [
                     'code' => 'PRECONDITION_FAILED',
-                    'message' => 'Stale asset revision',
+                    'message' => $this->translator->trans('asset.error.precondition_failed'),
                     'details' => [
                         'current_revision_etag' => $currentRevisionEtag,
                         'current_state' => $asset->getState()->value,

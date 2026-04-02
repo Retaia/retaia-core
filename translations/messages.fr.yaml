@@ -38,12 +38,76 @@ auth:
     expired_device_code: "Code device expiré"
     device_flow_not_approvable: "Le flow device ne peut pas être approuvé"
     slow_down: "Ralentissez"
+http:
+  error:
+    bad_request: "Requête invalide"
+    unauthorized: "Non autorisé"
+    forbidden: "Interdit"
+    not_found: "Introuvable"
+    method_not_allowed: "Méthode non autorisée"
+    conflict: "Conflit"
+    validation_failed: "Validation échouée"
+    too_many_requests: "Trop de requêtes"
+    internal_server_error: "Erreur interne du serveur"
+docs:
+  error:
+    version_not_found: "Version OpenAPI introuvable."
+    unreadable_openapi: "Impossible de lire le fichier OpenAPI."
 asset:
   error:
     not_found: "Asset introuvable"
     state_conflict: "Transition d'état non autorisée"
     decision_action_required: "action est requis"
     purged_read_only: "Les assets purgés sont en lecture seule"
+    invalid_list_query: "Paramètres de liste des assets invalides"
+    invalid_patch_payload: "Payload de mise à jour d'asset invalide"
+    precondition_required: "En-tête If-Match manquant"
+    precondition_failed: "Révision d'asset obsolète"
 agent:
   error:
     invalid_registration_payload: "agent_name, agent_version et capabilities sont requis"
+workflow:
+  error:
+    purge_batch_payload_required: "asset_uuids et confirm=true sont requis"
+derived:
+  error:
+    init_upload_payload_required: "kind, content_type et size_bytes sont requis"
+    upload_part_payload_required: "upload_id et part_number sont requis"
+    upload_session_conflict: "La session d'upload est invalide ou déjà terminée"
+    complete_upload_payload_required: "upload_id et total_parts sont requis"
+    upload_completion_conflict: "Les prérequis de finalisation d'upload ne sont pas satisfaits"
+job:
+  error:
+    not_claimable: "Le job ne peut pas être claim"
+    invalid_heartbeat_payload: "fencing_token est requis et doit être un entier strictement positif"
+    invalid_submit_payload: "fencing_token, job_type et result doivent correspondre au contrat du job claim"
+    invalid_fail_payload: "fencing_token, error_code et message sont requis"
+    lock_token_required: "lock_token est requis"
+    invalid_lock_token: "Le lock token est invalide ou expiré"
+ops:
+  error:
+    unmatched_reason_invalid: "reason doit être l'un de: missing_parent, ambiguous_parent, disabled_by_policy"
+    unmatched_since_invalid: "since doit être une date ISO-8601 valide"
+    requeue_target_required: "asset_uuid ou path est requis"
+    requeue_reason_required: "reason est requis"
+    requeue_asset_uuid_invalid: "asset_uuid doit être un UUID valide"
+    requeue_path_invalid: "path doit être un chemin relatif sûr"
+    requeue_storage_required: "storage_id est requis lorsque path est fourni sans asset_uuid"
+    requeue_storage_unknown: "storage_id doit référencer un storage configuré"
+    requeue_include_derived_boolean: "include_derived doit être un booléen"
+    requeue_include_sidecars_boolean: "include_sidecars doit être un booléen"
+    stale_lock_minutes_invalid: "stale_lock_minutes doit être un entier >= 1"
+    dry_run_boolean: "dry_run doit être un booléen"
+readiness:
+  message:
+    database_ok: "La vérification de connectivité base de données a réussi."
+    database_fail: "La vérification de connectivité base de données a échoué."
+    watch_path_ok: "La structure des répertoires d'ingest est présente."
+    watch_path_fail_prefix: "Répertoires d'ingest manquants ou échec de résolution : "
+    storage_writable_ok: "Les répertoires d'ingest sont inscriptibles."
+    storage_writable_fail_prefix: "Répertoires d'ingest non inscriptibles : "
+api:
+  error:
+    signed_agent_headers_required: "Les en-têtes de requête agent signée sont requis"
+    missing_idempotency_key: "L'en-tête Idempotency-Key est requis"
+    idempotency_conflict: "La clé Idempotency-Key a déjà été utilisée avec un payload différent"

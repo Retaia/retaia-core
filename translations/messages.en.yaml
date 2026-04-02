@@ -38,12 +38,76 @@ auth:
     expired_device_code: "Expired device code"
     device_flow_not_approvable: "Device flow is not approvable"
     slow_down: "Slow down"
+http:
+  error:
+    bad_request: "Bad Request"
+    unauthorized: "Unauthorized"
+    forbidden: "Forbidden"
+    not_found: "Not Found"
+    method_not_allowed: "Method Not Allowed"
+    conflict: "Conflict"
+    validation_failed: "Validation failed"
+    too_many_requests: "Too Many Requests"
+    internal_server_error: "Internal Server Error"
+docs:
+  error:
+    version_not_found: "OpenAPI version not found."
+    unreadable_openapi: "Unable to read OpenAPI file."
 asset:
   error:
     not_found: "Asset not found"
     state_conflict: "State transition is not allowed"
     decision_action_required: "action is required"
     purged_read_only: "Purged assets are read-only"
+    invalid_list_query: "Invalid assets list query parameters"
+    invalid_patch_payload: "Invalid asset patch payload"
+    precondition_required: "Missing If-Match header"
+    precondition_failed: "Stale asset revision"
 agent:
   error:
     invalid_registration_payload: "agent_name, agent_version and capabilities are required"
+workflow:
+  error:
+    purge_batch_payload_required: "asset_uuids and confirm=true are required"
+derived:
+  error:
+    init_upload_payload_required: "kind, content_type and size_bytes are required"
+    upload_part_payload_required: "upload_id and part_number are required"
+    upload_session_conflict: "Upload session is invalid or already completed"
+    complete_upload_payload_required: "upload_id and total_parts are required"
+    upload_completion_conflict: "Upload completion requirements are not satisfied"
+job:
+  error:
+    not_claimable: "Job is not claimable"
+    invalid_heartbeat_payload: "fencing_token is required and must be a positive integer"
+    invalid_submit_payload: "fencing_token, job_type and result must match the claimed job contract"
+    invalid_fail_payload: "fencing_token, error_code and message are required"
+    lock_token_required: "lock_token is required"
+    invalid_lock_token: "Invalid lock token or expired lock"
+ops:
+  error:
+    unmatched_reason_invalid: "reason must be one of: missing_parent, ambiguous_parent, disabled_by_policy"
+    unmatched_since_invalid: "since must be a valid ISO-8601 date-time"
+    requeue_target_required: "asset_uuid or path is required"
+    requeue_reason_required: "reason is required"
+    requeue_asset_uuid_invalid: "asset_uuid must be a valid UUID"
+    requeue_path_invalid: "path must be a safe relative path"
+    requeue_storage_required: "storage_id is required when path is provided without asset_uuid"
+    requeue_storage_unknown: "storage_id must reference a configured storage"
+    requeue_include_derived_boolean: "include_derived must be a boolean"
+    requeue_include_sidecars_boolean: "include_sidecars must be a boolean"
+    stale_lock_minutes_invalid: "stale_lock_minutes must be an integer >= 1"
+    dry_run_boolean: "dry_run must be a boolean"
+readiness:
+  message:
+    database_ok: "Database connectivity check passed."
+    database_fail: "Database connectivity check failed."
+    watch_path_ok: "Ingest watch path structure is present."
+    watch_path_fail_prefix: "Missing ingest directories or resolution failure: "
+    storage_writable_ok: "Ingest directories are writable."
+    storage_writable_fail_prefix: "Non-writable ingest directories: "
+api:
+  error:
+    signed_agent_headers_required: "Signed agent request headers are required"
+    missing_idempotency_key: "Idempotency-Key header is required"
+    idempotency_conflict: "Idempotency-Key was already used with a different payload"

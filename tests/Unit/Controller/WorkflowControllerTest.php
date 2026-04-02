@@ -121,7 +121,7 @@ final class WorkflowControllerTest extends TestCase
         $connection->method('fetchAssociative')->willReturn(false);
         $connection->method('insert')->willReturn(1);
 
-        return new IdempotencyService($connection);
+        return new IdempotencyService($connection, $this->translator());
     }
 
     private function translator(): TranslatorInterface
@@ -233,7 +233,7 @@ final class WorkflowControllerTest extends TestCase
                 new PurgeAssetHandler($workflowGateway),
             ),
             $translator,
-            new AssetRequestPreconditionService($assets)
+            new AssetRequestPreconditionService($assets, $translator)
         );
     }
 }

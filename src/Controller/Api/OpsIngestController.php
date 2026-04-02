@@ -12,6 +12,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[Route('/api/v1/ops')]
 final class OpsIngestController
@@ -31,6 +32,7 @@ final class OpsIngestController
         private AssetRepositoryInterface $assets,
         private JobRepository $jobs,
         private BusinessStorageRegistryInterface $storageRegistry,
+        private TranslatorInterface $translator,
     ) {
     }
 
@@ -58,7 +60,7 @@ final class OpsIngestController
         if ($reason !== '' && !in_array($reason, self::ALLOWED_UNMATCHED_REASONS, true)) {
             return $this->errorResponse(
                 'VALIDATION_FAILED',
-                'reason must be one of: missing_parent, ambiguous_parent, disabled_by_policy',
+                $this->translator->trans('ops.error.unmatched_reason_invalid'),
                 Response::HTTP_BAD_REQUEST
             );
         }
@@ -71,7 +73,7 @@ final class OpsIngestController
             } catch (\Throwable) {
                 return $this->errorResponse(
                     'VALIDATION_FAILED',
-                    'since must be a valid ISO-8601 date-time',
+                    $this->translator->trans('ops.error.unmatched_since_invalid'),
                     Response::HTTP_BAD_REQUEST
                 );
             }
@@ -98,28 +100,28 @@ final class OpsIngestController
         $reason = trim((string) ($payload['reason'] ?? ''));
 
         if ($assetUuid === '' && $path === '') {
-            return $this->errorResponse('VALIDATION_FAILED', 'asset_uuid or path is required', Response::HTTP_BAD_REQUEST);
+            return $this->errorResponse('VALIDATION_FAILED', $this->translator->trans('ops.error.requeue_target_required'), Response::HTTP_BAD_REQUEST);
         }
         if ($reason === '') {
-            return $this->errorResponse('VALIDATION_FAILED', 'reason is required', Response::HTTP_BAD_REQUEST);
+            return $this->errorResponse('VALIDATION_FAILED', $this->translator->trans('ops.error.requeue_reason_required'), Response::HTTP_BAD_REQUEST);
         }
         if ($assetUuid !== '' && !$this->isValidUuid($assetUuid)) {
-            return $this->errorResponse('VALIDATION_FAILED', 'asset_uuid must be a valid UUID', Response::HTTP_BAD_REQUEST);
+            return $this->errorResponse('VALIDATION_FAILED', $this->translator->trans('ops.error.requeue_asset_uuid_invalid'), Response::HTTP_BAD_REQUEST);
         }
         if ($path !== '' && !$this->isSafeRelativePath($path)) {
-            return $this->errorResponse('VALIDATION_FAILED', 'path must be a safe relative path', Response::HTTP_BAD_REQUEST);
+            return $this->errorResponse('VALIDATION_FAILED', $this->translator->trans('ops.error.requeue_path_invalid'), Response::HTTP_BAD_REQUEST);
         }
         if ($path !== '' && $assetUuid === '' && $storageId === '') {
             return $this->errorResponse(
                 'VALIDATION_FAILED',
-                'storage_id is required when path is provided without asset_uuid',
+                $this->translator->trans('ops.error.requeue_storage_required'),
                 Response::HTTP_BAD_REQUEST
             );
         }
         if ($storageId !== '' && !$this->storageRegistry->has($storageId)) {
             return $this->errorResponse(
                 'VALIDATION_FAILED',
-                'storage_id must reference a configured storage',
+                $this->translator->trans('ops.error.requeue_storage_unknown'),
                 Response::HTTP_BAD_REQUEST
             );
         }
@@ -127,12 +129,12 @@ final class OpsIngestController
         $includeDerived = true;
         if (array_key_exists('include_derived', $payload)) {
             if (!is_bool($payload['include_derived'])) {
-                return $this->errorResponse('VALIDATION_FAILED', 'include_derived must be a boolean', Response::HTTP_BAD_REQUEST);
+                return $this->errorResponse('VALIDATION_FAILED', $this->translator->trans('ops.error.requeue_include_derived_boolean'), Response::HTTP_BAD_REQUEST);
             }
             $includeDerived = (bool) $payload['include_derived'];
         }
         if (array_key_exists('include_sidecars', $payload) && !is_bool($payload['include_sidecars'])) {
-            return $this->errorResponse('VALIDATION_FAILED', 'include_sidecars must be a boolean', Response::HTTP_BAD_REQUEST);
+            return $this->errorResponse('VALIDATION_FAILED', $this->translator->trans('ops.error.requeue_include_sidecars_boolean'), Response::HTTP_BAD_REQUEST);
         }
 
         $normalizedPath = ltrim($path, '/');

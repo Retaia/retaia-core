@@ -21,7 +21,7 @@ final class AssetMutationControllerTest extends TestCase
     {
         $controller = new AssetMutationController(
             $this->forbiddenAssetEndpointsHandler(),
-            new AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class)),
+            new AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class), $this->translator()),
             $this->responder(),
         );
 
@@ -74,7 +74,15 @@ final class AssetMutationControllerTest extends TestCase
 
         return new AssetHttpResponder(
             $translator,
-            new AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class))
+            new AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class), $translator)
         );
+    }
+
+    private function translator(): TranslatorInterface
+    {
+        $translator = $this->createStub(TranslatorInterface::class);
+        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
+
+        return $translator;
     }
 }

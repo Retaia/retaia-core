@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class IdempotencyServiceTest extends TestCase
 {
@@ -16,7 +17,7 @@ final class IdempotencyServiceTest extends TestCase
         $connection = $this->createMock(Connection::class);
         $connection->expects(self::never())->method('fetchAssociative');
 
-        $service = new IdempotencyService($connection);
+        $service = new IdempotencyService($connection, $this->translator());
         $request = Request::create('/api/v1/jobs/submit', Request::METHOD_POST, server: ['CONTENT_TYPE' => 'application/json'], content: '{"job":"1"}');
 
         $response = $service->execute($request, 'actor-1', static fn (): JsonResponse => new JsonResponse(['ok' => true]));
@@ -41,7 +42,7 @@ final class IdempotencyServiceTest extends TestCase
             ]);
         $connection->expects(self::never())->method('insert');
 
-        $service = new IdempotencyService($connection);
+        $service = new IdempotencyService($connection, $this->translator());
         $response = $service->execute($request, 'actor-1', static fn (): JsonResponse => new JsonResponse(['ok' => true], Response::HTTP_CREATED));
 
         self::assertSame(Response::HTTP_CONFLICT, $response->getStatusCode());
@@ -65,7 +66,7 @@ final class IdempotencyServiceTest extends TestCase
             ]);
         $connection->expects(self::never())->method('insert');
 
-        $service = new IdempotencyService($connection);
+        $service = new IdempotencyService($connection, $this->translator());
         $response = $service->execute($request, 'actor-9', static fn (): JsonResponse => new JsonResponse(['should' => 'not-run']));
 
         self::assertSame(Response::HTTP_ACCEPTED, $response->getStatusCode());
@@ -93,10 +94,18 @@ final class IdempotencyServiceTest extends TestCase
                 })
             );
 
-        $service = new IdempotencyService($connection);
+        $service = new IdempotencyService($connection, $this->translator());
         $response = $service->execute($request, 'actor-4', static fn (): JsonResponse => new JsonResponse(['job_id' => 'job-4'], Response::HTTP_CREATED));
 
         self::assertSame(Response::HTTP_CREATED, $response->getStatusCode());
         self::assertSame('job-4', (string) json_decode((string) $response->getContent(), true)['job_id']);
+    }
+
+    private function translator(): TranslatorInterface
+    {
+        $translator = $this->createStub(TranslatorInterface::class);
+        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
+
+        return $translator;
     }
 }
