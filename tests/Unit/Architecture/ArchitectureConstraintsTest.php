@@ -17,6 +17,7 @@ final class ArchitectureConstraintsTest extends TestCase
                 'Doctrine\\DBAL\\Connection',
                 '->executeQuery(',
                 '->executeStatement(',
+                '->executeUpdate(',
                 '->fetchAllAssociative(',
                 '->fetchAssociative(',
                 '->fetchOne(',
@@ -36,6 +37,7 @@ final class ArchitectureConstraintsTest extends TestCase
                 'Doctrine\\DBAL\\Connection',
                 '->executeQuery(',
                 '->executeStatement(',
+                '->executeUpdate(',
                 '->fetchAllAssociative(',
                 '->fetchAssociative(',
                 '->fetchOne(',
@@ -101,8 +103,8 @@ final class ArchitectureConstraintsTest extends TestCase
             }
 
             if (
-                preg_match("/new\\s+JsonResponse\\s*\\(/m", $contents) !== 1
-                || preg_match("/['\\\"]code['\\\"]\\s*=>/m", $contents) !== 1
+                preg_match("/new\\s+JsonResponse\\s*\\(/m", $contents) < 1
+                || preg_match("/['\\\"]code['\\\"]\\s*=>/m", $contents) < 1
             ) {
                 continue;
             }
