@@ -14,12 +14,12 @@ The runtime/spec audit is green. The remaining work is structural: large classes
 
 ### Priority 1
 
-- [`src/Application/Asset/ListAssetsHandler`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Application/Asset/ListAssetsHandler.php)
-  - still mixes cursor validation, filter normalization, sort validation, and gateway orchestration
+- [`src/Workflow/Service/BatchWorkflowService`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Workflow/Service/BatchWorkflowService.php)
+  - improved already, but still carries orchestration for move preview/apply, decision preview/apply, and purge/report flows
   - next seams:
-    - `ListAssetsQueryNormalizer` for filters and sort validation
-    - `AssetListCursorCodec` for context hash, encode/decode, and offset rules
-    - handler kept as orchestration only
+    - move coordinator
+    - decision coordinator
+    - purge coordinator
 
 ### Priority 2
 
@@ -28,12 +28,6 @@ The runtime/spec audit is green. The remaining work is structural: large classes
   - next seams:
     - narrower builder map per driver
     - optional dedicated validator for driver-specific completeness checks if SMB/local setup grows again
-- [`src/Workflow/Service/BatchWorkflowService`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Workflow/Service/BatchWorkflowService.php)
-  - improved already, but still carries orchestration for move preview/apply, decision preview/apply, and purge/report flows
-  - next seams:
-    - move coordinator
-    - decision coordinator
-    - purge coordinator
 - [`src/Lock/Repository/OperationLockRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Lock/Repository/OperationLockRepository.php)
   - still mixes lock lifecycle persistence with query helpers and stale cleanup semantics
   - next seams:
