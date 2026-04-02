@@ -2,6 +2,7 @@
 
 namespace App\Api\Service;
 
+use App\Controller\Api\ApiErrorResponseFactory;
 use Doctrine\DBAL\Connection;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -23,10 +24,11 @@ final class IdempotencyService
     {
         $key = trim((string) $request->headers->get('Idempotency-Key', ''));
         if ($key === '') {
-            return new JsonResponse([
-                'code' => 'MISSING_IDEMPOTENCY_KEY',
-                'message' => $this->translator->trans('api.error.missing_idempotency_key'),
-            ], Response::HTTP_BAD_REQUEST);
+            return ApiErrorResponseFactory::create(
+                'MISSING_IDEMPOTENCY_KEY',
+                $this->translator->trans('api.error.missing_idempotency_key'),
+                Response::HTTP_BAD_REQUEST
+            );
         }
 
         $requestHash = hash('sha256', $request->getContent());
@@ -47,10 +49,11 @@ final class IdempotencyService
 
         if (is_array($existing)) {
             if (($existing['request_hash'] ?? '') !== $requestHash) {
-                return new JsonResponse([
-                    'code' => 'IDEMPOTENCY_CONFLICT',
-                    'message' => $this->translator->trans('api.error.idempotency_conflict'),
-                ], Response::HTTP_CONFLICT);
+                return ApiErrorResponseFactory::create(
+                    'IDEMPOTENCY_CONFLICT',
+                    $this->translator->trans('api.error.idempotency_conflict'),
+                    Response::HTTP_CONFLICT
+                );
             }
 
             $body = json_decode((string) ($existing['response_body'] ?? '{}'), true);

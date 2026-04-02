@@ -76,10 +76,46 @@ final class ArchitectureConstraintsTest extends TestCase
             }
 
             if (
-                str_contains($contents, "new JsonResponse([\n            'code' =>")
-                && str_contains($contents, "'message' =>")
+                preg_match("/new\\s+JsonResponse\\s*\\(\\s*\\[\\s*['\\\"]code['\\\"]\\s*=>/m", $contents) === 1
+                && preg_match("/['\\\"]message['\\\"]\\s*=>/m", $contents) === 1
             ) {
                 $violations[] = sprintf('%s rebuilds an inline code/message JsonResponse envelope', $this->relativePath($file));
+            }
+        }
+
+        sort($violations);
+
+        self::assertSame([], $violations, implode(PHP_EOL, $violations));
+    }
+
+    public function testErrorJsonResponsesUseCentralizedFactoryOrResponderTrait(): void
+    {
+        $violations = [];
+
+        foreach ($this->phpFilesIn('/src') as $file) {
+            $contents = file_get_contents($file); // @unit-purity-ignore
+            if (!is_string($contents)) {
+                $violations[] = $this->relativePath($file).': unreadable';
+
+                continue;
+            }
+
+            if (
+                preg_match("/new\\s+JsonResponse\\s*\\(/m", $contents) !== 1
+                || preg_match("/['\\\"]code['\\\"]\\s*=>/m", $contents) !== 1
+            ) {
+                continue;
+            }
+
+            $usesFactory = str_contains($contents, 'ApiErrorResponseFactory')
+                || str_contains($contents, '->errorResponse(');
+            $usesTrait = str_contains($contents, 'ApiErrorResponderTrait');
+
+            if (!$usesFactory && !$usesTrait) {
+                $violations[] = sprintf(
+                    '%s constructs JsonResponse error payloads without using the centralized error responders',
+                    $this->relativePath($file)
+                );
             }
         }
 

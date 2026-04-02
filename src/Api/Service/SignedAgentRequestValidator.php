@@ -6,6 +6,7 @@ use App\Api\Service\AgentSignature\AgentPublicKeyRepositoryInterface;
 use App\Api\Service\AgentSignature\AgentRequestSignatureVerifier;
 use App\Api\Service\AgentSignature\AgentSignatureNonceRepositoryInterface;
 use App\Api\Service\AgentSignature\SignedAgentMessageCanonicalizer;
+use App\Controller\Api\ApiErrorResponseFactory;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -115,15 +116,13 @@ final class SignedAgentRequestValidator
      */
     private function unauthorizedResponse(array $invalidHeaders): JsonResponse
     {
-        return new JsonResponse(
+        return ApiErrorResponseFactory::create(
+            'UNAUTHORIZED',
+            $this->translator->trans('api.error.signed_agent_headers_required'),
+            Response::HTTP_UNAUTHORIZED,
             [
-                'code' => 'UNAUTHORIZED',
-                'message' => $this->translator->trans('api.error.signed_agent_headers_required'),
-                'details' => [
-                    'invalid_headers' => array_values($invalidHeaders),
-                ],
-            ],
-            Response::HTTP_UNAUTHORIZED
+                'invalid_headers' => array_values($invalidHeaders),
+            ]
         );
     }
 }

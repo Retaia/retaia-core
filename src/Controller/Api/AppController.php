@@ -70,15 +70,13 @@ final class AppController
     private function policyResponse(AppPolicyEndpointResult $result): JsonResponse
     {
         if ($result->status() === AppPolicyEndpointResult::STATUS_UNSUPPORTED_CONTRACT_VERSION) {
-            return new JsonResponse(
+            return ApiErrorResponseFactory::create(
+                'UNSUPPORTED_FEATURE_FLAGS_CONTRACT_VERSION',
+                $this->translator->trans('auth.error.unsupported_feature_flags_contract_version'),
+                Response::HTTP_UPGRADE_REQUIRED,
                 [
-                    'code' => 'UNSUPPORTED_FEATURE_FLAGS_CONTRACT_VERSION',
-                    'message' => $this->translator->trans('auth.error.unsupported_feature_flags_contract_version'),
-                    'details' => [
-                        'accepted_feature_flags_contract_versions' => $result->acceptedVersions(),
-                    ],
-                ],
-                Response::HTTP_UPGRADE_REQUIRED
+                    'accepted_feature_flags_contract_versions' => $result->acceptedVersions(),
+                ]
             );
         }
 
