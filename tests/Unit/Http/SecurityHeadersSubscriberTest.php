@@ -11,14 +11,29 @@ use Symfony\Component\HttpKernel\HttpKernelInterface;
 
 final class SecurityHeadersSubscriberTest extends TestCase
 {
+    private SecurityHeadersSubscriber $subscriber;
+    private HttpKernelInterface $kernel;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->subscriber = new SecurityHeadersSubscriber();
+        $this->kernel = new class implements HttpKernelInterface {
+            public function handle(Request $request, int $type = self::MAIN_REQUEST, bool $catch = true): Response
+            {
+                return new Response();
+            }
+        };
+    }
+
     public function testAddsBaseHeadersForApiResponses(): void
     {
-        $subscriber = new SecurityHeadersSubscriber();
         $response = new Response();
         $request = Request::create('/api/v1/docs', 'GET');
-        $event = new ResponseEvent($this->kernelMock(), $request, HttpKernelInterface::MAIN_REQUEST, $response);
+        $event = new ResponseEvent($this->kernel, $request, HttpKernelInterface::MAIN_REQUEST, $response);
 
-        $subscriber->onKernelResponse($event);
+        $this->subscriber->onKernelResponse($event);
 
         self::assertSame('nosniff', $response->headers->get('X-Content-Type-Options'));
         self::assertSame('DENY', $response->headers->get('X-Frame-Options'));
@@ -30,12 +45,11 @@ final class SecurityHeadersSubscriberTest extends TestCase
 
     public function testDoesNotAddHeadersForNonApiResponses(): void
     {
-        $subscriber = new SecurityHeadersSubscriber();
         $response = new Response();
         $request = Request::create('/health', 'GET');
-        $event = new ResponseEvent($this->kernelMock(), $request, HttpKernelInterface::MAIN_REQUEST, $response);
+        $event = new ResponseEvent($this->kernel, $request, HttpKernelInterface::MAIN_REQUEST, $response);
 
-        $subscriber->onKernelResponse($event);
+        $this->subscriber->onKernelResponse($event);
 
         self::assertFalse($response->headers->has('X-Content-Type-Options'));
         self::assertFalse($response->headers->has('X-Frame-Options'));
@@ -47,12 +61,11 @@ final class SecurityHeadersSubscriberTest extends TestCase
 
     public function testAddsHstsWhenRequestIsSecure(): void
     {
-        $subscriber = new SecurityHeadersSubscriber();
         $response = new Response();
         $request = Request::create('/api/v1/docs', 'GET', [], [], [], ['HTTPS' => 'on']);
-        $event = new ResponseEvent($this->kernelMock(), $request, HttpKernelInterface::MAIN_REQUEST, $response);
+        $event = new ResponseEvent($this->kernel, $request, HttpKernelInterface::MAIN_REQUEST, $response);
 
-        $subscriber->onKernelResponse($event);
+        $this->subscriber->onKernelResponse($event);
 
         self::assertSame('max-age=31536000; includeSubDomains', $response->headers->get('Strict-Transport-Security'));
     }
@@ -63,7 +76,7 @@ final class SecurityHeadersSubscriberTest extends TestCase
         $response = new Response();
         $response->headers->set('Access-Control-Expose-Headers', 'ETag');
         $request = Request::create('/api/v1/docs', 'GET');
-        $event = new ResponseEvent($this->kernelMock(), $request, HttpKernelInterface::MAIN_REQUEST, $response);
+        $event = new ResponseEvent($this->kernel, $request, HttpKernelInterface::MAIN_REQUEST, $response);
 
         $subscriber->onKernelResponse($event);
 
@@ -79,20 +92,10 @@ final class SecurityHeadersSubscriberTest extends TestCase
         $response = new Response();
         $response->headers->set('Access-Control-Expose-Headers', 'ETag');
         $request = Request::create('/api/v1/docs', 'GET');
-        $event = new ResponseEvent($this->kernelMock(), $request, HttpKernelInterface::MAIN_REQUEST, $response);
+        $event = new ResponseEvent($this->kernel, $request, HttpKernelInterface::MAIN_REQUEST, $response);
 
         $subscriber->onKernelResponse($event);
 
         self::assertSame('ETag', $response->headers->get('Access-Control-Expose-Headers'));
-    }
-
-    private function kernelMock(): HttpKernelInterface
-    {
-        return new class implements HttpKernelInterface {
-            public function handle(Request $request, int $type = self::MAIN_REQUEST, bool $catch = true): Response
-            {
-                return new Response();
-            }
-        };
     }
 }
