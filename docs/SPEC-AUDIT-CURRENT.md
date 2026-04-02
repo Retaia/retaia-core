@@ -75,17 +75,8 @@ Rule:
 ## ReflectionClass Test Inventory
 
 Status:
-- No active runtime finding.
-- This is test-structure debt: these tests still depend on `ReflectionClass` or `newInstanceWithoutConstructor()`.
-
-Files currently using reflection in tests:
-- [`tests/Unit/Application/ApplicationResultObjectsSmokeTest.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/tests/Unit/Application/ApplicationResultObjectsSmokeTest.php)
-- [`tests/Unit/Controller/AgentControllerTest.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/tests/Unit/Controller/AgentControllerTest.php)
-- [`tests/Unit/Controller/AuthCurrentSessionResolverTest.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/tests/Unit/Controller/AuthCurrentSessionResolverTest.php)
-- [`tests/Unit/Controller/ControllerInstantiationTrait.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/tests/Unit/Controller/ControllerInstantiationTrait.php)
-- [`tests/Unit/Controller/DeviceControllerTest.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/tests/Unit/Controller/DeviceControllerTest.php)
-- [`tests/Unit/Controller/JobControllerTest.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/tests/Unit/Controller/JobControllerTest.php)
-- [`tests/Unit/Ingest/Service/IngestStableFileEnqueueServiceTest.php`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/tests/Unit/Ingest/Service/IngestStableFileEnqueueServiceTest.php)
+- No active reflection-based test instantiation findings.
+- Current unit tests no longer rely on `ReflectionClass` or `newInstanceWithoutConstructor()`.
 
 Rule:
 - Prefer constructor-based test setup or dedicated test builders/stubs.

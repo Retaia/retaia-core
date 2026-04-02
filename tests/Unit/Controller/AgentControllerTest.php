@@ -8,7 +8,6 @@ use App\Api\Service\AgentSignature\AgentRequestSignatureVerifier;
 use App\Api\Service\AgentSignature\AgentSignatureNonceRepositoryInterface;
 use App\Api\Service\AgentSignature\SignedAgentMessageCanonicalizer;
 use App\Api\Service\SignedAgentRequestValidator;
-use App\Application\Agent\RegisterAgentEndpointHandler;
 use App\Controller\Api\AgentController;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
@@ -30,7 +29,6 @@ final class AgentControllerTest extends TestCase
 
         $controller = $this->controller(AgentController::class, [
             'translator' => $this->translator(),
-            'registerAgentEndpointHandler' => (new \ReflectionClass(RegisterAgentEndpointHandler::class))->newInstanceWithoutConstructor(),
             'signedAgentRequestValidator' => $validator,
         ]);
 

@@ -7,9 +7,7 @@ use App\Api\Service\AgentSignature\AgentPublicKeyRepositoryInterface;
 use App\Api\Service\AgentSignature\AgentRequestSignatureVerifier;
 use App\Api\Service\AgentSignature\AgentSignatureNonceRepositoryInterface;
 use App\Api\Service\AgentSignature\SignedAgentMessageCanonicalizer;
-use App\Api\Service\IdempotencyService;
 use App\Api\Service\SignedAgentRequestValidator;
-use App\Application\Job\JobEndpointsHandler;
 use App\Controller\Api\JobController;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -31,8 +29,6 @@ final class JobControllerTest extends TestCase
         );
 
         $controller = $this->controller(JobController::class, [
-            'idempotency' => (new \ReflectionClass(IdempotencyService::class))->newInstanceWithoutConstructor(),
-            'jobEndpointsHandler' => (new \ReflectionClass(JobEndpointsHandler::class))->newInstanceWithoutConstructor(),
             'logger' => $this->createMock(LoggerInterface::class),
             'translator' => $this->translator(),
             'signedAgentRequestValidator' => $validator,

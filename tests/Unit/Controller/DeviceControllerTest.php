@@ -4,11 +4,9 @@ namespace App\Tests\Unit\Controller;
 
 use App\Application\Auth\Port\AuthenticatedUserGateway;
 use App\Application\Auth\ResolveAuthenticatedUserHandler;
-use App\Application\AuthClient\CompleteDeviceApprovalHandler;
 use App\Controller\DeviceController;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class DeviceControllerTest extends TestCase
@@ -24,9 +22,7 @@ final class DeviceControllerTest extends TestCase
                     return null;
                 }
             }),
-            'completeDeviceApprovalHandler' => (new \ReflectionClass(CompleteDeviceApprovalHandler::class))->newInstanceWithoutConstructor(),
             'translator' => $this->translator(),
-            'twoFactorChallengeRateLimiter' => (new \ReflectionClass(RateLimiterFactory::class))->newInstanceWithoutConstructor(),
         ]);
 
         $response = $controller->info(Request::create('/device?user_code=abc', 'GET'));
@@ -45,9 +41,7 @@ final class DeviceControllerTest extends TestCase
                     return null;
                 }
             }),
-            'completeDeviceApprovalHandler' => (new \ReflectionClass(CompleteDeviceApprovalHandler::class))->newInstanceWithoutConstructor(),
             'translator' => $this->translator(),
-            'twoFactorChallengeRateLimiter' => (new \ReflectionClass(RateLimiterFactory::class))->newInstanceWithoutConstructor(),
         ]);
 
         self::assertSame(401, $controller->approve(Request::create('/device', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{}'))->getStatusCode());
