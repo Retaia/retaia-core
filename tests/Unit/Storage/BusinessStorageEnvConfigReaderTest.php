@@ -18,7 +18,7 @@ final class BusinessStorageEnvConfigReaderTest extends TestCase
 
     public function testReadAllReturnsNormalizedLocalConfig(): void
     {
-        $root = sys_get_temp_dir().'/retaia-storage-reader-local-'.bin2hex(random_bytes(4));
+        $root = '/tmp/retaia-storage-reader-local';
         $this->configureBusinessStorages([[
             'id' => 'nas-main',
             'root_path' => 'var/storage/main',
@@ -57,7 +57,7 @@ final class BusinessStorageEnvConfigReaderTest extends TestCase
             'smb_version_max' => 'SMB3_11',
         ]], 'nas-smb');
 
-        $reader = new BusinessStorageEnvConfigReader(sys_get_temp_dir());
+        $reader = new BusinessStorageEnvConfigReader('/tmp/retaia-storage-reader-smb');
         $configs = $reader->readAll();
 
         self::assertCount(1, $configs);
@@ -75,7 +75,7 @@ final class BusinessStorageEnvConfigReaderTest extends TestCase
 
     public function testResolveDefaultStorageIdRejectsUnknownConfiguredDefault(): void
     {
-        $root = sys_get_temp_dir().'/retaia-storage-reader-default-'.bin2hex(random_bytes(4));
+        $root = '/tmp/retaia-storage-reader-default';
         $this->configureBusinessStorages([[
             'id' => 'nas-main',
             'root_path' => $root,
@@ -101,7 +101,7 @@ final class BusinessStorageEnvConfigReaderTest extends TestCase
         $_SERVER['APP_STORAGE_IDS'] = 'nas-main,nas_main';
         putenv('APP_STORAGE_IDS=nas-main,nas_main');
 
-        $reader = new BusinessStorageEnvConfigReader(sys_get_temp_dir());
+        $reader = new BusinessStorageEnvConfigReader('/tmp/retaia-storage-reader-duplicate');
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('collide once normalized');
