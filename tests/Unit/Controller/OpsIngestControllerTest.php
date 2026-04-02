@@ -10,8 +10,9 @@ use App\Controller\Api\OpsIngestController;
 use App\Entity\Asset;
 use App\Ingest\Repository\IngestDiagnosticsRepository;
 use App\Job\Repository\JobRepository;
-use Doctrine\DBAL\Connection;
 use App\Storage\BusinessStorageRegistryInterface;
+use App\Tests\Support\ProcessingJobSchemaTrait;
+use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -21,6 +22,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 final class OpsIngestControllerTest extends TestCase
 {
     use ControllerInstantiationTrait;
+    use ProcessingJobSchemaTrait;
 
     public function testDiagnosticsReturnsForbiddenWhenActorIsNotAdmin(): void
     {
@@ -111,28 +113,11 @@ final class OpsIngestControllerTest extends TestCase
     private function jobRepositoryWithExistingExtractFactsJob(string $assetUuid): JobRepository
     {
         $connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]);
-        $connection->executeStatement(<<<'SQL'
-CREATE TABLE processing_job (
-    id TEXT PRIMARY KEY,
-    asset_uuid TEXT NOT NULL,
-    job_type TEXT NOT NULL,
-    state_version TEXT NOT NULL,
-    status TEXT NOT NULL,
-    correlation_id TEXT DEFAULT NULL,
-    claimed_by TEXT DEFAULT NULL,
-    claimed_at TEXT DEFAULT NULL,
-    lock_token TEXT DEFAULT NULL,
-    fencing_token INTEGER DEFAULT NULL,
-    locked_until TEXT DEFAULT NULL,
-    completed_by TEXT DEFAULT NULL,
-    completed_at TEXT DEFAULT NULL,
-    failed_by TEXT DEFAULT NULL,
-    failed_at TEXT DEFAULT NULL,
-    result_payload TEXT DEFAULT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-)
-SQL);
+        $this->createProcessingJobTable($connection, [
+            'id_length' => 255,
+            'state_version_length' => 255,
+            'actor_length' => 255,
+        ]);
         $connection->executeStatement('CREATE UNIQUE INDEX uniq_processing_job_asset_type ON processing_job (asset_uuid, job_type)');
         $connection->insert('processing_job', [
             'id' => 'existing-extract-facts',
