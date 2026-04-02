@@ -2,8 +2,8 @@
 
 namespace App\Security;
 
+use App\Controller\Api\ApiErrorResponseFactory;
 use Psr\Log\LoggerInterface;
-use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Security\Core\Exception\AccessDeniedException;
@@ -29,11 +29,9 @@ final class ApiAccessDeniedHandler implements AccessDeniedHandlerInterface
             'method' => $request->getMethod(),
         ]);
 
-        return new JsonResponse(
-            [
-                'code' => 'FORBIDDEN_SCOPE',
-                'message' => $this->translator->trans('auth.error.forbidden_scope'),
-            ],
+        return ApiErrorResponseFactory::create(
+            'FORBIDDEN_SCOPE',
+            $this->translator->trans('auth.error.forbidden_scope'),
             Response::HTTP_FORBIDDEN
         );
     }
