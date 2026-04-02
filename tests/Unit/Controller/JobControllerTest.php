@@ -26,6 +26,7 @@ final class JobControllerTest extends TestCase
             $this->createMock(AgentSignatureNonceRepositoryInterface::class),
             new SignedAgentMessageCanonicalizer(),
             $this->createMock(AgentRuntimeRepositoryInterface::class),
+            $this->translator(),
         );
 
         $controller = $this->controller(JobController::class, [

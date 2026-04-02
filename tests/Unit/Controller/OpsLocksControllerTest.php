@@ -17,14 +17,14 @@ final class OpsLocksControllerTest extends TestCase
 {
     public function testLocksReturnsForbiddenWhenActorIsNotAdmin(): void
     {
-        $controller = new OpsLocksController($this->forbiddenAdminGuard(), $this->repositoryWithSnapshot());
+        $controller = new OpsLocksController($this->forbiddenAdminGuard(), $this->repositoryWithSnapshot(), $this->translator());
 
         self::assertSame(403, $controller->locks(new Request())->getStatusCode());
     }
 
     public function testLocksReturnsSnapshot(): void
     {
-        $controller = new OpsLocksController($this->allowAdminGuard(), $this->repositoryWithSnapshot());
+        $controller = new OpsLocksController($this->allowAdminGuard(), $this->repositoryWithSnapshot(), $this->translator());
 
         $response = $controller->locks(new Request(['asset_uuid' => 'asset-1', 'lock_type' => 'move', 'limit' => '10', 'offset' => '0']));
         $payload = json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR);
@@ -36,7 +36,7 @@ final class OpsLocksControllerTest extends TestCase
 
     public function testRecoverLocksValidatesPayload(): void
     {
-        $controller = new OpsLocksController($this->allowAdminGuard(), $this->repositoryWithSnapshot());
+        $controller = new OpsLocksController($this->allowAdminGuard(), $this->repositoryWithSnapshot(), $this->translator());
 
         $invalidMinutes = Request::create('/', 'POST', [], [], [], [], json_encode(['stale_lock_minutes' => '30'], JSON_THROW_ON_ERROR));
         self::assertSame(400, $controller->recoverLocks($invalidMinutes)->getStatusCode());
@@ -47,7 +47,7 @@ final class OpsLocksControllerTest extends TestCase
 
     public function testRecoverLocksReturnsRecoverySummary(): void
     {
-        $controller = new OpsLocksController($this->allowAdminGuard(), $this->repositoryForRecover());
+        $controller = new OpsLocksController($this->allowAdminGuard(), $this->repositoryForRecover(), $this->translator());
         $request = Request::create('/', 'POST', [], [], [], [], json_encode(['stale_lock_minutes' => 30, 'dry_run' => false], JSON_THROW_ON_ERROR));
 
         $response = $controller->recoverLocks($request);
@@ -61,7 +61,7 @@ final class OpsLocksControllerTest extends TestCase
 
     public function testRecoverLocksSupportsDryRun(): void
     {
-        $controller = new OpsLocksController($this->allowAdminGuard(), $this->repositoryForDryRun());
+        $controller = new OpsLocksController($this->allowAdminGuard(), $this->repositoryForDryRun(), $this->translator());
         $request = Request::create('/', 'POST', [], [], [], [], json_encode(['stale_lock_minutes' => 30, 'dry_run' => true], JSON_THROW_ON_ERROR));
 
         $response = $controller->recoverLocks($request);

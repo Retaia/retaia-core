@@ -32,9 +32,9 @@ final class AssetWorkflowControllerTest extends TestCase
     {
         $controller = new AssetWorkflowController(
             $this->assetEndpointsHandler(),
-            new AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class)),
+            new AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class), $this->translator()),
             $this->responder(),
-            new IdempotencyService(DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]))
+            new IdempotencyService(DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]), $this->translator())
         );
 
         $response = $controller->reprocess('asset-1', Request::create('/api/v1/assets/asset-1/reprocess', 'POST'));
@@ -81,12 +81,17 @@ final class AssetWorkflowControllerTest extends TestCase
 
     private function responder(): AssetHttpResponder
     {
+        return new AssetHttpResponder(
+            $this->translator(),
+            new AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class), $this->translator())
+        );
+    }
+
+    private function translator(): TranslatorInterface
+    {
         $translator = $this->createStub(TranslatorInterface::class);
         $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
 
-        return new AssetHttpResponder(
-            $translator,
-            new AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class))
-        );
+        return $translator;
     }
 }

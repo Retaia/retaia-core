@@ -98,7 +98,7 @@ final class AssetReadControllerTest extends TestCase
     {
         return new AssetHttpResponder(
             $this->translator(),
-            new \App\Api\Service\AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class))
+            new \App\Api\Service\AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class), $this->translator())
         );
     }
 

@@ -25,6 +25,7 @@ final class AgentControllerTest extends TestCase
             $this->createMock(AgentSignatureNonceRepositoryInterface::class),
             new SignedAgentMessageCanonicalizer(),
             $this->createMock(AgentRuntimeRepositoryInterface::class),
+            $this->translator(),
         );
 
         $controller = $this->controller(AgentController::class, [

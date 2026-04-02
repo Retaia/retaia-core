@@ -15,7 +15,7 @@ final class AssetHttpResponderTest extends TestCase
     {
         $responder = new AssetHttpResponder(
             $this->translator(),
-            new AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class))
+            new AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class), $this->translator())
         );
 
         $response = $responder->patchResult(new AssetEndpointResult(AssetEndpointResult::STATUS_SUCCESS, [
@@ -31,7 +31,7 @@ final class AssetHttpResponderTest extends TestCase
     {
         $responder = new AssetHttpResponder(
             $this->translator(),
-            new AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class))
+            new AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class), $this->translator())
         );
 
         $response = $responder->assetActionResult(new AssetEndpointResult(AssetEndpointResult::STATUS_STATE_CONFLICT));

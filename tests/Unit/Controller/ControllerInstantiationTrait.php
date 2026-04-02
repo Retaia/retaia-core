@@ -130,6 +130,7 @@ trait ControllerInstantiationTrait
                 $this->property($properties, 'assets', $this->createMock(AssetRepositoryInterface::class)),
                 $this->property($properties, 'jobs', new JobRepository($this->createStub(Connection::class), $this->createStub(BusinessStorageRegistryInterface::class))),
                 $this->property($properties, 'storageRegistry', $this->createStub(BusinessStorageRegistryInterface::class)),
+                $this->property($properties, 'translator', $this->translatorStub()),
             ),
             \App\Controller\DeviceController::class => new \App\Controller\DeviceController(
                 $this->property($properties, 'resolveAuthenticatedUserHandler', $this->defaultResolveAuthenticatedUserHandler()),
@@ -138,7 +139,7 @@ trait ControllerInstantiationTrait
                 $this->property($properties, 'twoFactorChallengeRateLimiter', $this->defaultNoLimitRateLimiterFactory()),
             ),
             JobController::class => new JobController(
-                $this->property($properties, 'idempotency', new IdempotencyService($this->createMock(Connection::class))),
+                $this->property($properties, 'idempotency', new IdempotencyService($this->createMock(Connection::class), $this->translatorStub())),
                 $this->property($properties, 'jobEndpointsHandler', $this->defaultJobEndpointsHandler()),
                 $this->property($properties, 'logger', $this->createMock(LoggerInterface::class)),
                 $this->property($properties, 'translator', $this->translatorStub()),
@@ -241,6 +242,7 @@ trait ControllerInstantiationTrait
         return new OpsReadinessReportBuilder(
             $this->createMock(Connection::class),
             $this->createStub(BusinessStorageRegistryInterface::class),
+            $this->translatorStub(),
         );
     }
 
@@ -252,6 +254,7 @@ trait ControllerInstantiationTrait
             $this->createMock(AgentSignatureNonceRepositoryInterface::class),
             new SignedAgentMessageCanonicalizer(),
             $this->createMock(AgentRuntimeRepositoryInterface::class),
+            $this->translatorStub(),
         );
     }
 

@@ -139,6 +139,22 @@ These items are not active runtime/spec regressions. They are the next code-qual
   - direct `JsonResponse` for simple success payloads
 - Keep this boundary explicit and avoid introducing a global serializer abstraction unless payload complexity genuinely requires it.
 
+### 11. Keep API localization coverage explicit
+
+- The API runtime now supports `en` / `fr` locale resolution from `Accept-Language`, with `en` fallback.
+- Error and operator-facing API messages should stay translated through message catalog keys, not hard-coded English strings.
+- This includes:
+  - centralized exception envelopes from `src/Http/ApiExceptionResponseSubscriber.php`
+  - controller validation errors for workflow, derived, jobs, ops ingest, and ops locks
+  - service-level API responses from precondition, idempotency, and signed-agent validation helpers
+  - docs and readiness messages that are user-visible over HTTP
+- Keep language-neutral contract payloads as raw data:
+  - booleans
+  - enum/status values
+  - identifiers
+  - timestamps
+- Do not translate stable machine-facing field names or business status enums.
+
 ## Persistence Architecture Rule
 
 Target direction: maximize Doctrine ORM usage and reduce DBAL/manual persistence to the smallest possible surface.

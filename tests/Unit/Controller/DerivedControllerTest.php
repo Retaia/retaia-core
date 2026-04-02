@@ -117,6 +117,7 @@ final class DerivedControllerTest extends TestCase
             new AgentSignatureNonceRepository($connection),
             new SignedAgentMessageCanonicalizer(),
             new AgentRuntimeRepository($connection),
+            $this->translator(),
         );
 
         return new DerivedController(
@@ -144,7 +145,7 @@ final class DerivedControllerTest extends TestCase
                 public function save(Asset $asset): void
                 {
                 }
-            }),
+            }, $this->translator()),
             $validator,
         );
     }

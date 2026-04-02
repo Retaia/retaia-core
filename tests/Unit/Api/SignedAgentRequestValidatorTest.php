@@ -13,6 +13,7 @@ use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class SignedAgentRequestValidatorTest extends TestCase
 {
@@ -49,6 +50,7 @@ final class SignedAgentRequestValidatorTest extends TestCase
             $this->nonceRepository(),
             new SignedAgentMessageCanonicalizer(),
             $this->runtimeRepository(),
+            $this->translator(),
         );
 
         $response = $validator->violationResponse($this->signedRequest());
@@ -67,6 +69,7 @@ final class SignedAgentRequestValidatorTest extends TestCase
             $this->nonceRepository(),
             new SignedAgentMessageCanonicalizer(),
             $this->runtimeRepository(),
+            $this->translator(),
         );
 
         self::assertNull($validator->violationResponse($this->signedRequest('nonce-1')));
@@ -94,6 +97,7 @@ final class SignedAgentRequestValidatorTest extends TestCase
             $this->nonceRepository(),
             new SignedAgentMessageCanonicalizer(),
             $this->runtimeRepository(),
+            $this->translator(),
         );
     }
 
@@ -146,6 +150,14 @@ final class SignedAgentRequestValidatorTest extends TestCase
     private static function fingerprint(): string
     {
         return 'ABCD1234EF567890ABCD1234EF567890ABCD1234';
+    }
+
+    private function translator(): TranslatorInterface
+    {
+        $translator = $this->createStub(TranslatorInterface::class);
+        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
+
+        return $translator;
     }
 }
 
