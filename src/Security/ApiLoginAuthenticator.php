@@ -28,14 +28,28 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
 {
     private const LOGIN_ROUTE = 'api_auth_login';
 
+    private ApiLoginRequestDataExtractor $requestDataExtractor;
+    private ApiLoginSecondFactorChallengeResponder $secondFactorChallengeResponder;
+
     public function __construct(
         private LoggerInterface $logger,
         private TranslatorInterface $translator,
         private TwoFactorService $twoFactorService,
         private UserAccessTokenService $userAccessTokenService,
         #[Autowire(service: 'limiter.auth_2fa_challenge')]
-        private RateLimiterFactory $twoFactorChallengeRateLimiter,
+        RateLimiterFactory $twoFactorChallengeRateLimiter,
+        ?ApiLoginRequestDataExtractor $requestDataExtractor = null,
+        ?ApiLoginSecondFactorAttemptLimiter $secondFactorAttemptLimiter = null,
+        ?ApiLoginSecondFactorChallengeResponder $secondFactorChallengeResponder = null,
     ) {
+        $this->requestDataExtractor = $requestDataExtractor ?? new ApiLoginRequestDataExtractor();
+        $attemptLimiter = $secondFactorAttemptLimiter ?? new ApiLoginSecondFactorAttemptLimiter($twoFactorChallengeRateLimiter, $translator);
+        $this->secondFactorChallengeResponder = $secondFactorChallengeResponder ?? new ApiLoginSecondFactorChallengeResponder(
+            $twoFactorService,
+            $attemptLimiter,
+            $translator,
+            $this->requestDataExtractor,
+        );
     }
 
     public function supports(Request $request): ?bool
@@ -46,18 +60,14 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
 
     public function authenticate(Request $request): Passport
     {
-        $payload = json_decode($request->getContent(), true);
-        if (!is_array($payload)) {
-            $payload = [];
-        }
-
-        $email = trim((string) ($payload['email'] ?? ''));
-        $password = (string) ($payload['password'] ?? '');
+        $credentials = $this->requestDataExtractor->credentials($request);
+        $email = $credentials['email'];
+        $password = $credentials['password'];
 
         if ($email === '' || $password === '') {
             $this->logger->info('auth.login.failed', [
                 'reason' => 'validation',
-                'email_hash' => $this->hashEmail($email),
+                'email_hash' => $this->requestDataExtractor->emailHash($request),
             ]);
 
             throw new CustomUserMessageAuthenticationException('VALIDATION_FAILED');
@@ -81,33 +91,10 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
             );
         }
 
-        if ($user instanceof User && $this->twoFactorService->isEnabled($user->getId())) {
-            $payload = json_decode($request->getContent(), true);
-            if (!is_array($payload)) {
-                $payload = [];
-            }
-            $otpCode = trim((string) ($payload['otp_code'] ?? ''));
-            $recoveryCode = trim((string) ($payload['recovery_code'] ?? ''));
-            if ($otpCode === '' && $recoveryCode === '') {
-                return new JsonResponse(
-                    ['code' => 'MFA_REQUIRED', 'message' => $this->translator->trans('auth.error.mfa_required')],
-                    Response::HTTP_UNAUTHORIZED
-                );
-            }
-
-            if (!$this->consumeSecondFactorAttemptRateLimit((string) $user->getId(), (string) ($request->getClientIp() ?? 'unknown'))) {
-                return $this->tooManySecondFactorAttemptsResponse();
-            }
-
-            $secondFactorOk = $otpCode !== ''
-                ? $this->twoFactorService->verifyLoginOtp($user->getId(), $otpCode)
-                : $this->twoFactorService->consumeRecoveryCode($user->getId(), $recoveryCode);
-
-            if (!$secondFactorOk) {
-                return new JsonResponse(
-                    ['code' => 'INVALID_2FA_CODE', 'message' => $this->translator->trans('auth.error.invalid_2fa_code')],
-                    Response::HTTP_UNAUTHORIZED
-                );
+        if ($user instanceof User) {
+            $secondFactorResponse = $this->secondFactorChallengeResponder->handle($request, $user);
+            if ($secondFactorResponse instanceof JsonResponse) {
+                return $secondFactorResponse;
             }
         }
 
@@ -118,15 +105,9 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
             );
         }
 
-        $payload = json_decode($request->getContent(), true);
-        if (!is_array($payload)) {
-            $payload = [];
-        }
-        $clientId = trim((string) ($payload['client_id'] ?? 'interactive-default'));
-        if ($clientId === '') {
-            $clientId = 'interactive-default';
-        }
-        $clientKind = trim((string) ($payload['client_kind'] ?? ClientKind::UI_WEB));
+        $client = $this->requestDataExtractor->client($request);
+        $clientId = $client['client_id'];
+        $clientKind = $client['client_kind'];
         if (!ClientKind::isInteractive($clientKind)) {
             return new JsonResponse(
                 ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.client_kind_required')],
@@ -151,7 +132,7 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
 
     public function onAuthenticationFailure(Request $request, AuthenticationException $exception): ?Response
     {
-        $emailHash = $this->emailHashFromRequest($request);
+        $emailHash = $this->requestDataExtractor->emailHash($request);
 
         if ($exception->getMessageKey() === 'VALIDATION_FAILED') {
             return new JsonResponse(
@@ -198,38 +179,6 @@ final class ApiLoginAuthenticator extends AbstractAuthenticator implements Authe
         return new JsonResponse(
             ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
             Response::HTTP_UNAUTHORIZED
-        );
-    }
-
-    private function emailHashFromRequest(Request $request): string
-    {
-        $payload = json_decode($request->getContent(), true);
-        if (!is_array($payload)) {
-            return $this->hashEmail('');
-        }
-
-        return $this->hashEmail((string) ($payload['email'] ?? ''));
-    }
-
-    private function hashEmail(string $email): string
-    {
-        return hash('sha256', mb_strtolower(trim($email)));
-    }
-
-    private function consumeSecondFactorAttemptRateLimit(string $userId, string $remoteAddress): bool
-    {
-        $limit = $this->twoFactorChallengeRateLimiter
-            ->create(hash('sha256', $userId.'|'.$remoteAddress.'|login'))
-            ->consume(1);
-
-        return $limit->isAccepted();
-    }
-
-    private function tooManySecondFactorAttemptsResponse(): JsonResponse
-    {
-        return new JsonResponse(
-            ['code' => 'TOO_MANY_ATTEMPTS', 'message' => $this->translator->trans('auth.error.too_many_2fa_attempts')],
-            Response::HTTP_TOO_MANY_REQUESTS
         );
     }
 }
