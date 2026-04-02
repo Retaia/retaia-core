@@ -84,6 +84,10 @@ These items are not active runtime/spec regressions. They are the next code-qual
   - application handlers do not execute SQL directly
   - only repositories/gateways touch persistence
   - business storage access only goes through the storage port
+- Current baseline guard should stay green:
+  - controllers do not import DBAL or run SQL directly
+  - `src/Application` does not import DBAL or run SQL directly
+  - `League\\Flysystem` stays confined to `src/Storage`
 
 ### 4. Add invariant/property-style tests
 
