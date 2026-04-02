@@ -27,8 +27,7 @@ The runtime/spec audit is green. The remaining work is structural: large classes
 
 ### Priority 3
 
-- [`src/Api/Service/AgentJobProjectionRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentJobProjectionRepository.php)
-  - still deserves narrower projection helpers once job ops reporting grows further
+- No active Priority 3 structural targets at the current audit depth.
 
 ## Cleanup Rule
 
