@@ -127,6 +127,7 @@ These items are not active runtime/spec regressions. They are the next code-qual
 - Keep controllers and responders on this single generator for error envelopes instead of building ad hoc `JsonResponse` payloads inline.
 - Unhandled exceptions on JSON API surfaces should also terminate through this same factory via `src/Http/ApiExceptionResponseSubscriber.php`.
 - Security authenticators, throttling responders, and admin guards should also terminate through this same factory.
+- Status at current audit depth: no remaining inline `new JsonResponse(['code' => ..., 'message' => ...])` in `src/`.
 - When adding a new API error response:
   - prefer `ApiErrorResponderTrait` for controller-local errors
   - or delegate through a domain responder such as `AuthApiErrorResponder`

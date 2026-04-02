@@ -34,6 +34,19 @@ final class AuthApiErrorResponderTest extends TestCase
         ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
     }
 
+    public function testSlowDownIncludesRetryInSeconds(): void
+    {
+        $responder = new AuthApiErrorResponder($this->translator());
+        $response = $responder->slowDown(9);
+
+        self::assertSame(429, $response->getStatusCode());
+        self::assertSame([
+            'code' => 'SLOW_DOWN',
+            'message' => 'auth.error.slow_down',
+            'retry_in_seconds' => 9,
+        ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
+    }
+
     private function translator(): TranslatorInterface
     {
         $translator = $this->createStub(TranslatorInterface::class);
