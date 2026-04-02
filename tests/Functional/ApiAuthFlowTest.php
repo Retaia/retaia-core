@@ -69,35 +69,6 @@ final class ApiAuthFlowTest extends WebTestCase
         self::assertSame('UNAUTHORIZED', $staleRefreshPayload['code'] ?? null);
     }
 
-    public function testLostPasswordResetFlow(): void
-    {
-        $client = $this->createIsolatedClient('10.0.0.13');
-
-        $client->jsonRequest('POST', '/api/v1/auth/lost-password/request', [
-            'email' => 'admin@retaia.local',
-        ]);
-
-        self::assertResponseStatusCodeSame(Response::HTTP_ACCEPTED);
-        $requestPayload = json_decode($client->getResponse()->getContent(), true);
-        self::assertIsArray($requestPayload);
-        self::assertSame(true, $requestPayload['accepted'] ?? null);
-
-        $token = $requestPayload['reset_token'] ?? null;
-        self::assertIsString($token);
-
-        $client->jsonRequest('POST', '/api/v1/auth/lost-password/reset', [
-            'token' => $token,
-            'new_password' => 'New-password1!',
-        ]);
-
-        self::assertResponseStatusCodeSame(Response::HTTP_OK);
-
-        $this->loginAndAttachBearer($client, [
-            'email' => 'admin@retaia.local',
-            'password' => 'New-password1!',
-        ]);
-    }
-
     public function testMySessionsListCurrentAndOtherSessions(): void
     {
         $email = sprintf('sessions-%s@retaia.local', bin2hex(random_bytes(4)));

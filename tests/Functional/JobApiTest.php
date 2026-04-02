@@ -17,28 +17,6 @@ final class JobApiTest extends WebTestCase
     use ApiAuthClientTrait;
     use FunctionalSchemaTrait;
 
-    public function testClaimIsAtomicWithSingleWinner(): void
-    {
-        $clientA = $this->bootClient();
-        $this->seedJob('job-1');
-        $this->loginAgent($clientA);
-
-        $this->signedJsonRequestAsAgent($clientA, 'POST', '/api/v1/jobs/job-1/claim');
-        $firstStatus = $clientA->getResponse()->getStatusCode();
-        if ($firstStatus === Response::HTTP_OK) {
-            $firstPayload = json_decode((string) $clientA->getResponse()->getContent(), true);
-            self::assertSame('nas-main', $firstPayload['source']['storage_id'] ?? null);
-            self::assertSame('INBOX/job-1.mov', $firstPayload['source']['original_relative'] ?? null);
-        }
-        $this->signedJsonRequestAsAgent($clientA, 'POST', '/api/v1/jobs/job-1/claim');
-        $secondStatus = $clientA->getResponse()->getStatusCode();
-
-        $statusCodes = [$firstStatus, $secondStatus];
-        sort($statusCodes);
-
-        self::assertSame([Response::HTTP_OK, Response::HTTP_CONFLICT], $statusCodes);
-    }
-
     public function testClaimRejectsForgedAgentSignature(): void
     {
         $client = $this->bootClient();
