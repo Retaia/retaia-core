@@ -46,6 +46,7 @@
         "phpstan/phpstan-symfony": "^2.0",
         "phpunit/phpunit": "^11",
         "symfony/browser-kit": "^7.4",
+        "symfony/web-profiler-bundle": "^7.4",
         "systemsdk/phpcpd": "^8.0"
     },
     "config": {
