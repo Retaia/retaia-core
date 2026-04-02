@@ -14,12 +14,6 @@ The runtime/spec audit is green. The remaining work is structural: large classes
 
 ### Priority 1
 
-- [`src/Storage/BusinessStorageRegistryFactory`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Storage/BusinessStorageRegistryFactory.php)
-  - still mixes env parsing, validation, backend selection, and per-driver construction
-  - next seams:
-    - `BusinessStorageEnvConfigReader` for env parsing and normalization
-    - `BusinessStorageDefinitionValidator` for required values and coercion
-    - per-driver builders behind a narrower factory map
 - [`src/Controller/Api/AssetController`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Controller/Api/AssetController.php)
   - still concentrates a wide asset HTTP surface that could be split by read, patch, workflow, and derived concerns
   - next seams:
@@ -36,6 +30,11 @@ The runtime/spec audit is green. The remaining work is structural: large classes
 
 ### Priority 2
 
+- [`src/Storage/BusinessStorageRegistryFactory`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Storage/BusinessStorageRegistryFactory.php)
+  - env parsing/validation is extracted, but the factory still keeps backend selection and per-driver construction
+  - next seams:
+    - narrower builder map per driver
+    - optional dedicated validator for driver-specific completeness checks if SMB/local setup grows again
 - [`src/Workflow/Service/BatchWorkflowService`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Workflow/Service/BatchWorkflowService.php)
   - improved already, but still carries orchestration for move preview/apply, decision preview/apply, and purge/report flows
   - next seams:
