@@ -59,6 +59,35 @@ final class ArchitectureConstraintsTest extends TestCase
         self::assertSame([], $violations, implode(PHP_EOL, $violations));
     }
 
+    public function testInlineCodeMessageJsonErrorEnvelopesDoNotReturnInSrc(): void
+    {
+        $violations = [];
+
+        foreach ($this->phpFilesIn('/src') as $file) {
+            $contents = file_get_contents($file); // @unit-purity-ignore
+            if (!is_string($contents)) {
+                $violations[] = $this->relativePath($file).': unreadable';
+
+                continue;
+            }
+
+            if (!str_contains($contents, 'new JsonResponse(')) {
+                continue;
+            }
+
+            if (
+                str_contains($contents, "new JsonResponse([\n            'code' =>")
+                && str_contains($contents, "'message' =>")
+            ) {
+                $violations[] = sprintf('%s rebuilds an inline code/message JsonResponse envelope', $this->relativePath($file));
+            }
+        }
+
+        sort($violations);
+
+        self::assertSame([], $violations, implode(PHP_EOL, $violations));
+    }
+
     /**
      * @param list<string> $patterns
      * @param null|callable(string): bool $filter

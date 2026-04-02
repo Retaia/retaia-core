@@ -19,10 +19,7 @@ final class AssetHttpResponder
     public function listResult(AssetEndpointResult $result): JsonResponse
     {
         if ($result->status() === AssetEndpointResult::STATUS_VALIDATION_FAILED) {
-            return new JsonResponse([
-                'code' => 'VALIDATION_FAILED',
-                'message' => $this->translator->trans('asset.error.invalid_list_query'),
-            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            return $this->errorResponse('VALIDATION_FAILED', 'asset.error.invalid_list_query', Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         if ($result->status() === AssetEndpointResult::STATUS_FORBIDDEN_SCOPE) {
@@ -54,16 +51,10 @@ final class AssetHttpResponder
             return $this->notFound();
         }
         if ($result->status() === AssetEndpointResult::STATUS_VALIDATION_FAILED) {
-            return new JsonResponse([
-                'code' => 'VALIDATION_FAILED',
-                'message' => $this->translator->trans('asset.error.invalid_patch_payload'),
-            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            return $this->errorResponse('VALIDATION_FAILED', 'asset.error.invalid_patch_payload', Response::HTTP_UNPROCESSABLE_ENTITY);
         }
         if ($result->status() === AssetEndpointResult::STATUS_PURGED_READ_ONLY) {
-            return new JsonResponse([
-                'code' => 'STATE_CONFLICT',
-                'message' => $this->translator->trans('asset.error.purged_read_only'),
-            ], Response::HTTP_GONE);
+            return $this->errorResponse('STATE_CONFLICT', 'asset.error.purged_read_only', Response::HTTP_GONE);
         }
         if ($result->status() === AssetEndpointResult::STATUS_STATE_CONFLICT) {
             return $this->stateConflict();
@@ -95,34 +86,22 @@ final class AssetHttpResponder
 
     public function forbiddenActor(): JsonResponse
     {
-        return new JsonResponse([
-            'code' => 'FORBIDDEN_ACTOR',
-            'message' => $this->translator->trans('auth.error.forbidden_actor'),
-        ], Response::HTTP_FORBIDDEN);
+        return $this->errorResponse('FORBIDDEN_ACTOR', 'auth.error.forbidden_actor', Response::HTTP_FORBIDDEN);
     }
 
     public function forbiddenScope(): JsonResponse
     {
-        return new JsonResponse([
-            'code' => 'FORBIDDEN_SCOPE',
-            'message' => $this->translator->trans('auth.error.forbidden_scope'),
-        ], Response::HTTP_FORBIDDEN);
+        return $this->errorResponse('FORBIDDEN_SCOPE', 'auth.error.forbidden_scope', Response::HTTP_FORBIDDEN);
     }
 
     private function notFound(): JsonResponse
     {
-        return new JsonResponse([
-            'code' => 'NOT_FOUND',
-            'message' => $this->translator->trans('asset.error.not_found'),
-        ], Response::HTTP_NOT_FOUND);
+        return $this->errorResponse('NOT_FOUND', 'asset.error.not_found', Response::HTTP_NOT_FOUND);
     }
 
     private function stateConflict(): JsonResponse
     {
-        return new JsonResponse([
-            'code' => 'STATE_CONFLICT',
-            'message' => $this->translator->trans('asset.error.state_conflict'),
-        ], Response::HTTP_CONFLICT);
+        return $this->errorResponse('STATE_CONFLICT', 'asset.error.state_conflict', Response::HTTP_CONFLICT);
     }
 
     /**
@@ -134,5 +113,10 @@ final class AssetHttpResponder
         $response->headers->set('Cache-Control', 'private, no-store');
 
         return $response;
+    }
+
+    private function errorResponse(string $code, string $messageKey, int $status): JsonResponse
+    {
+        return ApiErrorResponseFactory::create($code, $this->translator->trans($messageKey), $status);
     }
 }
