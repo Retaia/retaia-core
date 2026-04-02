@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Controller;
 
+use App\Tests\Support\TranslatorStubTrait;
 use App\Api\Service\AssetRequestPreconditionService;
 use App\Application\Auth\Port\AgentActorGateway;
 use App\Application\Auth\Port\AuthenticatedUserGateway;
@@ -38,12 +39,14 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class WorkflowControllerTest extends TestCase
 {
+    use TranslatorStubTrait;
+
     public function testPurgeBatchReturnsForbiddenForAgentActor(): void
     {
         $repo = new InMemoryAssetRepo([$this->asset('a2', AssetState::REJECTED)]);
         $connection = $this->createMock(Connection::class);
         $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false), $this->batchMoveReports(), $this->purgeStorage());
-        $controller = $this->controller($workflows, $repo, $this->idempotencyPassthrough(), $this->translator(), true, null, false);
+        $controller = $this->controller($workflows, $repo, $this->idempotencyPassthrough(), $this->translatorStub(), true, null, false);
 
         $request = Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{"asset_uuids":["a2"],"confirm":true}');
         $request->headers->set('Idempotency-Key', 'idem-batch-agent');
@@ -56,7 +59,7 @@ final class WorkflowControllerTest extends TestCase
         $repo = new InMemoryAssetRepo([$this->asset('a2', AssetState::REJECTED)]);
         $connection = $this->createMock(Connection::class);
         $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false), $this->batchMoveReports(), $this->purgeStorage());
-        $controller = $this->controller($workflows, $repo, $this->idempotencyPassthrough(), $this->translator(), false, null, false);
+        $controller = $this->controller($workflows, $repo, $this->idempotencyPassthrough(), $this->translatorStub(), false, null, false);
 
         $request = Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{"asset_uuids":[],"confirm":false}');
         $request->headers->set('Idempotency-Key', 'idem-batch-invalid');
@@ -74,7 +77,7 @@ final class WorkflowControllerTest extends TestCase
         $derivedFiles = $this->derivedFiles();
         $derivedFiles->method('listStoragePathsByAsset')->willReturn([]);
         $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false), $this->batchMoveReports(), new AssetPurgeStorageService($derivedFiles));
-        $controller = $this->controller($workflows, $repo, $this->idempotencyPassthrough(), $this->translator(), false, null, false);
+        $controller = $this->controller($workflows, $repo, $this->idempotencyPassthrough(), $this->translatorStub(), false, null, false);
 
         $request = Request::create('/x', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{"asset_uuids":["a2","a3"],"confirm":true}');
         $request->headers->set('Idempotency-Key', 'idem-batch-ok');
@@ -98,7 +101,7 @@ final class WorkflowControllerTest extends TestCase
         $derivedFiles->method('listStoragePathsByAsset')->willReturn([]);
         $workflows = new BatchWorkflowService($repo, new AssetStateMachine(), $connection, $this->locks(false), $this->batchMoveReports(), new AssetPurgeStorageService($derivedFiles));
         $idempotency = $this->idempotencyPassthrough();
-        $translator = $this->translator();
+        $translator = $this->translatorStub();
         $controller = $this->controller($workflows, $repo, $idempotency, $translator, false, null, false);
         self::assertSame(Response::HTTP_NOT_FOUND, $controller->previewPurge('missing')->getStatusCode());
         $purgeMissingRequest = Request::create('/x', 'POST');
@@ -121,16 +124,9 @@ final class WorkflowControllerTest extends TestCase
         $connection->method('fetchAssociative')->willReturn(false);
         $connection->method('insert')->willReturn(1);
 
-        return new IdempotencyService($connection, $this->translator());
+        return new IdempotencyService($connection, $this->translatorStub());
     }
 
-    private function translator(): TranslatorInterface
-    {
-        $translator = $this->createStub(TranslatorInterface::class);
-        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
-
-        return $translator;
-    }
 
     private function asset(string $uuid, AssetState $state): Asset
     {

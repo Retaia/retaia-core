@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Controller;
 
+use App\Tests\Support\TranslatorStubTrait;
 use App\Api\Service\AssetRequestPreconditionService;
 use App\Api\Service\IdempotencyService;
 use App\Application\Asset\AssetEndpointsHandler;
@@ -24,17 +25,18 @@ use App\Controller\Api\AssetWorkflowController;
 use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class AssetWorkflowControllerTest extends TestCase
 {
+    use TranslatorStubTrait;
+
     public function testReprocessRequiresIdempotencyKey(): void
     {
         $controller = new AssetWorkflowController(
             $this->assetEndpointsHandler(),
-            new AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class), $this->translator()),
+            new AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class), $this->translatorStub()),
             $this->responder(),
-            new IdempotencyService(DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]), $this->translator())
+            new IdempotencyService(DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]), $this->translatorStub())
         );
 
         $response = $controller->reprocess('asset-1', Request::create('/api/v1/assets/asset-1/reprocess', 'POST'));
@@ -82,16 +84,9 @@ final class AssetWorkflowControllerTest extends TestCase
     private function responder(): AssetHttpResponder
     {
         return new AssetHttpResponder(
-            $this->translator(),
-            new AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class), $this->translator())
+            $this->translatorStub(),
+            new AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class), $this->translatorStub())
         );
     }
 
-    private function translator(): TranslatorInterface
-    {
-        $translator = $this->createStub(TranslatorInterface::class);
-        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
-
-        return $translator;
-    }
 }

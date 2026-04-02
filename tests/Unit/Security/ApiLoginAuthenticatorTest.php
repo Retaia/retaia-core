@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Security;
 
+use App\Tests\Support\TranslatorStubTrait;
 use App\Auth\UserAccessTokenService;
 use App\Auth\UserAccessJwtService;
 use App\Auth\UserAuthSessionRepository;
@@ -27,10 +28,10 @@ use Symfony\Component\Security\Core\Exception\TooManyLoginAttemptsAuthentication
 use Symfony\Component\Security\Core\User\UserInterface;
 use Symfony\Component\Security\Http\Authenticator\Passport\Badge\UserBadge;
 use Symfony\Component\Security\Http\Authenticator\Passport\Credentials\PasswordCredentials;
-use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class ApiLoginAuthenticatorTest extends TestCase
 {
+    use TranslatorStubTrait;
     use UserAuthSessionEntityManagerTrait;
 
     public function testSupportsOnlyPostLoginRoute(): void
@@ -195,13 +196,6 @@ final class ApiLoginAuthenticatorTest extends TestCase
         self::assertSame('UNAUTHORIZED', (string) json_decode((string) $response->getContent(), true)['code']);
     }
 
-    private function translator(): TranslatorInterface
-    {
-        $translator = $this->createStub(TranslatorInterface::class);
-        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
-
-        return $translator;
-    }
 
     private function authenticator(): ApiLoginAuthenticator
     {
@@ -220,7 +214,7 @@ final class ApiLoginAuthenticatorTest extends TestCase
 
         return new ApiLoginAuthenticator(
             new NullLogger(),
-            $this->translator(),
+            $this->translatorStub(),
             $twoFactor,
             $userTokens,
             new RateLimiterFactory([

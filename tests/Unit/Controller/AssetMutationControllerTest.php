@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Controller;
 
+use App\Tests\Support\TranslatorStubTrait;
 use App\Api\Service\AssetRequestPreconditionService;
 use App\Application\Asset\AssetEndpointsHandler;
 use App\Application\Auth\Port\AgentActorGateway;
@@ -17,11 +18,13 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class AssetMutationControllerTest extends TestCase
 {
+    use TranslatorStubTrait;
+
     public function testPatchReturnsForbiddenForAgentActor(): void
     {
         $controller = new AssetMutationController(
             $this->forbiddenAssetEndpointsHandler(),
-            new AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class), $this->translator()),
+            new AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class), $this->translatorStub()),
             $this->responder(),
         );
 
@@ -78,11 +81,4 @@ final class AssetMutationControllerTest extends TestCase
         );
     }
 
-    private function translator(): TranslatorInterface
-    {
-        $translator = $this->createStub(TranslatorInterface::class);
-        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
-
-        return $translator;
-    }
 }

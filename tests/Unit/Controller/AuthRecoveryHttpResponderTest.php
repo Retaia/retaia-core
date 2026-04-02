@@ -2,19 +2,21 @@
 
 namespace App\Tests\Unit\Controller;
 
+use App\Tests\Support\TranslatorStubTrait;
 use App\Application\Auth\RequestEmailVerificationEndpointResult;
 use App\Application\Auth\RequestPasswordResetEndpointResult;
 use App\Application\Auth\ResetPasswordEndpointResult;
 use App\Controller\Api\AuthApiErrorResponder;
 use App\Controller\Api\AuthRecoveryHttpResponder;
 use PHPUnit\Framework\TestCase;
-use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class AuthRecoveryHttpResponderTest extends TestCase
 {
+    use TranslatorStubTrait;
+
     public function testResetUsesTranslatedFallbackViolation(): void
     {
-        $responder = new AuthRecoveryHttpResponder(new AuthApiErrorResponder($this->translator()));
+        $responder = new AuthRecoveryHttpResponder(new AuthApiErrorResponder($this->translatorStub()));
         $response = $responder->reset(new ResetPasswordEndpointResult(ResetPasswordEndpointResult::STATUS_VALIDATION_FAILED));
 
         self::assertSame(422, $response->getStatusCode());
@@ -26,7 +28,7 @@ final class AuthRecoveryHttpResponderTest extends TestCase
 
     public function testRequestResetAcceptedIncludesToken(): void
     {
-        $responder = new AuthRecoveryHttpResponder(new AuthApiErrorResponder($this->translator()));
+        $responder = new AuthRecoveryHttpResponder(new AuthApiErrorResponder($this->translatorStub()));
         $response = $responder->requestReset(new RequestPasswordResetEndpointResult(
             RequestPasswordResetEndpointResult::STATUS_ACCEPTED,
             'reset-token'
@@ -41,7 +43,7 @@ final class AuthRecoveryHttpResponderTest extends TestCase
 
     public function testRequestEmailVerificationAcceptedIncludesToken(): void
     {
-        $responder = new AuthRecoveryHttpResponder(new AuthApiErrorResponder($this->translator()));
+        $responder = new AuthRecoveryHttpResponder(new AuthApiErrorResponder($this->translatorStub()));
         $response = $responder->requestEmailVerification(new RequestEmailVerificationEndpointResult(
             RequestEmailVerificationEndpointResult::STATUS_ACCEPTED,
             'verify-token'
@@ -54,11 +56,4 @@ final class AuthRecoveryHttpResponderTest extends TestCase
         ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
     }
 
-    private function translator(): TranslatorInterface
-    {
-        $translator = $this->createStub(TranslatorInterface::class);
-        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
-
-        return $translator;
-    }
 }

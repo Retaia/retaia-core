@@ -2,20 +2,22 @@
 
 namespace App\Tests\Unit\Controller;
 
+use App\Tests\Support\TranslatorStubTrait;
 use App\Api\Service\AssetRequestPreconditionService;
 use App\Application\Asset\AssetEndpointResult;
 use App\Asset\Repository\AssetRepositoryInterface;
 use App\Controller\Api\AssetHttpResponder;
 use PHPUnit\Framework\TestCase;
-use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class AssetHttpResponderTest extends TestCase
 {
+    use TranslatorStubTrait;
+
     public function testPatchResultAttachesEtagFromPayload(): void
     {
         $responder = new AssetHttpResponder(
-            $this->translator(),
-            new AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class), $this->translator())
+            $this->translatorStub(),
+            new AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class), $this->translatorStub())
         );
 
         $response = $responder->patchResult(new AssetEndpointResult(AssetEndpointResult::STATUS_SUCCESS, [
@@ -30,8 +32,8 @@ final class AssetHttpResponderTest extends TestCase
     public function testAssetActionResultReturnsStateConflictPayload(): void
     {
         $responder = new AssetHttpResponder(
-            $this->translator(),
-            new AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class), $this->translator())
+            $this->translatorStub(),
+            new AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class), $this->translatorStub())
         );
 
         $response = $responder->assetActionResult(new AssetEndpointResult(AssetEndpointResult::STATUS_STATE_CONFLICT));
@@ -43,11 +45,4 @@ final class AssetHttpResponderTest extends TestCase
         ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
     }
 
-    private function translator(): TranslatorInterface
-    {
-        $translator = $this->createStub(TranslatorInterface::class);
-        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
-
-        return $translator;
-    }
 }

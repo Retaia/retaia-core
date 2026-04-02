@@ -2,19 +2,21 @@
 
 namespace App\Tests\Unit\Controller;
 
+use App\Tests\Support\TranslatorStubTrait;
 use App\Application\Auth\GetMyFeaturesEndpointResult;
 use App\Application\Auth\MyFeaturesResult;
 use App\Application\Auth\PatchMyFeaturesEndpointResult;
 use App\Controller\Api\AuthApiErrorResponder;
 use App\Controller\Api\AuthProfileHttpResponder;
 use PHPUnit\Framework\TestCase;
-use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class AuthProfileHttpResponderTest extends TestCase
 {
+    use TranslatorStubTrait;
+
     public function testMeFeaturesBuildsCanonicalPayload(): void
     {
-        $responder = new AuthProfileHttpResponder(new AuthApiErrorResponder($this->translator()));
+        $responder = new AuthProfileHttpResponder(new AuthApiErrorResponder($this->translatorStub()));
         $features = new MyFeaturesResult(['a' => true], ['a' => true], ['a' => ['source' => 'user']], [['key' => 'a']], ['a']);
         $response = $responder->meFeatures(new PatchMyFeaturesEndpointResult(PatchMyFeaturesEndpointResult::STATUS_UPDATED, null, $features));
 
@@ -30,7 +32,7 @@ final class AuthProfileHttpResponderTest extends TestCase
 
     public function testPatchMeFeaturesKeepsValidationDetailsShape(): void
     {
-        $responder = new AuthProfileHttpResponder(new AuthApiErrorResponder($this->translator()));
+        $responder = new AuthProfileHttpResponder(new AuthApiErrorResponder($this->translatorStub()));
         $response = $responder->meFeatures(new PatchMyFeaturesEndpointResult(
             PatchMyFeaturesEndpointResult::STATUS_VALIDATION_FAILED,
             ['unknown_keys' => ['x'], 'non_boolean_keys' => ['y']],
@@ -46,7 +48,7 @@ final class AuthProfileHttpResponderTest extends TestCase
 
     public function testMeFeaturesRequiresAuthentication(): void
     {
-        $responder = new AuthProfileHttpResponder(new AuthApiErrorResponder($this->translator()));
+        $responder = new AuthProfileHttpResponder(new AuthApiErrorResponder($this->translatorStub()));
         $response = $responder->meFeatures(new GetMyFeaturesEndpointResult(GetMyFeaturesEndpointResult::STATUS_UNAUTHORIZED));
 
         self::assertSame(401, $response->getStatusCode());
@@ -56,11 +58,4 @@ final class AuthProfileHttpResponderTest extends TestCase
         ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
     }
 
-    private function translator(): TranslatorInterface
-    {
-        $translator = $this->createStub(TranslatorInterface::class);
-        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
-
-        return $translator;
-    }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Controller;
 
+use App\Tests\Support\TranslatorStubTrait;
 use App\Api\Service\AssetRequestPreconditionService;
 use App\Api\Service\AgentRuntimeRepository;
 use App\Api\Service\AgentSignature\AgentPublicKeyRecord;
@@ -29,10 +30,11 @@ use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class DerivedControllerTest extends TestCase
 {
+    use TranslatorStubTrait;
+
     public function testInitUploadForbiddenNotFoundAndValidation(): void
     {
         $forbiddenGateway = new InMemoryDerivedGateway();
@@ -117,7 +119,7 @@ final class DerivedControllerTest extends TestCase
             new AgentSignatureNonceRepository($connection),
             new SignedAgentMessageCanonicalizer(),
             new AgentRuntimeRepository($connection),
-            $this->translator(),
+            $this->translatorStub(),
         );
 
         return new DerivedController(
@@ -130,7 +132,7 @@ final class DerivedControllerTest extends TestCase
                 new ListDerivedFilesHandler($gateway),
                 new GetDerivedByKindHandler($gateway),
             ),
-            $this->translator(),
+            $this->translatorStub(),
             new AssetRequestPreconditionService(new class implements \App\Asset\Repository\AssetRepositoryInterface {
                 public function findByUuid(string $uuid): ?Asset
                 {
@@ -145,7 +147,7 @@ final class DerivedControllerTest extends TestCase
                 public function save(Asset $asset): void
                 {
                 }
-            }, $this->translator()),
+            }, $this->translatorStub()),
             $validator,
         );
     }
@@ -163,13 +165,6 @@ final class DerivedControllerTest extends TestCase
         return $request;
     }
 
-    private function translator(): TranslatorInterface
-    {
-        $translator = $this->createStub(TranslatorInterface::class);
-        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
-
-        return $translator;
-    }
 
     private function connection(): Connection
     {
