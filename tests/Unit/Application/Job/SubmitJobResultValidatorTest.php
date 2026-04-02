@@ -54,6 +54,68 @@ final class SubmitJobResultValidatorTest extends TestCase
         ]));
     }
 
+    public function testRejectsDerivedPayloadWithEmptyOrNonStringRef(): void
+    {
+        self::assertFalse($this->validator->isAllowedForJobType('generate_preview', [
+            'derived_patch' => [
+                'derived_manifest' => [
+                    ['kind' => 'video', 'ref' => ''],
+                ],
+            ],
+        ]));
+
+        self::assertFalse($this->validator->isAllowedForJobType('generate_preview', [
+            'derived_patch' => [
+                'derived_manifest' => [
+                    ['kind' => 'video', 'ref' => null],
+                ],
+            ],
+        ]));
+    }
+
+    public function testRejectsDerivedPayloadWithNonIntegerSizeBytes(): void
+    {
+        self::assertFalse($this->validator->isAllowedForJobType('generate_preview', [
+            'derived_patch' => [
+                'derived_manifest' => [
+                    [
+                        'kind' => 'video',
+                        'ref' => 'preview.mp4',
+                        'size_bytes' => '100',
+                    ],
+                ],
+            ],
+        ]));
+
+        self::assertFalse($this->validator->isAllowedForJobType('generate_preview', [
+            'derived_patch' => [
+                'derived_manifest' => [
+                    [
+                        'kind' => 'video',
+                        'ref' => 'preview.mp4',
+                        'size_bytes' => 1.23,
+                    ],
+                ],
+            ],
+        ]));
+    }
+
+    public function testRejectsDerivedPayloadWithNonStringSha256(): void
+    {
+        self::assertFalse($this->validator->isAllowedForJobType('generate_preview', [
+            'derived_patch' => [
+                'derived_manifest' => [
+                    [
+                        'kind' => 'video',
+                        'ref' => 'preview.mp4',
+                        'size_bytes' => 100,
+                        'sha256' => 12345,
+                    ],
+                ],
+            ],
+        ]));
+    }
+
     public function testRejectsInvalidWarningsShape(): void
     {
         self::assertFalse($this->validator->isAllowedForJobType('generate_preview', [
