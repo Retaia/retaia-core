@@ -17,6 +17,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 #[Route('/device')]
 final class DeviceController
 {
+    use \App\Controller\Api\ApiErrorResponderTrait;
     use RequestPayloadTrait;
 
     public function __construct(
@@ -45,19 +46,13 @@ final class DeviceController
     {
         $authenticatedUser = $this->resolveAuthenticatedUserHandler->handle();
         if ($authenticatedUser->status() === ResolveAuthenticatedUserResult::STATUS_UNAUTHORIZED) {
-            return new JsonResponse(
-                ['code' => 'UNAUTHORIZED', 'message' => $this->translator->trans('auth.error.authentication_required')],
-                Response::HTTP_UNAUTHORIZED
-            );
+            return $this->errorResponse('UNAUTHORIZED', $this->translator->trans('auth.error.authentication_required'), Response::HTTP_UNAUTHORIZED);
         }
 
         $payload = $this->payload($request, true);
         $userCode = strtoupper(trim((string) ($payload['user_code'] ?? '')));
         if ($userCode === '') {
-            return new JsonResponse(
-                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.user_code_required')],
-                Response::HTTP_UNPROCESSABLE_ENTITY
-            );
+            return $this->errorResponse('VALIDATION_FAILED', $this->translator->trans('auth.error.user_code_required'), Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         $otpCode = trim((string) ($payload['otp_code'] ?? ''));
@@ -65,10 +60,7 @@ final class DeviceController
             ->create(hash('sha256', (string) $authenticatedUser->id().'|'.(string) ($request->getClientIp() ?? 'unknown').'|device-approve'))
             ->consume(1);
         if (!$limit->isAccepted()) {
-            return new JsonResponse(
-                ['code' => 'TOO_MANY_ATTEMPTS', 'message' => $this->translator->trans('auth.error.too_many_2fa_attempts')],
-                Response::HTTP_TOO_MANY_REQUESTS
-            );
+            return $this->errorResponse('TOO_MANY_ATTEMPTS', $this->translator->trans('auth.error.too_many_2fa_attempts'), Response::HTTP_TOO_MANY_REQUESTS);
         }
 
         $result = $this->completeDeviceApprovalHandler->handle(
@@ -77,34 +69,19 @@ final class DeviceController
             $otpCode
         );
         if ($result->status() === CompleteDeviceApprovalResult::STATUS_VALIDATION_FAILED_OTP_REQUIRED) {
-            return new JsonResponse(
-                ['code' => 'VALIDATION_FAILED', 'message' => $this->translator->trans('auth.error.otp_code_required')],
-                Response::HTTP_UNPROCESSABLE_ENTITY
-            );
+            return $this->errorResponse('VALIDATION_FAILED', $this->translator->trans('auth.error.otp_code_required'), Response::HTTP_UNPROCESSABLE_ENTITY);
         }
         if ($result->status() === CompleteDeviceApprovalResult::STATUS_INVALID_2FA_CODE) {
-            return new JsonResponse(
-                ['code' => 'INVALID_2FA_CODE', 'message' => $this->translator->trans('auth.error.invalid_2fa_code')],
-                Response::HTTP_BAD_REQUEST
-            );
+            return $this->errorResponse('INVALID_2FA_CODE', $this->translator->trans('auth.error.invalid_2fa_code'), Response::HTTP_BAD_REQUEST);
         }
         if ($result->status() === CompleteDeviceApprovalResult::STATUS_INVALID_DEVICE_CODE) {
-            return new JsonResponse(
-                ['code' => 'INVALID_DEVICE_CODE', 'message' => $this->translator->trans('auth.error.invalid_device_code')],
-                Response::HTTP_BAD_REQUEST
-            );
+            return $this->errorResponse('INVALID_DEVICE_CODE', $this->translator->trans('auth.error.invalid_device_code'), Response::HTTP_BAD_REQUEST);
         }
         if ($result->status() === CompleteDeviceApprovalResult::STATUS_EXPIRED_DEVICE_CODE) {
-            return new JsonResponse(
-                ['code' => 'EXPIRED_DEVICE_CODE', 'message' => $this->translator->trans('auth.error.expired_device_code')],
-                Response::HTTP_BAD_REQUEST
-            );
+            return $this->errorResponse('EXPIRED_DEVICE_CODE', $this->translator->trans('auth.error.expired_device_code'), Response::HTTP_BAD_REQUEST);
         }
         if ($result->status() === CompleteDeviceApprovalResult::STATUS_STATE_CONFLICT) {
-            return new JsonResponse(
-                ['code' => 'STATE_CONFLICT', 'message' => $this->translator->trans('auth.error.device_flow_not_approvable')],
-                Response::HTTP_CONFLICT
-            );
+            return $this->errorResponse('STATE_CONFLICT', $this->translator->trans('auth.error.device_flow_not_approvable'), Response::HTTP_CONFLICT);
         }
 
         return new JsonResponse(['approved' => true], Response::HTTP_OK);

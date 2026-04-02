@@ -47,10 +47,7 @@ final class DerivedController
             return $this->notFound();
         }
         if ($result->status() === DerivedEndpointResult::STATUS_VALIDATION_FAILED) {
-            return new JsonResponse([
-                'code' => 'VALIDATION_FAILED',
-                'message' => 'kind, content_type and size_bytes are required',
-            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            return $this->errorResponse('VALIDATION_FAILED', 'kind, content_type and size_bytes are required', Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         return new JsonResponse($result->payload() ?? [], Response::HTTP_OK);
@@ -76,16 +73,10 @@ final class DerivedController
             return $this->notFound();
         }
         if ($result->status() === DerivedEndpointResult::STATUS_VALIDATION_FAILED) {
-            return new JsonResponse([
-                'code' => 'VALIDATION_FAILED',
-                'message' => 'upload_id and part_number are required',
-            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            return $this->errorResponse('VALIDATION_FAILED', 'upload_id and part_number are required', Response::HTTP_UNPROCESSABLE_ENTITY);
         }
         if ($result->status() === DerivedEndpointResult::STATUS_STATE_CONFLICT) {
-            return new JsonResponse([
-                'code' => 'STATE_CONFLICT',
-                'message' => 'Upload session is invalid or already completed',
-            ], Response::HTTP_CONFLICT);
+            return $this->errorResponse('STATE_CONFLICT', 'Upload session is invalid or already completed', Response::HTTP_CONFLICT);
         }
 
         return new JsonResponse(['accepted' => true], Response::HTTP_OK);
@@ -111,16 +102,10 @@ final class DerivedController
             return $this->notFound();
         }
         if ($result->status() === DerivedEndpointResult::STATUS_VALIDATION_FAILED) {
-            return new JsonResponse([
-                'code' => 'VALIDATION_FAILED',
-                'message' => 'upload_id and total_parts are required',
-            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            return $this->errorResponse('VALIDATION_FAILED', 'upload_id and total_parts are required', Response::HTTP_UNPROCESSABLE_ENTITY);
         }
         if ($result->status() === DerivedEndpointResult::STATUS_STATE_CONFLICT) {
-            return new JsonResponse([
-                'code' => 'STATE_CONFLICT',
-                'message' => 'Upload completion requirements are not satisfied',
-            ], Response::HTTP_CONFLICT);
+            return $this->errorResponse('STATE_CONFLICT', 'Upload completion requirements are not satisfied', Response::HTTP_CONFLICT);
         }
 
         return new JsonResponse($result->payload() ?? [], Response::HTTP_OK);
@@ -142,10 +127,7 @@ final class DerivedController
     {
         $result = $this->derivedEndpointsHandler->getByKind($uuid, $kind);
         if ($result->status() === DerivedEndpointResult::STATUS_NOT_FOUND) {
-            return new JsonResponse([
-                'code' => 'NOT_FOUND',
-                'message' => $this->translator->trans('asset.error.not_found'),
-            ], Response::HTTP_NOT_FOUND);
+            return $this->errorResponse('NOT_FOUND', $this->translator->trans('asset.error.not_found'), Response::HTTP_NOT_FOUND);
         }
 
         return new JsonResponse($result->payload() ?? [], Response::HTTP_OK);

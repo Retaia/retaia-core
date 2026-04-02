@@ -11,15 +11,6 @@ trait ApiErrorResponderTrait
      */
     private function errorResponse(string $code, string $message, int $status, array $details = []): JsonResponse
     {
-        $payload = [
-            'code' => $code,
-            'message' => $message,
-        ];
-
-        if ($details !== []) {
-            $payload['details'] = $details;
-        }
-
-        return new JsonResponse($payload, $status);
+        return ApiErrorResponseFactory::create($code, $message, $status, $details);
     }
 }
