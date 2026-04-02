@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Security;
 
+use App\Tests\Support\TranslatorStubTrait;
 use App\Entity\User;
 use App\Security\ApiLoginRequestDataExtractor;
 use App\Security\ApiLoginSecondFactorAttemptLimiter;
@@ -16,17 +17,18 @@ use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\RateLimiter\Storage\InMemoryStorage;
-use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class ApiLoginSecondFactorChallengeResponderTest extends TestCase
 {
+    use TranslatorStubTrait;
+
     public function testReturnsMfaRequiredWhenEnabledWithoutCode(): void
     {
         [$service] = $this->enabledTwoFactorService('u-1');
         $responder = new ApiLoginSecondFactorChallengeResponder(
             $service,
             $this->limiter(true),
-            $this->translator(),
+            $this->translatorStub(),
             new ApiLoginRequestDataExtractor()
         );
 
@@ -43,7 +45,7 @@ final class ApiLoginSecondFactorChallengeResponderTest extends TestCase
         $responder = new ApiLoginSecondFactorChallengeResponder(
             $service,
             $this->limiter(true),
-            $this->translator(),
+            $this->translatorStub(),
             new ApiLoginRequestDataExtractor()
         );
 
@@ -61,13 +63,13 @@ final class ApiLoginSecondFactorChallengeResponderTest extends TestCase
         $responderDisabled = new ApiLoginSecondFactorChallengeResponder(
             $disabledService,
             $this->limiter(true),
-            $this->translator(),
+            $this->translatorStub(),
             new ApiLoginRequestDataExtractor()
         );
         $responderEnabled = new ApiLoginSecondFactorChallengeResponder(
             $enabledService,
             $this->limiter(true),
-            $this->translator(),
+            $this->translatorStub(),
             new ApiLoginRequestDataExtractor()
         );
 
@@ -81,7 +83,7 @@ final class ApiLoginSecondFactorChallengeResponderTest extends TestCase
         $responder = new ApiLoginSecondFactorChallengeResponder(
             $service,
             $this->limiter(false),
-            $this->translator(),
+            $this->translatorStub(),
             new ApiLoginRequestDataExtractor()
         );
 
@@ -92,13 +94,6 @@ final class ApiLoginSecondFactorChallengeResponderTest extends TestCase
         self::assertSame(429, $response->getStatusCode());
     }
 
-    private function translator(): TranslatorInterface
-    {
-        $translator = $this->createStub(TranslatorInterface::class);
-        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
-
-        return $translator;
-    }
 
     private function limiter(bool $accepted): ApiLoginSecondFactorAttemptLimiter
     {
@@ -109,7 +104,7 @@ final class ApiLoginSecondFactorChallengeResponderTest extends TestCase
                 'limit' => $accepted ? 10 : 1,
                 'interval' => '1 minute',
             ], new InMemoryStorage()),
-            $this->translator()
+            $this->translatorStub()
         );
 
         if (!$accepted) {

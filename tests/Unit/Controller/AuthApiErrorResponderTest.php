@@ -2,15 +2,17 @@
 
 namespace App\Tests\Unit\Controller;
 
+use App\Tests\Support\TranslatorStubTrait;
 use App\Controller\Api\AuthApiErrorResponder;
 use PHPUnit\Framework\TestCase;
-use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class AuthApiErrorResponderTest extends TestCase
 {
+    use TranslatorStubTrait;
+
     public function testTranslatedIncludesDetails(): void
     {
-        $responder = new AuthApiErrorResponder($this->translator());
+        $responder = new AuthApiErrorResponder($this->translatorStub());
         $response = $responder->translated('VALIDATION_FAILED', 'auth.error.email_required', 422, ['field' => 'email']);
 
         self::assertSame(422, $response->getStatusCode());
@@ -23,7 +25,7 @@ final class AuthApiErrorResponderTest extends TestCase
 
     public function testTooManyAttemptsIncludesRetryInSeconds(): void
     {
-        $responder = new AuthApiErrorResponder($this->translator());
+        $responder = new AuthApiErrorResponder($this->translatorStub());
         $response = $responder->tooManyAttempts('auth.error.too_many_refresh_requests', 17);
 
         self::assertSame(429, $response->getStatusCode());
@@ -36,7 +38,7 @@ final class AuthApiErrorResponderTest extends TestCase
 
     public function testSlowDownIncludesRetryInSeconds(): void
     {
-        $responder = new AuthApiErrorResponder($this->translator());
+        $responder = new AuthApiErrorResponder($this->translatorStub());
         $response = $responder->slowDown(9);
 
         self::assertSame(429, $response->getStatusCode());
@@ -47,11 +49,4 @@ final class AuthApiErrorResponderTest extends TestCase
         ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
     }
 
-    private function translator(): TranslatorInterface
-    {
-        $translator = $this->createStub(TranslatorInterface::class);
-        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
-
-        return $translator;
-    }
 }

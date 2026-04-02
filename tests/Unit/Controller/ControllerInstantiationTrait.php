@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Controller;
 
+use App\Tests\Support\TranslatorStubTrait;
 use App\Api\Service\AgentRuntimeRepositoryInterface;
 use App\Api\Service\AgentSignature\AgentPublicKeyRepositoryInterface;
 use App\Api\Service\AgentSignature\AgentRequestSignatureVerifier;
@@ -93,6 +94,8 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 trait ControllerInstantiationTrait
 {
+    use TranslatorStubTrait;
+
     /**
      * @param class-string $className
      * @param array<string, mixed> $properties

@@ -17,11 +17,9 @@ use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class OpsIngestControllerTest extends TestCase
-{
-    use ControllerInstantiationTrait;
+{    use ControllerInstantiationTrait;
     use ProcessingJobSchemaTrait;
 
     public function testDiagnosticsReturnsForbiddenWhenActorIsNotAdmin(): void
@@ -159,7 +157,7 @@ final class OpsIngestControllerTest extends TestCase
             }
         };
 
-        return new OpsAdminAccessGuard(new ResolveAdminActorHandler($gateway), $this->translator());
+        return new OpsAdminAccessGuard(new ResolveAdminActorHandler($gateway), $this->translatorStub());
     }
 
     private function forbiddenAdminGuard(): OpsAdminAccessGuard
@@ -176,14 +174,7 @@ final class OpsIngestControllerTest extends TestCase
             }
         };
 
-        return new OpsAdminAccessGuard(new ResolveAdminActorHandler($gateway), $this->translator());
+        return new OpsAdminAccessGuard(new ResolveAdminActorHandler($gateway), $this->translatorStub());
     }
 
-    private function translator(): TranslatorInterface
-    {
-        $translator = $this->createStub(TranslatorInterface::class);
-        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
-
-        return $translator;
-    }
 }

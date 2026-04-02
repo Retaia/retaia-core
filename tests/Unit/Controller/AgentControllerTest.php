@@ -11,11 +11,9 @@ use App\Api\Service\SignedAgentRequestValidator;
 use App\Controller\Api\AgentController;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class AgentControllerTest extends TestCase
-{
-    use ControllerInstantiationTrait;
+{    use ControllerInstantiationTrait;
 
     public function testRegisterReturnsUnauthorizedWhenSignatureHeadersAreMissing(): void
     {
@@ -25,22 +23,15 @@ final class AgentControllerTest extends TestCase
             $this->createMock(AgentSignatureNonceRepositoryInterface::class),
             new SignedAgentMessageCanonicalizer(),
             $this->createMock(AgentRuntimeRepositoryInterface::class),
-            $this->translator(),
+            $this->translatorStub(),
         );
 
         $controller = $this->controller(AgentController::class, [
-            'translator' => $this->translator(),
+            'translator' => $this->translatorStub(),
             'signedAgentRequestValidator' => $validator,
         ]);
 
         self::assertSame(401, $controller->register(Request::create('/api/v1/agents/register', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{}'))->getStatusCode());
     }
 
-    private function translator(): TranslatorInterface
-    {
-        $translator = $this->createStub(TranslatorInterface::class);
-        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
-
-        return $translator;
-    }
 }

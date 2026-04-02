@@ -2,16 +2,17 @@
 
 namespace App\Tests\Unit\Controller;
 
+use App\Tests\Support\TranslatorStubTrait;
 use App\Controller\Api\OpsReadinessReportBuilder;
 use App\Storage\BusinessStorageDefinition;
 use App\Storage\BusinessStorageInterface;
 use App\Storage\BusinessStorageRegistryInterface;
 use Doctrine\DBAL\Connection;
 use PHPUnit\Framework\TestCase;
-use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class OpsReadinessReportBuilderTest extends TestCase
 {
+    use TranslatorStubTrait;
     /**
      * @param array<string,mixed> $payload
      * @return array<string,mixed>
@@ -40,7 +41,7 @@ final class OpsReadinessReportBuilderTest extends TestCase
         $registry = $this->createMock(BusinessStorageRegistryInterface::class);
         $registry->method('all')->willReturn([new BusinessStorageDefinition('nas-main', $storage)]);
 
-        $payload = (new OpsReadinessReportBuilder($connection, $registry, $this->translator()))->build();
+        $payload = (new OpsReadinessReportBuilder($connection, $registry, $this->translatorStub()))->build();
 
         self::assertSame('ok', $payload['status']);
         self::assertFalse($payload['self_healing']['active']);
@@ -62,7 +63,7 @@ final class OpsReadinessReportBuilderTest extends TestCase
         $registry = $this->createMock(BusinessStorageRegistryInterface::class);
         $registry->method('all')->willReturn([new BusinessStorageDefinition('nas-main', $storage)]);
 
-        $payload = (new OpsReadinessReportBuilder($connection, $registry, $this->translator()))->build();
+        $payload = (new OpsReadinessReportBuilder($connection, $registry, $this->translatorStub()))->build();
 
         self::assertSame('degraded', $payload['status']);
         self::assertTrue($payload['self_healing']['active']);
@@ -77,7 +78,7 @@ final class OpsReadinessReportBuilderTest extends TestCase
         $registry = $this->createMock(BusinessStorageRegistryInterface::class);
         $registry->method('all')->willReturn([]);
 
-        $payload = (new OpsReadinessReportBuilder($connection, $registry, $this->translator()))->build();
+        $payload = (new OpsReadinessReportBuilder($connection, $registry, $this->translatorStub()))->build();
 
         self::assertSame('down', $payload['status']);
         self::assertSame('fail', $this->getCheckByName($payload, 'database')['status']);
@@ -97,18 +98,11 @@ final class OpsReadinessReportBuilderTest extends TestCase
         $registry = $this->createMock(BusinessStorageRegistryInterface::class);
         $registry->method('all')->willReturn([new BusinessStorageDefinition('nas-main', $storage)]);
 
-        $payload = (new OpsReadinessReportBuilder($connection, $registry, $this->translator()))->build();
+        $payload = (new OpsReadinessReportBuilder($connection, $registry, $this->translatorStub()))->build();
 
         self::assertSame('down', $payload['status']);
         self::assertSame('fail', $this->getCheckByName($payload, 'storage_writable')['status']);
         self::assertFalse($payload['self_healing']['active']);
     }
 
-    private function translator(): TranslatorInterface
-    {
-        $translator = $this->createStub(TranslatorInterface::class);
-        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
-
-        return $translator;
-    }
 }

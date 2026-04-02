@@ -2,17 +2,19 @@
 
 namespace App\Tests\Unit\Controller;
 
+use App\Tests\Support\TranslatorStubTrait;
 use App\Application\Auth\AuthMeEndpointResult;
 use App\Controller\Api\AuthApiErrorResponder;
 use App\Controller\Api\AuthSessionHttpResponder;
 use PHPUnit\Framework\TestCase;
-use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class AuthSessionHttpResponderTest extends TestCase
 {
+    use TranslatorStubTrait;
+
     public function testMeMapsAuthenticatedPayload(): void
     {
-        $responder = new AuthSessionHttpResponder(new AuthApiErrorResponder($this->translator()));
+        $responder = new AuthSessionHttpResponder(new AuthApiErrorResponder($this->translatorStub()));
         $response = $responder->me(new AuthMeEndpointResult(
             AuthMeEndpointResult::STATUS_SUCCESS,
             'user-1',
@@ -37,7 +39,7 @@ final class AuthSessionHttpResponderTest extends TestCase
 
     public function testRevokeMySessionReturnsConflictForCurrentSession(): void
     {
-        $responder = new AuthSessionHttpResponder(new AuthApiErrorResponder($this->translator()));
+        $responder = new AuthSessionHttpResponder(new AuthApiErrorResponder($this->translatorStub()));
         $response = $responder->revokeMySession('CURRENT_SESSION');
 
         self::assertSame(409, $response->getStatusCode());
@@ -47,11 +49,4 @@ final class AuthSessionHttpResponderTest extends TestCase
         ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
     }
 
-    private function translator(): TranslatorInterface
-    {
-        $translator = $this->createStub(TranslatorInterface::class);
-        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
-
-        return $translator;
-    }
 }

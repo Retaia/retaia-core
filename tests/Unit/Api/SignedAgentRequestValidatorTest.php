@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Api;
 
+use App\Tests\Support\TranslatorStubTrait;
 use App\Api\Service\AgentRuntimeRepository;
 use App\Api\Service\AgentSignature\AgentPublicKeyRecord;
 use App\Api\Service\AgentSignature\AgentPublicKeyRepository;
@@ -13,10 +14,11 @@ use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class SignedAgentRequestValidatorTest extends TestCase
 {
+    use TranslatorStubTrait;
+
     public function testRejectsMissingHeaders(): void
     {
         $validator = $this->validator(new AlwaysValidVerifier());
@@ -50,7 +52,7 @@ final class SignedAgentRequestValidatorTest extends TestCase
             $this->nonceRepository(),
             new SignedAgentMessageCanonicalizer(),
             $this->runtimeRepository(),
-            $this->translator(),
+            $this->translatorStub(),
         );
 
         $response = $validator->violationResponse($this->signedRequest());
@@ -69,7 +71,7 @@ final class SignedAgentRequestValidatorTest extends TestCase
             $this->nonceRepository(),
             new SignedAgentMessageCanonicalizer(),
             $this->runtimeRepository(),
-            $this->translator(),
+            $this->translatorStub(),
         );
 
         self::assertNull($validator->violationResponse($this->signedRequest('nonce-1')));
@@ -97,7 +99,7 @@ final class SignedAgentRequestValidatorTest extends TestCase
             $this->nonceRepository(),
             new SignedAgentMessageCanonicalizer(),
             $this->runtimeRepository(),
-            $this->translator(),
+            $this->translatorStub(),
         );
     }
 
@@ -152,13 +154,6 @@ final class SignedAgentRequestValidatorTest extends TestCase
         return 'ABCD1234EF567890ABCD1234EF567890ABCD1234';
     }
 
-    private function translator(): TranslatorInterface
-    {
-        $translator = $this->createStub(TranslatorInterface::class);
-        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
-
-        return $translator;
-    }
 }
 
 final class AlwaysValidVerifier implements AgentRequestSignatureVerifier

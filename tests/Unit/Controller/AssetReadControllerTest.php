@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Controller;
 
+use App\Tests\Support\TranslatorStubTrait;
 use App\Application\Asset\AssetEndpointsHandler;
 use App\Application\Asset\GetAssetHandler;
 use App\Application\Asset\ListAssetsHandler;
@@ -21,10 +22,11 @@ use App\Controller\Api\AssetListQueryParser;
 use App\Controller\Api\AssetReadController;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class AssetReadControllerTest extends TestCase
 {
+    use TranslatorStubTrait;
+
     public function testListReturnsValidationFailurePayload(): void
     {
         $gateway = $this->createStub(AssetReadGateway::class);
@@ -97,16 +99,9 @@ final class AssetReadControllerTest extends TestCase
     private function responder(): AssetHttpResponder
     {
         return new AssetHttpResponder(
-            $this->translator(),
-            new \App\Api\Service\AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class), $this->translator())
+            $this->translatorStub(),
+            new \App\Api\Service\AssetRequestPreconditionService($this->createStub(AssetRepositoryInterface::class), $this->translatorStub())
         );
     }
 
-    private function translator(): TranslatorInterface
-    {
-        $translator = $this->createStub(TranslatorInterface::class);
-        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
-
-        return $translator;
-    }
 }

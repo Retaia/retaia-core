@@ -7,11 +7,9 @@ use App\Controller\Api\AuthSessionController;
 use App\Controller\Api\AuthSessionHttpResponder;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class AuthSessionControllerTest extends TestCase
-{
-    use ControllerInstantiationTrait;
+{    use ControllerInstantiationTrait;
 
     public function testLoginThrowsLogicException(): void
     {
@@ -47,7 +45,7 @@ final class AuthSessionControllerTest extends TestCase
 
     private function errorResponder(): AuthApiErrorResponder
     {
-        return new AuthApiErrorResponder($this->translator());
+        return new AuthApiErrorResponder($this->translatorStub());
     }
 
     private function sessionResponder(): AuthSessionHttpResponder
@@ -55,11 +53,4 @@ final class AuthSessionControllerTest extends TestCase
         return new AuthSessionHttpResponder($this->errorResponder());
     }
 
-    private function translator(): TranslatorInterface
-    {
-        $translator = $this->createStub(TranslatorInterface::class);
-        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
-
-        return $translator;
-    }
 }

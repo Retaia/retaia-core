@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Controller;
 
+use App\Tests\Support\TranslatorStubTrait;
 use App\Application\Auth\Port\AdminActorGateway;
 use App\Application\Auth\ResolveAdminActorHandler;
 use App\Controller\Api\OpsAdminAccessGuard;
@@ -12,10 +13,11 @@ use App\Job\Repository\JobSourceProjector;
 use App\Storage\BusinessStorageRegistryInterface;
 use Doctrine\DBAL\Connection;
 use PHPUnit\Framework\TestCase;
-use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class OpsJobsControllerTest extends TestCase
 {
+    use TranslatorStubTrait;
+
     public function testQueueReturnsForbiddenWhenActorIsNotAdmin(): void
     {
         $controller = new OpsJobsController($this->forbiddenAdminGuard(), $this->repositoryWithQueueDiagnostics());
@@ -61,7 +63,7 @@ final class OpsJobsControllerTest extends TestCase
             public function actorId(): ?string { return 'admin-1'; }
         };
 
-        return new OpsAdminAccessGuard(new ResolveAdminActorHandler($gateway), $this->translator());
+        return new OpsAdminAccessGuard(new ResolveAdminActorHandler($gateway), $this->translatorStub());
     }
 
     private function forbiddenAdminGuard(): OpsAdminAccessGuard
@@ -71,14 +73,7 @@ final class OpsJobsControllerTest extends TestCase
             public function actorId(): ?string { return null; }
         };
 
-        return new OpsAdminAccessGuard(new ResolveAdminActorHandler($gateway), $this->translator());
+        return new OpsAdminAccessGuard(new ResolveAdminActorHandler($gateway), $this->translatorStub());
     }
 
-    private function translator(): TranslatorInterface
-    {
-        $translator = $this->createStub(TranslatorInterface::class);
-        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
-
-        return $translator;
-    }
 }

@@ -2,24 +2,26 @@
 
 namespace App\Tests\Unit\Controller;
 
+use App\Tests\Support\TranslatorStubTrait;
 use App\Controller\Api\AuthApiErrorResponder;
 use App\Controller\Api\AuthRateLimitGuard;
 use App\Controller\Api\AuthSessionHttpResponder;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\RateLimiter\Storage\InMemoryStorage;
-use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class AuthRateLimitGuardTest extends TestCase
 {
+    use TranslatorStubTrait;
+
     public function testConsumeRefreshReturnsThrottleResponseWhenRejected(): void
     {
         $refreshLimiter = $this->rateLimiterFactory();
         $refreshLimiter->create('k1')->consume(1);
 
         $guard = new AuthRateLimitGuard(
-            new AuthApiErrorResponder($this->translator()),
-            new AuthSessionHttpResponder(new AuthApiErrorResponder($this->translator())),
+            new AuthApiErrorResponder($this->translatorStub()),
+            new AuthSessionHttpResponder(new AuthApiErrorResponder($this->translatorStub())),
             $refreshLimiter,
             $this->rateLimiterFactory(),
         );
@@ -33,8 +35,8 @@ final class AuthRateLimitGuardTest extends TestCase
     public function testConsumeTwoFactorManageReturnsNullWhenAccepted(): void
     {
         $guard = new AuthRateLimitGuard(
-            new AuthApiErrorResponder($this->translator()),
-            new AuthSessionHttpResponder(new AuthApiErrorResponder($this->translator())),
+            new AuthApiErrorResponder($this->translatorStub()),
+            new AuthSessionHttpResponder(new AuthApiErrorResponder($this->translatorStub())),
             $this->rateLimiterFactory(),
             $this->rateLimiterFactory(),
         );
@@ -42,13 +44,6 @@ final class AuthRateLimitGuardTest extends TestCase
         self::assertNull($guard->consumeTwoFactorManage('u1', 'setup', '127.0.0.1'));
     }
 
-    private function translator(): TranslatorInterface
-    {
-        $translator = $this->createStub(TranslatorInterface::class);
-        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
-
-        return $translator;
-    }
 
     private function rateLimiterFactory(): RateLimiterFactory
     {

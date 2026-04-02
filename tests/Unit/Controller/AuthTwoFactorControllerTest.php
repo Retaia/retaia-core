@@ -11,16 +11,14 @@ use App\Controller\Api\AuthCurrentSessionResolver;
 use App\Controller\Api\AuthTwoFactorController;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class AuthTwoFactorControllerTest extends TestCase
-{
-    use ControllerInstantiationTrait;
+{    use ControllerInstantiationTrait;
 
     public function testSetupRejectsMissingBearerToken(): void
     {
         $controller = $this->controller(AuthTwoFactorController::class, [
-            'errors' => new AuthApiErrorResponder($this->createTranslatorStub()),
+            'errors' => new AuthApiErrorResponder($this->translatorStub()),
             'currentSessionResolver' => $this->currentSessionResolver(),
         ]);
 
@@ -60,11 +58,4 @@ final class AuthTwoFactorControllerTest extends TestCase
         );
     }
 
-    private function createTranslatorStub(): TranslatorInterface
-    {
-        $translator = $this->createStub(TranslatorInterface::class);
-        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
-
-        return $translator;
-    }
 }

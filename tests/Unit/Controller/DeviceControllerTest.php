@@ -7,11 +7,9 @@ use App\Application\Auth\ResolveAuthenticatedUserHandler;
 use App\Controller\DeviceController;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class DeviceControllerTest extends TestCase
-{
-    use ControllerInstantiationTrait;
+{    use ControllerInstantiationTrait;
 
     public function testInfoReturnsApprovalPayload(): void
     {
@@ -22,7 +20,7 @@ final class DeviceControllerTest extends TestCase
                     return null;
                 }
             }),
-            'translator' => $this->translator(),
+            'translator' => $this->translatorStub(),
         ]);
 
         $response = $controller->info(Request::create('/device?user_code=abc', 'GET'));
@@ -41,17 +39,10 @@ final class DeviceControllerTest extends TestCase
                     return null;
                 }
             }),
-            'translator' => $this->translator(),
+            'translator' => $this->translatorStub(),
         ]);
 
         self::assertSame(401, $controller->approve(Request::create('/device', 'POST', server: ['CONTENT_TYPE' => 'application/json'], content: '{}'))->getStatusCode());
     }
 
-    private function translator(): TranslatorInterface
-    {
-        $translator = $this->createStub(TranslatorInterface::class);
-        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
-
-        return $translator;
-    }
 }

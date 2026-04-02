@@ -2,6 +2,7 @@
 
 namespace App\Tests\Unit\Controller;
 
+use App\Tests\Support\TranslatorStubTrait;
 use App\Application\AuthClient\MintClientTokenEndpointResult;
 use App\Application\AuthClient\PollDeviceFlowEndpointResult;
 use App\Controller\Api\AuthApiErrorResponder;
@@ -11,10 +12,11 @@ use App\Observability\Repository\MetricEventRepository;
 use Doctrine\DBAL\Connection;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
-use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class AuthClientHttpResponderTest extends TestCase
 {
+    use TranslatorStubTrait;
+
     public function testClientTokenForbiddenActorRecordsMetric(): void
     {
         $connection = $this->createMock(Connection::class);
@@ -24,7 +26,7 @@ final class AuthClientHttpResponderTest extends TestCase
 
         $metrics = new MetricEventRepository($connection);
         $logger = $this->createStub(LoggerInterface::class);
-        $responder = new AuthClientHttpResponder(new AuthApiErrorResponder($this->translator()), $metrics, $logger);
+        $responder = new AuthClientHttpResponder(new AuthApiErrorResponder($this->translatorStub()), $metrics, $logger);
 
         $response = $responder->clientToken(new MintClientTokenEndpointResult(MintClientTokenEndpointResult::STATUS_FORBIDDEN_ACTOR));
 
@@ -46,7 +48,7 @@ final class AuthClientHttpResponderTest extends TestCase
         $logger = $this->createMock(LoggerInterface::class);
         $logger->expects(self::once())->method('info')->with('auth.device.approved');
 
-        $responder = new AuthClientHttpResponder(new AuthApiErrorResponder($this->translator()), $metrics, $logger);
+        $responder = new AuthClientHttpResponder(new AuthApiErrorResponder($this->translatorStub()), $metrics, $logger);
         $response = $responder->pollDeviceFlow(new PollDeviceFlowEndpointResult(
             PollDeviceFlowEndpointResult::STATUS_SUCCESS,
             ['status' => 'approved', 'client_id' => 'c1'],
@@ -59,11 +61,4 @@ final class AuthClientHttpResponderTest extends TestCase
         ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
     }
 
-    private function translator(): TranslatorInterface
-    {
-        $translator = $this->createStub(TranslatorInterface::class);
-        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
-
-        return $translator;
-    }
 }

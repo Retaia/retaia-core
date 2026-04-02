@@ -12,11 +12,9 @@ use App\Controller\Api\JobController;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class JobControllerTest extends TestCase
-{
-    use ControllerInstantiationTrait;
+{    use ControllerInstantiationTrait;
 
     public function testClaimRejectsUnsignedRequests(): void
     {
@@ -26,12 +24,12 @@ final class JobControllerTest extends TestCase
             $this->createMock(AgentSignatureNonceRepositoryInterface::class),
             new SignedAgentMessageCanonicalizer(),
             $this->createMock(AgentRuntimeRepositoryInterface::class),
-            $this->translator(),
+            $this->translatorStub(),
         );
 
         $controller = $this->controller(JobController::class, [
             'logger' => $this->createMock(LoggerInterface::class),
-            'translator' => $this->translator(),
+            'translator' => $this->translatorStub(),
             'signedAgentRequestValidator' => $validator,
             'agentRuntimeRepository' => $this->createMock(AgentRuntimeRepositoryInterface::class),
         ]);
@@ -39,11 +37,4 @@ final class JobControllerTest extends TestCase
         self::assertSame(401, $controller->claim('job-1', Request::create('/api/v1/jobs/job-1/claim', 'POST'))->getStatusCode());
     }
 
-    private function translator(): TranslatorInterface
-    {
-        $translator = $this->createStub(TranslatorInterface::class);
-        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id);
-
-        return $translator;
-    }
 }
