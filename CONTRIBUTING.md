@@ -10,6 +10,7 @@ Avant tout changement contractuel: modifier/valider `retaia-docs` puis implémen
 - Rebase sur `master` avant merge.
 - Aucun merge commit de synchronisation dans la PR.
 - Le hook `pre-commit` DOIT bloquer tout commit direct sur `master`.
+- Les titres de PR liées au schéma/migrations DOIVENT suivre le style Conventional Commit, par exemple `refactor(db): ...` ou `fix(db): ...`.
 
 ## Exigences de PR
 - Décrire clairement l'impact contrat/runtime.
