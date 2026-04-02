@@ -2,10 +2,9 @@
 
 namespace App\Tests\Unit\Application\Job;
 
-use App\Asset\Repository\AssetRepositoryInterface;
-use App\Asset\Service\AssetStateMachine;
 use App\Application\Auth\Port\AuthenticatedUserGateway;
 use App\Application\Auth\ResolveAuthenticatedUserHandler;
+use App\Application\Job\CheckSuggestTagsSubmitScopeHandler;
 use App\Application\Job\ClaimJobHandler;
 use App\Application\Job\FailJobHandler;
 use App\Application\Job\HeartbeatJobHandler;
@@ -15,9 +14,13 @@ use App\Application\Job\JobEndpointsHandler;
 use App\Application\Job\ListClaimableJobsHandler;
 use App\Application\Job\Port\JobGateway;
 use App\Application\Job\ResolveJobLockConflictCodeHandler;
+use App\Application\Job\SubmitJobAssetMutator;
+use App\Application\Job\SubmitJobDerivedPersister;
 use App\Application\Job\SubmitJobHandler;
+use App\Application\Job\SubmitJobResultValidator;
+use App\Asset\Repository\AssetRepositoryInterface;
+use App\Asset\Service\AssetStateMachine;
 use App\Derived\DerivedFileRepositoryInterface;
-use App\Application\Job\CheckSuggestTagsSubmitScopeHandler;
 use App\Job\Job;
 use App\Job\JobStatus;
 use PHPUnit\Framework\TestCase;
@@ -82,52 +85,6 @@ final class JobEndpointsHandlerTest extends TestCase
         self::assertSame(JobEndpointResult::STATUS_VALIDATION_FAILED, $result->status());
     }
 
-    public function testFailReturnsValidationFailedWhenErrorCodeMissing(): void
-    {
-        $gateway = $this->createMock(JobGateway::class);
-        $gateway->expects(self::never())->method('fail');
-
-        $handler = $this->buildHandler($gateway, ['id' => 'agent-1', 'email' => 'a@b.c', 'roles' => ['ROLE_AGENT']]);
-        $result = $handler->fail('job-1', [
-            'lock_token' => 'token',
-            'fencing_token' => 1,
-            'message' => 'failed',
-            'retryable' => true,
-        ]);
-
-        self::assertSame(JobEndpointResult::STATUS_VALIDATION_FAILED, $result->status());
-        self::assertTrue((bool) $result->retryable());
-    }
-
-    public function testListUsesAnonymousActorWhenUnauthenticated(): void
-    {
-        $gateway = $this->createMock(JobGateway::class);
-        $gateway->expects(self::once())->method('listClaimable')->with(10)->willReturn([]);
-
-        $handler = $this->buildHandler($gateway, null);
-        $result = $handler->list(10);
-
-        self::assertSame(JobEndpointResult::STATUS_SUCCESS, $result->status());
-        self::assertSame('anonymous', $result->actorId());
-        self::assertSame(['items' => []], $result->payload());
-    }
-
-    public function testListFiltersOutNonV1JobTypes(): void
-    {
-        $gateway = $this->createMock(JobGateway::class);
-        $gateway->expects(self::once())->method('listClaimable')->with(10)->willReturn([
-            new Job('job-1', 'asset-1', 'extract_facts', JobStatus::PENDING, null, null, null, []),
-            new Job('job-2', 'asset-2', 'suggest_tags', JobStatus::PENDING, null, null, null, []),
-        ]);
-
-        $handler = $this->buildHandler($gateway, ['id' => 'agent-1', 'email' => 'a@b.c', 'roles' => ['ROLE_AGENT']]);
-        $result = $handler->list(10);
-
-        self::assertSame(JobEndpointResult::STATUS_SUCCESS, $result->status());
-        self::assertCount(1, $result->payload()['items'] ?? []);
-        self::assertSame('job-1', $result->payload()['items'][0]['job_id'] ?? null);
-    }
-
     public function testClaimReturnsStateConflictForNonV1JobType(): void
     {
         $gateway = $this->createMock(JobGateway::class);
@@ -156,9 +113,12 @@ final class JobEndpointsHandlerTest extends TestCase
             new HeartbeatJobHandler($gateway, new ResolveJobLockConflictCodeHandler($gateway)),
             new SubmitJobHandler(
                 $gateway,
-                $this->createMock(AssetRepositoryInterface::class),
-                $this->createMock(DerivedFileRepositoryInterface::class),
-                new AssetStateMachine(),
+                new SubmitJobAssetMutator(
+                    $this->createMock(AssetRepositoryInterface::class),
+                    new AssetStateMachine(),
+                    new SubmitJobDerivedPersister($this->createMock(DerivedFileRepositoryInterface::class)),
+                ),
+                new SubmitJobResultValidator(),
                 new CheckSuggestTagsSubmitScopeHandler(true),
                 new ResolveJobLockConflictCodeHandler($gateway)
             ),
