@@ -23,6 +23,16 @@ final class SubmitJobResultValidatorTest extends TestCase
         ]));
     }
 
+    public function testRejectsFactsPatchWithUnknownField(): void
+    {
+        self::assertFalse($this->validator->isAllowedForJobType('extract_facts', [
+            'facts_patch' => [
+                'duration_ms' => 123,
+                'unknown_field' => 42,
+            ],
+        ]));
+    }
+
     public function testRejectsTranscriptPatchOutsideTranscribeAudio(): void
     {
         self::assertFalse($this->validator->isAllowedForJobType('extract_facts', [
