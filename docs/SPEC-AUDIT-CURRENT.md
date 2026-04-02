@@ -14,12 +14,11 @@ The runtime/spec audit is green. The remaining work is structural: large classes
 
 ### Priority 1
 
-- [`src/Workflow/Service/BatchWorkflowService`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Workflow/Service/BatchWorkflowService.php)
-  - improved already, but still carries orchestration for move preview/apply, decision preview/apply, and purge/report flows
+- [`src/Lock/Repository/OperationLockRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Lock/Repository/OperationLockRepository.php)
+  - still mixes lock lifecycle persistence with query helpers and stale cleanup semantics
   - next seams:
-    - move coordinator
-    - decision coordinator
-    - purge coordinator
+    - active lock writer
+    - stale lock cleanup/query projector
 
 ### Priority 2
 
@@ -28,11 +27,6 @@ The runtime/spec audit is green. The remaining work is structural: large classes
   - next seams:
     - narrower builder map per driver
     - optional dedicated validator for driver-specific completeness checks if SMB/local setup grows again
-- [`src/Lock/Repository/OperationLockRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Lock/Repository/OperationLockRepository.php)
-  - still mixes lock lifecycle persistence with query helpers and stale cleanup semantics
-  - next seams:
-    - active lock writer
-    - stale lock cleanup/query projector
 - [`src/Ingest/Repository/IngestDiagnosticsRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Repository/IngestDiagnosticsRepository.php)
   - still handles unmatched-sidecar writes, counters, latest snapshot, and filtered listing in one class
   - next seams:
@@ -52,8 +46,6 @@ The runtime/spec audit is green. The remaining work is structural: large classes
   - still mixes runtime writes and ops-facing read projection helpers
 - [`src/Application/Job/JobEndpointsHandler`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Application/Job/JobEndpointsHandler.php)
   - still exposes a broad façade over claim, heartbeat, submit, fail, and list/read concerns
-- [`src/Security/ApiLoginAuthenticator`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Security/ApiLoginAuthenticator.php)
-  - still mixes credential auth, throttling, MFA challenge branching, and token minting handoff
 - [`src/Api/Service/AgentJobProjectionRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Api/Service/AgentJobProjectionRepository.php)
   - still deserves narrower projection helpers once job ops reporting grows further
 
