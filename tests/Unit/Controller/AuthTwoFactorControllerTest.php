@@ -2,6 +2,10 @@
 
 namespace App\Tests\Unit\Controller;
 
+use App\Auth\UserAccessJwtService;
+use App\Auth\UserAccessTokenService;
+use App\Auth\UserAuthSessionService;
+use App\Auth\UserAuthSessionRepositoryInterface;
 use App\Controller\Api\AuthApiErrorResponder;
 use App\Controller\Api\AuthCurrentSessionResolver;
 use App\Controller\Api\AuthTwoFactorController;
@@ -25,9 +29,12 @@ final class AuthTwoFactorControllerTest extends TestCase
 
     private function currentSessionResolver(): AuthCurrentSessionResolver
     {
-        $reflection = new \ReflectionClass(AuthCurrentSessionResolver::class);
-
-        return $reflection->newInstanceWithoutConstructor();
+        return new AuthCurrentSessionResolver(
+            new UserAccessTokenService(
+                new UserAuthSessionService($this->createMock(UserAuthSessionRepositoryInterface::class)),
+                new UserAccessJwtService('test-secret', 3600),
+            )
+        );
     }
 
     private function createTranslatorStub(): TranslatorInterface
