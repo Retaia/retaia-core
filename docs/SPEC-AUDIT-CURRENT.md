@@ -14,11 +14,12 @@ The runtime/spec audit is green. The remaining work is structural: large classes
 
 ### Priority 1
 
-- [`src/Lock/Repository/OperationLockRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Lock/Repository/OperationLockRepository.php)
-  - still mixes lock lifecycle persistence with query helpers and stale cleanup semantics
+- [`src/Ingest/Repository/IngestDiagnosticsRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Repository/IngestDiagnosticsRepository.php)
+  - still handles unmatched-sidecar writes, counters, latest snapshot, and filtered listing in one class
   - next seams:
-    - active lock writer
-    - stale lock cleanup/query projector
+    - unmatched-sidecar writer
+    - diagnostics summary projector
+    - unmatched-sidecar listing projector
 
 ### Priority 2
 
@@ -27,12 +28,6 @@ The runtime/spec audit is green. The remaining work is structural: large classes
   - next seams:
     - narrower builder map per driver
     - optional dedicated validator for driver-specific completeness checks if SMB/local setup grows again
-- [`src/Ingest/Repository/IngestDiagnosticsRepository`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Ingest/Repository/IngestDiagnosticsRepository.php)
-  - still handles unmatched-sidecar writes, counters, latest snapshot, and filtered listing in one class
-  - next seams:
-    - unmatched-sidecar writer
-    - diagnostics summary projector
-    - unmatched-sidecar listing projector
 - [`src/Security/ApiLoginAuthenticator`](/Users/fullfrontend/Jobs/A%20-%20Full%20Front-End/retaia-workspace/retaia-core/src/Security/ApiLoginAuthenticator.php)
   - still mixes credential auth, throttling, MFA challenge branching, and token minting handoff
   - next seams:
