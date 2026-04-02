@@ -2,6 +2,7 @@
 
 namespace App\Http;
 
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Event\ResponseEvent;
@@ -9,6 +10,12 @@ use Symfony\Component\HttpKernel\KernelEvents;
 
 final class SecurityHeadersSubscriber implements EventSubscriberInterface
 {
+    public function __construct(
+        #[Autowire('%kernel.debug%')]
+        private bool $debug = false,
+    ) {
+    }
+
     public static function getSubscribedEvents(): array
     {
         return [
@@ -37,5 +44,25 @@ final class SecurityHeadersSubscriber implements EventSubscriberInterface
         $response->headers->set('X-Frame-Options', 'DENY');
         $response->headers->set('Referrer-Policy', 'no-referrer');
         $response->headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+
+        if ($this->debug) {
+            $this->exposeProfilerHeaders($response);
+        }
+    }
+
+    private function exposeProfilerHeaders(Response $response): void
+    {
+        $existing = $response->headers->get('Access-Control-Expose-Headers', '');
+        $headers = $existing === ''
+            ? []
+            : array_values(array_filter(array_map('trim', explode(',', $existing)), static fn (string $value): bool => $value !== ''));
+
+        foreach (['X-Debug-Token', 'X-Debug-Token-Link', 'X-Previous-Debug-Token'] as $header) {
+            if (!in_array($header, $headers, true)) {
+                $headers[] = $header;
+            }
+        }
+
+        $response->headers->set('Access-Control-Expose-Headers', implode(', ', $headers));
     }
 }

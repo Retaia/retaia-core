@@ -25,6 +25,7 @@ final class SecurityHeadersSubscriberTest extends TestCase
         self::assertSame('no-referrer', $response->headers->get('Referrer-Policy'));
         self::assertSame('camera=(), microphone=(), geolocation=()', $response->headers->get('Permissions-Policy'));
         self::assertFalse($response->headers->has('Strict-Transport-Security'));
+        self::assertFalse($response->headers->has('Access-Control-Expose-Headers'));
     }
 
     public function testAddsHstsWhenRequestIsSecure(): void
@@ -37,6 +38,22 @@ final class SecurityHeadersSubscriberTest extends TestCase
         $subscriber->onKernelResponse($event);
 
         self::assertSame('max-age=31536000; includeSubDomains', $response->headers->get('Strict-Transport-Security'));
+    }
+
+    public function testExposesProfilerHeadersInDebugMode(): void
+    {
+        $subscriber = new SecurityHeadersSubscriber(true);
+        $response = new Response();
+        $response->headers->set('Access-Control-Expose-Headers', 'ETag');
+        $request = Request::create('/api/v1/docs', 'GET');
+        $event = new ResponseEvent($this->kernelMock(), $request, HttpKernelInterface::MAIN_REQUEST, $response);
+
+        $subscriber->onKernelResponse($event);
+
+        self::assertSame(
+            'ETag, X-Debug-Token, X-Debug-Token-Link, X-Previous-Debug-Token',
+            $response->headers->get('Access-Control-Expose-Headers')
+        );
     }
 
     private function kernelMock(): HttpKernelInterface
