@@ -18,7 +18,7 @@ final class SecurityHeadersSubscriberTest extends TestCase
     {
         parent::setUp();
 
-        $this->subscriber = new SecurityHeadersSubscriber(false);
+        $this->subscriber = $this->createSubscriber();
         $this->kernel = $this->createMock(HttpKernelInterface::class);
     }
 
@@ -67,7 +67,7 @@ final class SecurityHeadersSubscriberTest extends TestCase
 
     public function testExposesProfilerHeadersInDebugMode(): void
     {
-        $this->subscriber = new SecurityHeadersSubscriber(true);
+        $this->subscriber = $this->createSubscriber(true);
         $response = new Response();
         $response->headers->set('Access-Control-Expose-Headers', 'ETag');
         $request = Request::create('/api/v1/docs', 'GET');
@@ -91,5 +91,10 @@ final class SecurityHeadersSubscriberTest extends TestCase
         $this->subscriber->onKernelResponse($event);
 
         self::assertSame('ETag', $response->headers->get('Access-Control-Expose-Headers'));
+    }
+
+    private function createSubscriber(bool $debug = false): SecurityHeadersSubscriber
+    {
+        return new SecurityHeadersSubscriber($debug);
     }
 }
