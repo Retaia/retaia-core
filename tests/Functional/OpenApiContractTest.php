@@ -76,6 +76,7 @@ final class OpenApiContractTest extends WebTestCase
         $this->assertPathStatusUsesErrorResponse($openApi, '/auth/lost-password/reset', 'post', '422');
         $this->assertPathStatusUsesErrorResponse($openApi, '/auth/2fa/setup', 'post', '401');
         $this->assertPathStatusUsesErrorResponse($openApi, '/auth/2fa/setup', 'post', '409');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/2fa/setup', 'post', '429');
         $this->assertPathStatusUsesErrorResponse($openApi, '/auth/2fa/enable', 'post', '400');
         $this->assertPathStatusUsesErrorResponse($openApi, '/auth/2fa/enable', 'post', '401');
         $this->assertPathStatusUsesErrorResponse($openApi, '/auth/2fa/enable', 'post', '409');
