@@ -124,9 +124,9 @@ final class ArchitectureConstraintsTest extends TestCase
                 continue;
             }
 
-            $usesFactory = str_contains($contents, 'ApiErrorResponseFactory')
-                || str_contains($contents, '->errorResponse(');
-            $usesTrait = str_contains($contents, 'ApiErrorResponderTrait');
+            $analysis = $this->analyzeErrorResponderUsage($contents);
+            $usesFactory = $analysis['usesFactory'] || $analysis['usesErrorResponseCall'];
+            $usesTrait = $analysis['usesTrait'];
 
             if (!$usesFactory && !$usesTrait) {
                 $violations[] = sprintf(
@@ -139,6 +139,75 @@ final class ArchitectureConstraintsTest extends TestCase
         sort($violations);
 
         self::assertSame([], $violations, implode(PHP_EOL, $violations));
+    }
+
+    /**
+     * @return array{usesFactory: bool, usesTrait: bool, usesErrorResponseCall: bool}
+     */
+    private function analyzeErrorResponderUsage(string $contents): array
+    {
+        $tokens = token_get_all($contents);
+
+        $usesFactory = false;
+        $usesTrait = false;
+        $usesErrorResponseCall = false;
+
+        $tokenCount = \count($tokens);
+        for ($i = 0; $i < $tokenCount; $i++) {
+            $token = $tokens[$i];
+            if (!\is_array($token)) {
+                continue;
+            }
+
+            $tokenId = $token[0];
+            $tokenText = $token[1];
+
+            if ($tokenId !== T_STRING && (!defined('T_NAME_QUALIFIED') || $tokenId !== T_NAME_QUALIFIED)) {
+                continue;
+            }
+
+            if ($tokenText === 'ApiErrorResponseFactory') {
+                $usesFactory = true;
+
+                continue;
+            }
+
+            if ($tokenText === 'ApiErrorResponderTrait') {
+                $usesTrait = true;
+
+                continue;
+            }
+
+            if ($tokenText !== 'errorResponse') {
+                continue;
+            }
+
+            $j = $i + 1;
+            while ($j < $tokenCount) {
+                $next = $tokens[$j];
+                if (\is_array($next)) {
+                    if (\in_array($next[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+                        $j++;
+
+                        continue;
+                    }
+
+                    break;
+                }
+
+                if ($next === '(') {
+                    $usesErrorResponseCall = true;
+                }
+
+                break;
+            }
+        }
+
+        return [
+            'usesFactory' => $usesFactory,
+            'usesTrait' => $usesTrait,
+            'usesErrorResponseCall' => $usesErrorResponseCall,
+        ];
     }
 
     /**
