@@ -65,6 +65,28 @@ final class ApiLoginSecondFactorAttemptLimiterTest extends TestCase
         self::assertFalse($limiter->consume('u-1', '192.168.0.1'));
     }
 
+    public function testTooManyAttemptsResponseBeforeLimitExceededDoesNotSetRetryAfter(): void
+    {
+        $translator = $this->createMock(TranslatorInterface::class);
+        $translator->expects(self::once())
+            ->method('trans')
+            ->with('auth.error.too_many_2fa_attempts')
+            ->willReturn('auth.error.too_many_2fa_attempts');
+        $limiter = new ApiLoginSecondFactorAttemptLimiter(
+            $this->limiterFactory(1, '1 minute'),
+            $translator
+        );
+
+        $response = $limiter->tooManyAttemptsResponse();
+
+        self::assertSame(429, $response->getStatusCode());
+        self::assertSame([
+            'code' => 'TOO_MANY_ATTEMPTS',
+            'message' => 'auth.error.too_many_2fa_attempts',
+        ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
+        self::assertFalse($response->headers->has('Retry-After'));
+    }
+
     private function limiterFactory(int $limit, string $interval): RateLimiterFactory
     {
         return new RateLimiterFactory([
