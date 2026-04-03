@@ -10,6 +10,8 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class ApiLoginSecondFactorAttemptLimiterIntegrationTest extends TestCase
 {
+    private const INTERVAL_WAIT_TIME_SECONDS = 2;
+
     public function testAllowsAttemptsAgainAfterIntervalExpires(): void
     {
         $limiter = new ApiLoginSecondFactorAttemptLimiter(
@@ -25,7 +27,7 @@ final class ApiLoginSecondFactorAttemptLimiterIntegrationTest extends TestCase
         self::assertTrue($limiter->consume('u-1', '127.0.0.1'));
         self::assertFalse($limiter->consume('u-1', '127.0.0.1'));
 
-        sleep(2);
+        sleep(self::INTERVAL_WAIT_TIME_SECONDS);
 
         self::assertTrue($limiter->consume('u-1', '127.0.0.1'));
     }

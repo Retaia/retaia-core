@@ -69,6 +69,17 @@ final class SecurityHeadersSubscriberTest extends TestCase
         self::assertSame('max-age=31536000; includeSubDomains', $response->headers->get('Strict-Transport-Security'));
     }
 
+    public function testDoesNotAddHstsWhenRequestIsNotSecure(): void
+    {
+        $response = new Response();
+        $request = Request::create('/api/v1/docs', 'GET');
+        $event = new ResponseEvent($this->kernel, $request, HttpKernelInterface::MAIN_REQUEST, $response);
+
+        $this->subscriber->onKernelResponse($event);
+
+        self::assertFalse($response->headers->has('Strict-Transport-Security'));
+    }
+
     public function testExposesProfilerHeadersInDebugMode(): void
     {
         $this->subscriber = $this->createSubscriber(true);

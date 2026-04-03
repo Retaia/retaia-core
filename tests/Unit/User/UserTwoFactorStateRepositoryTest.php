@@ -61,7 +61,12 @@ final class UserTwoFactorStateRepositoryTest extends TestCase
             'secret_encrypted' => 'active-secret',
         ], null, 42));
 
-        self::assertNotNull($repository->findByUserId('u-2'));
+        $stored = $repository->findByUserId('u-2');
+
+        self::assertNotNull($stored);
+        self::assertSame('u-2', $stored->userId);
+        self::assertTrue($stored->enabled);
+        self::assertSame('active-secret', $stored->secretEncrypted);
 
         $repository->delete('u-2');
 
@@ -112,13 +117,7 @@ final class UserTwoFactorStateRepositoryTest extends TestCase
         self::assertSame(['updated-legacy-hash'], $stored->legacyRecoveryCodeSha256);
         self::assertSame(300, $stored->createdAt);
         self::assertSame(400, $stored->updatedAt);
-
-        $row = $this->connection()
-            ->executeQuery('SELECT COUNT(*) AS cnt FROM user_two_factor_state WHERE user_id = ?', ['u-3'])
-            ->fetchAssociative();
-
-        self::assertIsArray($row);
-        self::assertSame(1, (int) $row['cnt']);
+        self::assertSame(1, $this->countRowsForUserId('u-3'));
     }
 
     private function connection(): Connection
@@ -131,5 +130,16 @@ final class UserTwoFactorStateRepositoryTest extends TestCase
         $this->ensureUserTwoFactorStateTable($this->connection);
 
         return $this->connection;
+    }
+
+    private function countRowsForUserId(string $userId): int
+    {
+        $row = $this->connection()
+            ->executeQuery('SELECT COUNT(*) AS cnt FROM user_two_factor_state WHERE user_id = ?', [$userId])
+            ->fetchAssociative();
+
+        self::assertIsArray($row);
+
+        return (int) $row['cnt'];
     }
 }
