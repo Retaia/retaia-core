@@ -10,7 +10,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class ApiLoginSecondFactorAttemptLimiterIntegrationTest extends TestCase
 {
-    public function testLimitResetsAfterWindowExpires(): void
+    public function testAllowsAttemptsAgainAfterIntervalExpires(): void
     {
         $limiter = new ApiLoginSecondFactorAttemptLimiter(
             new RateLimiterFactory([
