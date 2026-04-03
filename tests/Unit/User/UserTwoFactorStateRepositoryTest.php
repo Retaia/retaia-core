@@ -112,6 +112,13 @@ final class UserTwoFactorStateRepositoryTest extends TestCase
         self::assertSame(['updated-legacy-hash'], $stored->legacyRecoveryCodeSha256);
         self::assertSame(300, $stored->createdAt);
         self::assertSame(400, $stored->updatedAt);
+
+        $row = $this->connection()
+            ->executeQuery('SELECT COUNT(*) AS cnt FROM user_two_factor_state WHERE user_id = ?', ['u-3'])
+            ->fetchAssociative();
+
+        self::assertIsArray($row);
+        self::assertSame(1, (int) $row['cnt']);
     }
 
     private function connection(): Connection
