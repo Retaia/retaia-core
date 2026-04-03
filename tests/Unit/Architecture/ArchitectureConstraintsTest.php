@@ -83,7 +83,15 @@ final class ArchitectureConstraintsTest extends TestCase
                 continue;
             }
 
-            if (preg_match(self::INLINE_CODE_MESSAGE_JSON_RESPONSE_PATTERN, $contents) === 1) {
+            $matchResult = preg_match(self::INLINE_CODE_MESSAGE_JSON_RESPONSE_PATTERN, $contents);
+            if ($matchResult === false) {
+                self::fail(sprintf(
+                    'Regex error while checking inline code/message JsonResponse envelope in %s',
+                    $this->relativePath($file)
+                ));
+            }
+
+            if ($matchResult === 1) {
                 $violations[] = sprintf('%s rebuilds an inline code/message JsonResponse envelope', $this->relativePath($file));
             }
         }
@@ -105,7 +113,14 @@ final class ArchitectureConstraintsTest extends TestCase
                 continue;
             }
 
-            if (preg_match(self::JSON_RESPONSE_WITH_CODE_PATTERN, $contents) !== 1) {
+            $matchResult = preg_match(self::JSON_RESPONSE_WITH_CODE_PATTERN, $contents);
+            if ($matchResult === false) {
+                $violations[] = $this->relativePath($file).': regex error while searching for JsonResponse error payloads';
+
+                continue;
+            }
+
+            if ($matchResult !== 1) {
                 continue;
             }
 
