@@ -13,6 +13,18 @@ final class UserTwoFactorStateRepositoryTest extends TestCase
 {
     use FunctionalSchemaTrait;
 
+    private ?Connection $connection = null;
+
+    protected function tearDown(): void
+    {
+        if ($this->connection instanceof Connection) {
+            $this->connection->close();
+            $this->connection = null;
+        }
+
+        parent::tearDown();
+    }
+
     public function testSaveAndFindRoundTrip(): void
     {
         $repository = new UserTwoFactorStateRepository($this->connection());
@@ -56,9 +68,13 @@ final class UserTwoFactorStateRepositoryTest extends TestCase
 
     private function connection(): Connection
     {
-        $connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]);
-        $this->ensureUserTwoFactorStateTable($connection);
+        if ($this->connection instanceof Connection) {
+            return $this->connection;
+        }
 
-        return $connection;
+        $this->connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]);
+        $this->ensureUserTwoFactorStateTable($this->connection);
+
+        return $this->connection;
     }
 }
