@@ -52,7 +52,7 @@ final class ApiLoginSecondFactorAttemptLimiterTest extends TestCase
         self::assertFalse($limiter->consume('u-2', '127.0.0.1'));
     }
 
-    public function testSameUserOnDifferentIpsHaveIndependentLimits(): void
+    public function testSameUserOnDifferentIpsHasIndependentLimits(): void
     {
         $limiter = new ApiLoginSecondFactorAttemptLimiter(
             $this->limiterFactory(1, '1 minute'),
