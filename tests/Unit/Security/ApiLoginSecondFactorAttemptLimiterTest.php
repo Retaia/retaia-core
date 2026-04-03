@@ -12,9 +12,14 @@ final class ApiLoginSecondFactorAttemptLimiterTest extends TestCase
 {
     public function testConsumeRejectsAfterConfiguredLimitAndBuildsResponse(): void
     {
+        $translator = $this->createMock(TranslatorInterface::class);
+        $translator->expects(self::once())
+            ->method('trans')
+            ->with('auth.error.too_many_2fa_attempts')
+            ->willReturn('auth.error.too_many_2fa_attempts');
         $limiter = new ApiLoginSecondFactorAttemptLimiter(
             $this->limiterFactory(1, '1 minute'),
-            $this->translator()
+            $translator
         );
 
         self::assertTrue($limiter->consume('u-1', '127.0.0.1'));
@@ -31,6 +36,7 @@ final class ApiLoginSecondFactorAttemptLimiterTest extends TestCase
         self::assertNotNull($retryAfter);
         self::assertNotSame('', $retryAfter);
         self::assertGreaterThanOrEqual(0, (int) $retryAfter);
+        self::assertLessThanOrEqual(60, (int) $retryAfter);
     }
 
     public function testDifferentUsersOnSameIpHaveIndependentLimits(): void
