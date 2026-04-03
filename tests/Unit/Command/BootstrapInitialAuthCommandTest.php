@@ -165,6 +165,9 @@ final class BootstrapInitialAuthCommandTest extends TestCase
         self::assertStringContainsString('(unchanged)', $tester->getDisplay());
         self::assertSame('persisted-agent-secret', $clients->findByClientId('agent-default')?->secretKey);
         self::assertSame('persisted-mcp-secret', $clients->findByClientId('mcp-default')?->secretKey);
-        self::assertSame('existing-hash', $users->findByEmail('admin@retaia.local')?->getPassword());
+        $adminUser = $users->findByEmail('admin@retaia.local');
+        self::assertSame('existing-hash', $adminUser?->getPassword());
+        self::assertContains('ROLE_ADMIN', $adminUser?->getRoles() ?? []);
+        self::assertTrue($adminUser?->isEmailVerified() ?? false);
     }
 }
