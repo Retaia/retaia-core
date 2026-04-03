@@ -65,7 +65,7 @@ final class ApiLoginSecondFactorAttemptLimiterTest extends TestCase
         self::assertFalse($limiter->consume('u-1', '192.168.0.1'));
     }
 
-    public function testTooManyAttemptsResponseBeforeLimitExceededDoesNotSetRetryAfter(): void
+    public function testTooManyAttemptsResponseWithoutConsumeDoesNotSetRetryAfter(): void
     {
         $translator = $this->createMock(TranslatorInterface::class);
         $translator->expects(self::once())
