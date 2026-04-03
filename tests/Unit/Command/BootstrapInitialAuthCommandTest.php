@@ -15,35 +15,45 @@ use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
 
+final class InMemoryUserRepository implements UserRepositoryInterface
+{
+    /** @var array<string, User> */
+    public array $usersByEmail = [];
+
+    public function __construct(?User $initialUser = null)
+    {
+        if ($initialUser instanceof User) {
+            $this->save($initialUser);
+        }
+    }
+
+    public function findByEmail(string $email): ?User
+    {
+        return $this->usersByEmail[strtolower($email)] ?? null;
+    }
+
+    public function findById(string $id): ?User
+    {
+        foreach ($this->usersByEmail as $user) {
+            if ($user->getId() === $id) {
+                return $user;
+            }
+        }
+
+        return null;
+    }
+
+    public function save(User $user): void
+    {
+        $this->usersByEmail[strtolower($user->getEmail())] = $user;
+    }
+}
+
 final class BootstrapInitialAuthCommandTest extends TestCase
 {
     public function testExecuteCreatesAdminAndDefaultClientsWhenMissing(): void
     {
-        $users = new class() implements UserRepositoryInterface {
-            /** @var array<string, User> */
-            public array $usersByEmail = [];
-
-            public function findByEmail(string $email): ?User
-            {
-                return $this->usersByEmail[strtolower($email)] ?? null;
-            }
-
-            public function findById(string $id): ?User
-            {
-                foreach ($this->usersByEmail as $user) {
-                    if ($user->getId() === $id) {
-                        return $user;
-                    }
-                }
-
-                return null;
-            }
-
-            public function save(User $user): void
-            {
-                $this->usersByEmail[strtolower($user->getEmail())] = $user;
-            }
-        };
+        $users = new InMemoryUserRepository();
         $clients = new class() implements AuthClientRegistryRepositoryInterface {
             /** @var array<string, AuthClientRegistryEntry> */
             public array $entries = [];
@@ -106,26 +116,7 @@ final class BootstrapInitialAuthCommandTest extends TestCase
     public function testExecuteLeavesExistingSecretsUnchangedWithoutFlags(): void
     {
         $existingAdmin = new User('admin-1', 'admin@retaia.local', 'existing-hash', ['ROLE_ADMIN'], true);
-        $users = new class($existingAdmin) implements UserRepositoryInterface {
-            public function __construct(private User $user)
-            {
-            }
-
-            public function findByEmail(string $email): ?User
-            {
-                return strtolower($email) === strtolower($this->user->getEmail()) ? $this->user : null;
-            }
-
-            public function findById(string $id): ?User
-            {
-                return $id === $this->user->getId() ? $this->user : null;
-            }
-
-            public function save(User $user): void
-            {
-                $this->user = $user;
-            }
-        };
+        $users = new InMemoryUserRepository($existingAdmin);
         $agent = new AuthClientRegistryEntry('agent-default', 'AGENT', 'persisted-agent-secret', null, null, null, null, null);
         $mcp = new AuthClientRegistryEntry('mcp-default', 'MCP', 'persisted-mcp-secret', null, null, null, null, null);
         $clients = new class($agent, $mcp) implements AuthClientRegistryRepositoryInterface {
