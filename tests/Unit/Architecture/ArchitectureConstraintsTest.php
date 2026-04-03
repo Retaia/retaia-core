@@ -9,6 +9,12 @@ use SplFileInfo;
 
 final class ArchitectureConstraintsTest extends TestCase
 {
+    private const INLINE_CODE_MESSAGE_JSON_RESPONSE_PATTERN =
+        "/new\\s+JsonResponse\\s*\\(\\s*\\[.*?['\\\"]code['\\\"]\\s*=>.*?['\\\"]message['\\\"]\\s*=>/s";
+
+    private const JSON_RESPONSE_WITH_CODE_PATTERN =
+        "/new\\s+JsonResponse\\s*\\(.*?['\\\"]code['\\\"]\\s*=>/s";
+
     public function testControllersDoNotImportDbalOrExecuteSqlDirectly(): void
     {
         $violations = $this->findViolations(
@@ -77,10 +83,7 @@ final class ArchitectureConstraintsTest extends TestCase
                 continue;
             }
 
-            if (
-                preg_match("/new\\s+JsonResponse\\s*\\(\\s*\\[\\s*['\\\"]code['\\\"]\\s*=>/m", $contents) === 1
-                && preg_match("/['\\\"]message['\\\"]\\s*=>/m", $contents) === 1
-            ) {
+            if (preg_match(self::INLINE_CODE_MESSAGE_JSON_RESPONSE_PATTERN, $contents) === 1) {
                 $violations[] = sprintf('%s rebuilds an inline code/message JsonResponse envelope', $this->relativePath($file));
             }
         }
@@ -102,10 +105,7 @@ final class ArchitectureConstraintsTest extends TestCase
                 continue;
             }
 
-            if (
-                preg_match("/new\\s+JsonResponse\\s*\\(/m", $contents) < 1
-                || preg_match("/['\\\"]code['\\\"]\\s*=>/m", $contents) < 1
-            ) {
+            if (preg_match(self::JSON_RESPONSE_WITH_CODE_PATTERN, $contents) !== 1) {
                 continue;
             }
 
