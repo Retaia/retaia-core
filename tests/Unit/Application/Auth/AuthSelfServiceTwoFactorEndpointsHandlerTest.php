@@ -98,6 +98,13 @@ final class AuthSelfServiceTwoFactorEndpointsHandlerTest extends TestCase
         self::assertSame(['code-a', 'code-b'], $result->recoveryCodes());
     }
 
+    public function testRegenerateRecoveryCodesReturnsValidationFailedWhenOtpMissing(): void
+    {
+        $handler = $this->buildHandler(['id' => 'u-1', 'email' => 'user@example.test', 'roles' => ['ROLE_USER']]);
+
+        self::assertSame('VALIDATION_FAILED', $handler->regenerateTwoFactorRecoveryCodes([])->status());
+    }
+
     /**
      * @param array{id: string, email: string, roles: array<int, string>}|null $currentUser
      */

@@ -74,6 +74,24 @@ final class OpenApiContractTest extends WebTestCase
         $this->assertPathStatusUsesErrorResponse($openApi, '/auth/lost-password/request', 'post', '429');
         $this->assertPathStatusUsesErrorResponse($openApi, '/auth/lost-password/reset', 'post', '400');
         $this->assertPathStatusUsesErrorResponse($openApi, '/auth/lost-password/reset', 'post', '422');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/2fa/setup', 'post', '401');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/2fa/setup', 'post', '409');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/2fa/setup', 'post', '429');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/2fa/enable', 'post', '400');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/2fa/enable', 'post', '401');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/2fa/enable', 'post', '409');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/2fa/enable', 'post', '422');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/2fa/enable', 'post', '429');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/2fa/disable', 'post', '400');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/2fa/disable', 'post', '401');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/2fa/disable', 'post', '409');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/2fa/disable', 'post', '422');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/2fa/disable', 'post', '429');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/2fa/recovery-codes/regenerate', 'post', '400');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/2fa/recovery-codes/regenerate', 'post', '401');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/2fa/recovery-codes/regenerate', 'post', '409');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/2fa/recovery-codes/regenerate', 'post', '422');
+        $this->assertPathStatusUsesErrorResponse($openApi, '/auth/2fa/recovery-codes/regenerate', 'post', '429');
         $this->assertPathStatusUsesErrorResponse($openApi, '/auth/verify-email/request', 'post', '422');
         $this->assertPathStatusUsesErrorResponse($openApi, '/auth/verify-email/request', 'post', '429');
         $this->assertPathStatusUsesErrorResponse($openApi, '/auth/verify-email/confirm', 'post', '400');
@@ -389,6 +407,18 @@ final class OpenApiContractTest extends WebTestCase
         $recoverySchema = $openApi['components']['schemas']['Auth2faRecoveryCodesResponse'] ?? null;
         self::assertIsArray($recoverySchema);
         self::assertSame(['recovery_codes'], $recoverySchema['required'] ?? null);
+
+        $otpRequestSchema = $openApi['components']['schemas']['Auth2faOtpRequest'] ?? null;
+        self::assertIsArray($otpRequestSchema);
+        self::assertSame(['otp_code'], $otpRequestSchema['required'] ?? null);
+
+        $regenerateRequestBody = $openApi['paths']['/auth/2fa/recovery-codes/regenerate']['post']['requestBody'] ?? null;
+        self::assertIsArray($regenerateRequestBody);
+        self::assertTrue((bool) ($regenerateRequestBody['required'] ?? false));
+        self::assertSame(
+            '#/components/schemas/Auth2faOtpRequest',
+            $regenerateRequestBody['content']['application/json']['schema']['$ref'] ?? null
+        );
 
         $client = $this->createAuthenticatedClient();
 

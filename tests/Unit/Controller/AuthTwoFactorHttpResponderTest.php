@@ -5,6 +5,7 @@ namespace App\Tests\Unit\Controller;
 use App\Tests\Support\TranslatorStubTrait;
 use App\Application\Auth\TwoFactorDisableEndpointResult;
 use App\Application\Auth\TwoFactorEnableEndpointResult;
+use App\Application\Auth\TwoFactorRecoveryCodesEndpointResult;
 use App\Controller\Api\AuthApiErrorResponder;
 use App\Controller\Api\AuthTwoFactorHttpResponder;
 use PHPUnit\Framework\TestCase;
@@ -41,4 +42,45 @@ final class AuthTwoFactorHttpResponderTest extends TestCase
         ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
     }
 
+    public function testRegenerateRecoveryCodesReturnsValidationFailedWhenOtpMissing(): void
+    {
+        $responder = new AuthTwoFactorHttpResponder(new AuthApiErrorResponder($this->translatorStub()));
+        $response = $responder->regenerateRecoveryCodes(new TwoFactorRecoveryCodesEndpointResult(
+            TwoFactorRecoveryCodesEndpointResult::STATUS_VALIDATION_FAILED,
+        ));
+
+        self::assertSame(422, $response->getStatusCode());
+        self::assertSame([
+            'code' => 'VALIDATION_FAILED',
+            'message' => 'auth.error.otp_code_required',
+        ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
+    }
+
+    public function testRegenerateRecoveryCodesReturnsInvalidCodeWhenOtpIsWrong(): void
+    {
+        $responder = new AuthTwoFactorHttpResponder(new AuthApiErrorResponder($this->translatorStub()));
+        $response = $responder->regenerateRecoveryCodes(new TwoFactorRecoveryCodesEndpointResult(
+            TwoFactorRecoveryCodesEndpointResult::STATUS_INVALID_CODE,
+        ));
+
+        self::assertSame(400, $response->getStatusCode());
+        self::assertSame([
+            'code' => 'INVALID_2FA_CODE',
+            'message' => 'auth.error.invalid_2fa_code',
+        ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
+    }
+
+    public function testRegenerateRecoveryCodesReturnsConflictWhenMfaIsDisabled(): void
+    {
+        $responder = new AuthTwoFactorHttpResponder(new AuthApiErrorResponder($this->translatorStub()));
+        $response = $responder->regenerateRecoveryCodes(new TwoFactorRecoveryCodesEndpointResult(
+            TwoFactorRecoveryCodesEndpointResult::STATUS_NOT_ENABLED,
+        ));
+
+        self::assertSame(409, $response->getStatusCode());
+        self::assertSame([
+            'code' => 'MFA_NOT_ENABLED',
+            'message' => 'auth.error.mfa_not_enabled',
+        ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
+    }
 }
