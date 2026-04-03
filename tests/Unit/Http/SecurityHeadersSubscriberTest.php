@@ -18,13 +18,8 @@ final class SecurityHeadersSubscriberTest extends TestCase
     {
         parent::setUp();
 
-        $this->subscriber = new SecurityHeadersSubscriber();
-        $this->kernel = new class implements HttpKernelInterface {
-            public function handle(Request $request, int $type = self::MAIN_REQUEST, bool $catch = true): Response
-            {
-                return new Response();
-            }
-        };
+        $this->subscriber = new SecurityHeadersSubscriber(false);
+        $this->kernel = $this->createMock(HttpKernelInterface::class);
     }
 
     public function testAddsBaseHeadersForApiResponses(): void
@@ -72,13 +67,13 @@ final class SecurityHeadersSubscriberTest extends TestCase
 
     public function testExposesProfilerHeadersInDebugMode(): void
     {
-        $subscriber = new SecurityHeadersSubscriber(true);
+        $this->subscriber = new SecurityHeadersSubscriber(true);
         $response = new Response();
         $response->headers->set('Access-Control-Expose-Headers', 'ETag');
         $request = Request::create('/api/v1/docs', 'GET');
         $event = new ResponseEvent($this->kernel, $request, HttpKernelInterface::MAIN_REQUEST, $response);
 
-        $subscriber->onKernelResponse($event);
+        $this->subscriber->onKernelResponse($event);
 
         self::assertSame(
             'ETag, X-Debug-Token, X-Debug-Token-Link, X-Previous-Debug-Token',
@@ -88,13 +83,12 @@ final class SecurityHeadersSubscriberTest extends TestCase
 
     public function testDoesNotExposeProfilerHeadersWhenNotInDebugMode(): void
     {
-        $subscriber = new SecurityHeadersSubscriber(false);
         $response = new Response();
         $response->headers->set('Access-Control-Expose-Headers', 'ETag');
         $request = Request::create('/api/v1/docs', 'GET');
         $event = new ResponseEvent($this->kernel, $request, HttpKernelInterface::MAIN_REQUEST, $response);
 
-        $subscriber->onKernelResponse($event);
+        $this->subscriber->onKernelResponse($event);
 
         self::assertSame('ETag', $response->headers->get('Access-Control-Expose-Headers'));
     }
