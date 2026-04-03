@@ -61,9 +61,57 @@ final class UserTwoFactorStateRepositoryTest extends TestCase
             'secret_encrypted' => 'active-secret',
         ], null, 42));
 
+        self::assertNotNull($repository->findByUserId('u-2'));
+
         $repository->delete('u-2');
 
         self::assertNull($repository->findByUserId('u-2'));
+    }
+
+    public function testFindByUserIdReturnsNullForUnknownUser(): void
+    {
+        $repository = new UserTwoFactorStateRepository($this->connection());
+
+        self::assertNull($repository->findByUserId('non-existent-user'));
+    }
+
+    public function testSaveUpdatesExistingRecordForSameUserId(): void
+    {
+        $repository = new UserTwoFactorStateRepository($this->connection());
+
+        $repository->save(new UserTwoFactorState(
+            'u-3',
+            true,
+            'initial-pending-secret',
+            'initial-active-secret',
+            ['$argon2id$initial'],
+            ['initial-legacy-hash'],
+            100,
+            200,
+        ));
+
+        $repository->save(new UserTwoFactorState(
+            'u-3',
+            false,
+            'updated-pending-secret',
+            'updated-active-secret',
+            ['$argon2id$updated'],
+            ['updated-legacy-hash'],
+            300,
+            400,
+        ));
+
+        $stored = $repository->findByUserId('u-3');
+
+        self::assertNotNull($stored);
+        self::assertSame('u-3', $stored->userId);
+        self::assertFalse($stored->enabled);
+        self::assertSame('updated-pending-secret', $stored->pendingSecretEncrypted);
+        self::assertSame('updated-active-secret', $stored->secretEncrypted);
+        self::assertSame(['$argon2id$updated'], $stored->recoveryCodeHashes);
+        self::assertSame(['updated-legacy-hash'], $stored->legacyRecoveryCodeSha256);
+        self::assertSame(300, $stored->createdAt);
+        self::assertSame(400, $stored->updatedAt);
     }
 
     private function connection(): Connection
