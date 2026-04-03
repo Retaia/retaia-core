@@ -62,6 +62,10 @@ final class SecurityHeadersSubscriberTest extends TestCase
 
         $this->subscriber->onKernelResponse($event);
 
+        self::assertSame('nosniff', $response->headers->get('X-Content-Type-Options'));
+        self::assertSame('DENY', $response->headers->get('X-Frame-Options'));
+        self::assertSame('no-referrer', $response->headers->get('Referrer-Policy'));
+        self::assertSame('camera=(), microphone=(), geolocation=()', $response->headers->get('Permissions-Policy'));
         self::assertSame('max-age=31536000; includeSubDomains', $response->headers->get('Strict-Transport-Security'));
     }
 
@@ -79,6 +83,10 @@ final class SecurityHeadersSubscriberTest extends TestCase
             'ETag, X-Debug-Token, X-Debug-Token-Link, X-Previous-Debug-Token',
             $response->headers->get('Access-Control-Expose-Headers')
         );
+        self::assertSame('nosniff', $response->headers->get('X-Content-Type-Options'));
+        self::assertSame('DENY', $response->headers->get('X-Frame-Options'));
+        self::assertSame('no-referrer', $response->headers->get('Referrer-Policy'));
+        self::assertSame('camera=(), microphone=(), geolocation=()', $response->headers->get('Permissions-Policy'));
     }
 
     public function testDoesNotExposeProfilerHeadersWhenNotInDebugMode(): void
@@ -91,6 +99,17 @@ final class SecurityHeadersSubscriberTest extends TestCase
         $this->subscriber->onKernelResponse($event);
 
         self::assertSame('ETag', $response->headers->get('Access-Control-Expose-Headers'));
+    }
+
+    public function testDoesNotExposeProfilerHeadersWhenNotInDebugModeAndHeaderNotSet(): void
+    {
+        $response = new Response();
+        $request = Request::create('/api/v1/docs', 'GET');
+        $event = new ResponseEvent($this->kernel, $request, HttpKernelInterface::MAIN_REQUEST, $response);
+
+        $this->subscriber->onKernelResponse($event);
+
+        self::assertFalse($response->headers->has('Access-Control-Expose-Headers'));
     }
 
     private function createSubscriber(bool $debug = false): SecurityHeadersSubscriber
