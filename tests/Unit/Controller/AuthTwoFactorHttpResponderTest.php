@@ -14,10 +14,18 @@ final class AuthTwoFactorHttpResponderTest extends TestCase
 {
     use TranslatorStubTrait;
 
+    private AuthTwoFactorHttpResponder $responder;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->responder = new AuthTwoFactorHttpResponder(new AuthApiErrorResponder($this->translatorStub()));
+    }
+
     public function testEnableReturnsRecoveryCodesOnSuccess(): void
     {
-        $responder = new AuthTwoFactorHttpResponder(new AuthApiErrorResponder($this->translatorStub()));
-        $response = $responder->enable(new TwoFactorEnableEndpointResult(
+        $response = $this->responder->enable(new TwoFactorEnableEndpointResult(
             TwoFactorEnableEndpointResult::STATUS_ENABLED,
             ['one', 'two'],
         ));
@@ -31,8 +39,7 @@ final class AuthTwoFactorHttpResponderTest extends TestCase
 
     public function testDisableReturnsDisabledPayloadOnSuccess(): void
     {
-        $responder = new AuthTwoFactorHttpResponder(new AuthApiErrorResponder($this->translatorStub()));
-        $response = $responder->disable(new TwoFactorDisableEndpointResult(
+        $response = $this->responder->disable(new TwoFactorDisableEndpointResult(
             TwoFactorDisableEndpointResult::STATUS_DISABLED,
         ));
 
@@ -44,8 +51,7 @@ final class AuthTwoFactorHttpResponderTest extends TestCase
 
     public function testRegenerateRecoveryCodesReturnsValidationFailedWhenOtpMissing(): void
     {
-        $responder = new AuthTwoFactorHttpResponder(new AuthApiErrorResponder($this->translatorStub()));
-        $response = $responder->regenerateRecoveryCodes(new TwoFactorRecoveryCodesEndpointResult(
+        $response = $this->responder->regenerateRecoveryCodes(new TwoFactorRecoveryCodesEndpointResult(
             TwoFactorRecoveryCodesEndpointResult::STATUS_VALIDATION_FAILED,
         ));
 
@@ -58,8 +64,7 @@ final class AuthTwoFactorHttpResponderTest extends TestCase
 
     public function testRegenerateRecoveryCodesReturnsInvalidCodeWhenOtpIsWrong(): void
     {
-        $responder = new AuthTwoFactorHttpResponder(new AuthApiErrorResponder($this->translatorStub()));
-        $response = $responder->regenerateRecoveryCodes(new TwoFactorRecoveryCodesEndpointResult(
+        $response = $this->responder->regenerateRecoveryCodes(new TwoFactorRecoveryCodesEndpointResult(
             TwoFactorRecoveryCodesEndpointResult::STATUS_INVALID_CODE,
         ));
 
@@ -72,8 +77,7 @@ final class AuthTwoFactorHttpResponderTest extends TestCase
 
     public function testRegenerateRecoveryCodesReturnsConflictWhenMfaIsDisabled(): void
     {
-        $responder = new AuthTwoFactorHttpResponder(new AuthApiErrorResponder($this->translatorStub()));
-        $response = $responder->regenerateRecoveryCodes(new TwoFactorRecoveryCodesEndpointResult(
+        $response = $this->responder->regenerateRecoveryCodes(new TwoFactorRecoveryCodesEndpointResult(
             TwoFactorRecoveryCodesEndpointResult::STATUS_NOT_ENABLED,
         ));
 
@@ -86,8 +90,7 @@ final class AuthTwoFactorHttpResponderTest extends TestCase
 
     public function testRegenerateRecoveryCodesReturnsRecoveryCodesOnSuccess(): void
     {
-        $responder = new AuthTwoFactorHttpResponder(new AuthApiErrorResponder($this->translatorStub()));
-        $response = $responder->regenerateRecoveryCodes(new TwoFactorRecoveryCodesEndpointResult(
+        $response = $this->responder->regenerateRecoveryCodes(new TwoFactorRecoveryCodesEndpointResult(
             TwoFactorRecoveryCodesEndpointResult::STATUS_REGENERATED,
             ['one', 'two'],
         ));
