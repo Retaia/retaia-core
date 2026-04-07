@@ -23,6 +23,14 @@ final class AuthTwoFactorHttpResponderTest extends TestCase
         $this->responder = new AuthTwoFactorHttpResponder(new AuthApiErrorResponder($this->translatorStub()));
     }
 
+    /**
+     * @return array<mixed>
+     */
+    private function decodeJsonResponse(object $response): array
+    {
+        return json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR);
+    }
+
     public function testEnableReturnsRecoveryCodesOnSuccess(): void
     {
         $response = $this->responder->enable(new TwoFactorEnableEndpointResult(
@@ -34,7 +42,59 @@ final class AuthTwoFactorHttpResponderTest extends TestCase
         self::assertSame([
             'mfa_enabled' => true,
             'recovery_codes' => ['one', 'two'],
-        ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
+        ], $this->decodeJsonResponse($response));
+    }
+
+    public function testEnableReturnsValidationFailedWhenOtpMissing(): void
+    {
+        $response = $this->responder->enable(new TwoFactorEnableEndpointResult(
+            TwoFactorEnableEndpointResult::STATUS_VALIDATION_FAILED,
+        ));
+
+        self::assertSame(422, $response->getStatusCode());
+        self::assertSame([
+            'code' => 'VALIDATION_FAILED',
+            'message' => 'auth.error.otp_code_required',
+        ], $this->decodeJsonResponse($response));
+    }
+
+    public function testEnableReturnsInvalidCodeWhenOtpIsWrong(): void
+    {
+        $response = $this->responder->enable(new TwoFactorEnableEndpointResult(
+            TwoFactorEnableEndpointResult::STATUS_INVALID_CODE,
+        ));
+
+        self::assertSame(400, $response->getStatusCode());
+        self::assertSame([
+            'code' => 'INVALID_2FA_CODE',
+            'message' => 'auth.error.invalid_2fa_code',
+        ], $this->decodeJsonResponse($response));
+    }
+
+    public function testEnableReturnsConflictWhenMfaIsAlreadyEnabled(): void
+    {
+        $response = $this->responder->enable(new TwoFactorEnableEndpointResult(
+            TwoFactorEnableEndpointResult::STATUS_ALREADY_ENABLED,
+        ));
+
+        self::assertSame(409, $response->getStatusCode());
+        self::assertSame([
+            'code' => 'MFA_ALREADY_ENABLED',
+            'message' => 'auth.error.mfa_already_enabled',
+        ], $this->decodeJsonResponse($response));
+    }
+
+    public function testEnableReturnsValidationFailedWhenSetupIsMissing(): void
+    {
+        $response = $this->responder->enable(new TwoFactorEnableEndpointResult(
+            TwoFactorEnableEndpointResult::STATUS_SETUP_REQUIRED,
+        ));
+
+        self::assertSame(422, $response->getStatusCode());
+        self::assertSame([
+            'code' => 'VALIDATION_FAILED',
+            'message' => 'auth.error.mfa_setup_required',
+        ], $this->decodeJsonResponse($response));
     }
 
     public function testDisableReturnsDisabledPayloadOnSuccess(): void
@@ -46,7 +106,46 @@ final class AuthTwoFactorHttpResponderTest extends TestCase
         self::assertSame(200, $response->getStatusCode());
         self::assertSame([
             'mfa_enabled' => false,
-        ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
+        ], $this->decodeJsonResponse($response));
+    }
+
+    public function testDisableReturnsValidationFailedWhenOtpMissing(): void
+    {
+        $response = $this->responder->disable(new TwoFactorDisableEndpointResult(
+            TwoFactorDisableEndpointResult::STATUS_VALIDATION_FAILED,
+        ));
+
+        self::assertSame(422, $response->getStatusCode());
+        self::assertSame([
+            'code' => 'VALIDATION_FAILED',
+            'message' => 'auth.error.otp_code_required',
+        ], $this->decodeJsonResponse($response));
+    }
+
+    public function testDisableReturnsInvalidCodeWhenOtpIsWrong(): void
+    {
+        $response = $this->responder->disable(new TwoFactorDisableEndpointResult(
+            TwoFactorDisableEndpointResult::STATUS_INVALID_CODE,
+        ));
+
+        self::assertSame(400, $response->getStatusCode());
+        self::assertSame([
+            'code' => 'INVALID_2FA_CODE',
+            'message' => 'auth.error.invalid_2fa_code',
+        ], $this->decodeJsonResponse($response));
+    }
+
+    public function testDisableReturnsConflictWhenMfaIsDisabled(): void
+    {
+        $response = $this->responder->disable(new TwoFactorDisableEndpointResult(
+            TwoFactorDisableEndpointResult::STATUS_NOT_ENABLED,
+        ));
+
+        self::assertSame(409, $response->getStatusCode());
+        self::assertSame([
+            'code' => 'MFA_NOT_ENABLED',
+            'message' => 'auth.error.mfa_not_enabled',
+        ], $this->decodeJsonResponse($response));
     }
 
     public function testRegenerateRecoveryCodesReturnsValidationFailedWhenOtpMissing(): void
@@ -59,7 +158,7 @@ final class AuthTwoFactorHttpResponderTest extends TestCase
         self::assertSame([
             'code' => 'VALIDATION_FAILED',
             'message' => 'auth.error.otp_code_required',
-        ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
+        ], $this->decodeJsonResponse($response));
     }
 
     public function testRegenerateRecoveryCodesReturnsInvalidCodeWhenOtpIsWrong(): void
@@ -72,7 +171,7 @@ final class AuthTwoFactorHttpResponderTest extends TestCase
         self::assertSame([
             'code' => 'INVALID_2FA_CODE',
             'message' => 'auth.error.invalid_2fa_code',
-        ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
+        ], $this->decodeJsonResponse($response));
     }
 
     public function testRegenerateRecoveryCodesReturnsConflictWhenMfaIsDisabled(): void
@@ -85,7 +184,7 @@ final class AuthTwoFactorHttpResponderTest extends TestCase
         self::assertSame([
             'code' => 'MFA_NOT_ENABLED',
             'message' => 'auth.error.mfa_not_enabled',
-        ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
+        ], $this->decodeJsonResponse($response));
     }
 
     public function testRegenerateRecoveryCodesReturnsRecoveryCodesOnSuccess(): void
@@ -98,6 +197,6 @@ final class AuthTwoFactorHttpResponderTest extends TestCase
         self::assertSame(200, $response->getStatusCode());
         self::assertSame([
             'recovery_codes' => ['one', 'two'],
-        ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
+        ], $this->decodeJsonResponse($response));
     }
 }
