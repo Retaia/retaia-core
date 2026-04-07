@@ -83,4 +83,18 @@ final class AuthTwoFactorHttpResponderTest extends TestCase
             'message' => 'auth.error.mfa_not_enabled',
         ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
     }
+
+    public function testRegenerateRecoveryCodesReturnsRecoveryCodesOnSuccess(): void
+    {
+        $responder = new AuthTwoFactorHttpResponder(new AuthApiErrorResponder($this->translatorStub()));
+        $response = $responder->regenerateRecoveryCodes(new TwoFactorRecoveryCodesEndpointResult(
+            TwoFactorRecoveryCodesEndpointResult::STATUS_REGENERATED,
+            ['one', 'two'],
+        ));
+
+        self::assertSame(200, $response->getStatusCode());
+        self::assertSame([
+            'recovery_codes' => ['one', 'two'],
+        ], json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR));
+    }
 }
