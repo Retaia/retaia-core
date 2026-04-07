@@ -148,6 +148,19 @@ final class AuthTwoFactorHttpResponderTest extends TestCase
         ], $this->decodeJsonResponse($response));
     }
 
+    public function testRegenerateRecoveryCodesReturnsRecoveryCodesOnSuccess(): void
+    {
+        $response = $this->responder->regenerateRecoveryCodes(new TwoFactorRecoveryCodesEndpointResult(
+            TwoFactorRecoveryCodesEndpointResult::STATUS_REGENERATED,
+            ['one', 'two'],
+        ));
+
+        self::assertSame(200, $response->getStatusCode());
+        self::assertSame([
+            'recovery_codes' => ['one', 'two'],
+        ], $this->decodeJsonResponse($response));
+    }
+
     public function testRegenerateRecoveryCodesReturnsValidationFailedWhenOtpMissing(): void
     {
         $response = $this->responder->regenerateRecoveryCodes(new TwoFactorRecoveryCodesEndpointResult(
@@ -187,16 +200,4 @@ final class AuthTwoFactorHttpResponderTest extends TestCase
         ], $this->decodeJsonResponse($response));
     }
 
-    public function testRegenerateRecoveryCodesReturnsRecoveryCodesOnSuccess(): void
-    {
-        $response = $this->responder->regenerateRecoveryCodes(new TwoFactorRecoveryCodesEndpointResult(
-            TwoFactorRecoveryCodesEndpointResult::STATUS_REGENERATED,
-            ['one', 'two'],
-        ));
-
-        self::assertSame(200, $response->getStatusCode());
-        self::assertSame([
-            'recovery_codes' => ['one', 'two'],
-        ], $this->decodeJsonResponse($response));
-    }
 }
