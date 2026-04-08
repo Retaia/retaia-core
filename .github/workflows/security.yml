@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   codeql:
-    name: CodeQL (${{ matrix.language }})
+    name: CodeQL (${{ matrix.name }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -26,9 +26,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language:
-          - actions
-          - javascript-typescript
+        include:
+          - name: actions
+            language: actions
+          - name: javascript-typescript
+            language: javascript-typescript
+          - name: php-security-extended
+            language: php
+            queries: security-extended
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -40,6 +45,7 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           build-mode: none
+          queries: ${{ matrix.queries || '' }}
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
