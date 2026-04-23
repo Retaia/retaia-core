@@ -75,3 +75,4 @@ php bin/console app:release:write-ui-manifest --ui-version=<v> --asset-url=<url>
 ```
 
 Cette commande genere `public/releases/latest.json`.
+Le manifeste doit pointer vers un artefact UI tagge, pas vers un commit `master`.

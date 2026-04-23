@@ -137,6 +137,7 @@ Deux workflows dedies executent une mise a jour automatique puis commit/push sur
 
 Ces workflows sont des jobs d'auto-remediation: ils n'executent pas de suite de validation metier.
 Ils tentent un push direct sur `master`; si la protection de branche le refuse, ils ouvrent automatiquement une PR.
+Pour l'UI, le manifeste doit toujours pointer vers une release GitHub ou un tag explicite, jamais vers un commit `master`.
 
 Variables utiles:
 
@@ -145,7 +146,7 @@ Variables utiles:
   - `RETAIA_DOCKER_BASE_TAG` (defaut: `latest`)
 - UI:
   - `RETAIA_UI_REPOSITORY` (defaut: `Retaia/retaia-ui`)
-  - `RETAIA_UI_REF` (defaut: `master`)
+  - `RETAIA_UI_TAG` (optionnel: tag UI explicite utilise si `releases/latest` n'est pas disponible)
   - `RETAIA_UI_RELEASE_CHANNEL` (defaut: `stable`)
 
 Secrets recommandes:

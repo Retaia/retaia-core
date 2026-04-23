@@ -139,6 +139,7 @@ php bin/console app:release:write-ui-manifest \
 ```
 
 Sortie par defaut: `public/releases/latest.json`.
+Le manifeste doit pointer vers un artefact UI tagge, pas vers un commit `master`.
 
 ## Important
 
