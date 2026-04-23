@@ -29,7 +29,7 @@ jobs:
           GH_TOKEN: ${{ secrets.RETAIA_UI_REPO_TOKEN != '' && secrets.RETAIA_UI_REPO_TOKEN || secrets.GITHUB_TOKEN }}
         run: bash scripts/auto-update-ui-release-manifest.sh
 
-      - name: Commit and push update
+      - name: Commit and open or update PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -38,8 +38,7 @@ jobs:
             exit 0
           fi
 
-          TIMESTAMP="$(date -u +%Y%m%d-%H%M%S)"
-          UPDATE_BRANCH="codex/auto-update-ui-${TIMESTAMP}"
+          UPDATE_BRANCH="codex/auto-update-ui-release-manifest"
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -47,13 +46,19 @@ jobs:
           git add public/releases/latest.json
           git commit -m "chore(ui): auto-update release manifest"
 
-          if git push origin HEAD:master; then
-            echo "Pushed update directly to master."
+          git push --force-with-lease origin HEAD:"${UPDATE_BRANCH}"
+
+          EXISTING_PR_URL="$(gh pr list \
+            --base master \
+            --head "${UPDATE_BRANCH}" \
+            --json url \
+            --jq '.[0].url // ""')"
+
+          if [[ -n "${EXISTING_PR_URL}" ]]; then
+            echo "Updated existing PR: ${EXISTING_PR_URL}"
             exit 0
           fi
 
-          echo "Direct push to master refused, fallback to PR."
-          git push origin HEAD:"${UPDATE_BRANCH}"
           gh pr create \
             --base master \
             --head "${UPDATE_BRANCH}" \

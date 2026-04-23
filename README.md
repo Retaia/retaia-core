@@ -296,7 +296,7 @@ GitHub Actions includes:
 - `release`
 - `docker-image-build`
 - `docker-base-image-auto-update`
-- `ui-release-auto-update`
+- `ui-release-auto-update` (manifest UI base sur release/tag, jamais sur `master`)
 
 Details:
 

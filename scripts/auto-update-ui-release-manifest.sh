@@ -6,10 +6,12 @@ OUTPUT_PATH="${ROOT_DIR}/public/releases/latest.json"
 
 UI_REPOSITORY="${RETAIA_UI_REPOSITORY:-Retaia/retaia-ui}"
 UI_RELEASE_CHANNEL="${RETAIA_UI_RELEASE_CHANNEL:-stable}"
-UI_REF="${RETAIA_UI_REF:-master}"
-GITHUB_API_URL="https://api.github.com/repos/${UI_REPOSITORY}/releases/latest"
-GITHUB_COMMIT_API_URL="https://api.github.com/repos/${UI_REPOSITORY}/commits/${UI_REF}"
-GITHUB_ZIPBALL_URL="https://api.github.com/repos/${UI_REPOSITORY}/zipball/${UI_REF}"
+UI_TAG="${RETAIA_UI_TAG:-}"
+GITHUB_API_BASE_URL="https://api.github.com/repos/${UI_REPOSITORY}"
+GITHUB_RELEASE_API_URL="${GITHUB_API_BASE_URL}/releases/latest"
+GITHUB_TAG_API_URL="${GITHUB_API_BASE_URL}/git/ref/tags"
+GITHUB_ZIPBALL_BASE_URL="https://api.github.com/repos/${UI_REPOSITORY}/zipball"
+GITHUB_HTML_BASE_URL="https://github.com/${UI_REPOSITORY}"
 
 if ! command -v curl >/dev/null 2>&1; then
   echo "curl command is required." >&2
@@ -33,7 +35,6 @@ fi
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
-RELEASE_JSON="${TMP_DIR}/release.json"
 api_get() {
   local url="$1"
   local output_file="$2"
@@ -55,7 +56,8 @@ NOTES_URL=""
 ASSET_URL=""
 GENERATED_AT=""
 
-RELEASE_HTTP_CODE="$(api_get "${GITHUB_API_URL}" "${RELEASE_JSON}")"
+RELEASE_JSON="${TMP_DIR}/release.json"
+RELEASE_HTTP_CODE="$(api_get "${GITHUB_RELEASE_API_URL}" "${RELEASE_JSON}")"
 if [[ "${RELEASE_HTTP_CODE}" == "200" ]]; then
   UI_VERSION="$(jq -r '.tag_name // empty' "${RELEASE_JSON}")"
   NOTES_URL="$(jq -r '.html_url // empty' "${RELEASE_JSON}")"
@@ -70,23 +72,29 @@ if [[ "${RELEASE_HTTP_CODE}" == "200" ]]; then
 fi
 
 if [[ -z "${UI_VERSION}" || -z "${NOTES_URL}" || -z "${ASSET_URL}" ]]; then
-  COMMIT_JSON="${TMP_DIR}/commit.json"
-  COMMIT_HTTP_CODE="$(api_get "${GITHUB_COMMIT_API_URL}" "${COMMIT_JSON}")"
-  if [[ "${COMMIT_HTTP_CODE}" != "200" ]]; then
-    echo "Unable to read ${UI_REPOSITORY} metadata (release and ${UI_REF} commit). Configure GH_TOKEN/GITHUB_TOKEN with access." >&2
+  if [[ -z "${UI_TAG}" ]]; then
+    echo "Unable to resolve a tagged UI release from ${UI_REPOSITORY}. Configure RETAIA_UI_TAG with an explicit tag when no GitHub release is available." >&2
     exit 1
   fi
 
-  UI_SHA="$(jq -r '.sha // empty' "${COMMIT_JSON}")"
-  NOTES_URL="$(jq -r '.html_url // empty' "${COMMIT_JSON}")"
-  GENERATED_AT="$(jq -r '.commit.committer.date // empty' "${COMMIT_JSON}")"
-  if [[ -z "${UI_SHA}" || -z "${NOTES_URL}" ]]; then
-    echo "Unable to parse commit metadata for ${UI_REPOSITORY}@${UI_REF}." >&2
+  TAG_JSON="${TMP_DIR}/tag.json"
+  TAG_HTTP_CODE="$(api_get "${GITHUB_TAG_API_URL}/${UI_TAG}" "${TAG_JSON}")"
+  if [[ "${TAG_HTTP_CODE}" != "200" ]]; then
+    echo "Unable to read tag metadata for ${UI_REPOSITORY}@${UI_TAG}. Configure RETAIA_UI_TAG with an existing tag and valid token access if required." >&2
     exit 1
   fi
 
-  UI_VERSION="${UI_REF}-${UI_SHA:0:12}"
-  ASSET_URL="${GITHUB_ZIPBALL_URL}"
+  TAG_REF="$(jq -r '.ref // empty' "${TAG_JSON}")"
+  TAG_SHA="$(jq -r '.object.sha // empty' "${TAG_JSON}")"
+  if [[ "${TAG_REF}" != "refs/tags/${UI_TAG}" || -z "${TAG_SHA}" ]]; then
+    echo "Unable to parse tag metadata for ${UI_REPOSITORY}@${UI_TAG}." >&2
+    exit 1
+  fi
+
+  UI_VERSION="${UI_TAG}"
+  NOTES_URL="${GITHUB_HTML_BASE_URL}/releases/tag/${UI_TAG}"
+  GENERATED_AT="$(date -u +"%Y-%m-%dT%H:%M:%S+00:00")"
+  ASSET_URL="${GITHUB_ZIPBALL_BASE_URL}/${UI_TAG}"
 fi
 
 if [[ -z "${GENERATED_AT}" ]]; then

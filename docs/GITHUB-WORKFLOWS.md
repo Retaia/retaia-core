@@ -136,7 +136,8 @@ Deux workflows dedies executent une mise a jour automatique puis commit/push sur
     - `public/releases/latest.json`
 
 Ces workflows sont des jobs d'auto-remediation: ils n'executent pas de suite de validation metier.
-Ils tentent un push direct sur `master`; si la protection de branche le refuse, ils ouvrent automatiquement une PR.
+Le workflow UI pousse toujours sur une branche dediee puis cree la PR si elle n'existe pas encore.
+Pour l'UI, le manifeste doit toujours pointer vers une release GitHub ou un tag explicite, jamais vers un commit `master`.
 
 Variables utiles:
 
@@ -145,13 +146,13 @@ Variables utiles:
   - `RETAIA_DOCKER_BASE_TAG` (defaut: `latest`)
 - UI:
   - `RETAIA_UI_REPOSITORY` (defaut: `Retaia/retaia-ui`)
-  - `RETAIA_UI_REF` (defaut: `master`)
+  - `RETAIA_UI_TAG` (optionnel: tag UI explicite utilise si `releases/latest` n'est pas disponible)
   - `RETAIA_UI_RELEASE_CHANNEL` (defaut: `stable`)
 
 Secrets recommandes:
 
 - `RETAIA_UI_REPO_TOKEN`: token avec acces lecture au repo UI prive (si `Retaia/retaia-ui` n'est pas public).
-- `GITHUB_TOKEN`: utilise pour commit/push (ou creation de PR fallback si push direct refuse).
+- `GITHUB_TOKEN`: utilise pour commit/push sur la branche d'update et creation/reutilisation de PR.
 
 ## Required Checks (master)
 
