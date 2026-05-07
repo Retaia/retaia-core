@@ -76,7 +76,7 @@ jobs:
 
       - name: Install Cosign
         if: env.SHOULD_PUSH == 'true'
-        uses: sigstore/cosign-installer@v4.1.1
+        uses: sigstore/cosign-installer@v4.1.2
 
       - name: Sign pushed image tags (keyless)
         if: env.SHOULD_PUSH == 'true'
